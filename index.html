@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technology Asset Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+        }
+        /* Simple spinner for loading states */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Main Container -->
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Technology Asset Dashboard</h1>
+            <p class="text-gray-600 mt-1">Manage your organization's technology assets directly from a Google Sheet.</p>
+        </header>
+
+        <!-- Setup Instructions & User Credentials -->
+        <div id="setup-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Initial Setup</h2>
+            <p class="mb-4">Before you begin, you need to configure your Google API credentials and the target spreadsheet.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="api-key" class="block text-sm font-medium text-gray-700">Google API Key</label>
+                    <input type="password" id="api-key" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Paste your API Key here">
+                </div>
+                <div>
+                    <label for="client-id" class="block text-sm font-medium text-gray-700">Google Client ID</label>
+                    <input type="password" id="client-id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Paste your Client ID here">
+                </div>
+                <div>
+                    <label for="spreadsheet-id" class="block text-sm font-medium text-gray-700">Google Spreadsheet ID</label>
+                    <input type="text" id="spreadsheet-id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Paste your Spreadsheet ID here">
+                </div>
+                 <div>
+                    <label for="sheet-name" class="block text-sm font-medium text-gray-700">Sheet Name</label>
+                    <input type="text" id="sheet-name" value="Assets" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+             <div class="mt-4">
+                <button id="save-settings-btn" class="w-full md:w-auto bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Save Settings & Connect</button>
+            </div>
+        </div>
+        
+        <!-- Authentication Section -->
+        <div id="auth-section" class="text-center my-12 hidden">
+            <p class="text-lg mb-4">Please connect your Google Account to access the spreadsheet.</p>
+            <button id="authorize_button" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Connect to Google
+            </button>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" class="hidden">
+            <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
+                <div class="flex gap-4">
+                    <button id="add-asset-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                        Add New Asset
+                    </button>
+                    <button id="view-by-employee-btn" class="bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2">
+                        View by Employee
+                    </button>
+                </div>
+                <div class="flex items-center gap-4">
+                     <div id="loading-indicator" class="hidden items-center gap-2 text-gray-600">
+                        <div class="loader !w-5 !h-5"></div>
+                        <span>Syncing...</span>
+                    </div>
+                    <button id="refresh-data-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400">Refresh Data</button>
+                    <button id="signout_button" class="bg-red-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                        Disconnect
+                    </button>
+                </div>
+            </div>
+
+            <!-- Asset Table -->
+            <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Type</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Code</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condition</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="asset-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Rows will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+                 <div id="no-data-message" class="text-center py-12 text-gray-500 hidden">
+                    <p class="text-xl">No assets found.</p>
+                    <p>Click "Add New Asset" to get started.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Asset Modal -->
+    <div id="asset-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
+            <form id="asset-form" class="p-8">
+                <h2 id="modal-title" class="text-2xl font-bold mb-6">Add New Asset</h2>
+                <input type="hidden" id="asset-id">
+                <input type="hidden" id="row-index">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <!-- Column 1 -->
+                    <div>
+                        <label for="asset-name" class="block text-sm font-medium text-gray-700">Item Name</label>
+                        <input type="text" id="asset-name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="quantity" class="block text-sm font-medium text-gray-700">No. of Item</label>
+                        <input type="number" id="quantity" value="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="site" class="block text-sm font-medium text-gray-700">Site</label>
+                        <input type="text" id="site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
+                        <input type="text" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="container" class="block text-sm font-medium text-gray-700">Container</label>
+                        <input type="text" id="container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
+                        <select id="intended-user-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                            <option>Staff</option>
+                            <option>Youth</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                     <div>
+                        <label for="condition" class="block text-sm font-medium text-gray-700">Condition</label>
+                        <select id="condition" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                            <option>New</option>
+                            <option>Good</option>
+                            <option>Fair</option>
+                            <option>Damaged</option>
+                            <option>For Repair</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="asset-type" class="block text-sm font-medium text-gray-700">Item Type</label>
+                        <input type="text" id="asset-type" placeholder="e.g., Tablet, Accessory" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    
+                    <!-- Column 2 -->
+                    <div>
+                        <label for="id-code" class="block text-sm font-medium text-gray-700">ID Code</label>
+                        <input type="text" id="id-code" placeholder="Internal tracking code" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="serial-number" class="block text-sm font-medium text-gray-700">Serial Number</label>
+                        <input type="text" id="serial-number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="assigned-to" class="block text-sm font-medium text-gray-700">Assignment (Employee)</label>
+                        <input type="text" id="assigned-to" placeholder="Person's Name or Email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="date-issued" class="block text-sm font-medium text-gray-700">Date Issued</label>
+                        <input type="date" id="date-issued" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="purchase-date" class="block text-sm font-medium text-gray-700">Purchase Date</label>
+                        <input type="date" id="purchase-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="specs" class="block text-sm font-medium text-gray-700">Specs</label>
+                        <textarea id="specs" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></textarea>
+                    </div>
+                    <div class="md:col-span-2">
+                        <div class="mb-2 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 rounded-md">
+                            <p class="font-bold text-sm">Security Warning</p>
+                            <p class="text-xs">Storing passwords in a spreadsheet is highly discouraged. Consider a dedicated password manager.</p>
+                        </div>
+                        <label for="login-info" class="block text-sm font-medium text-gray-700">Password / Login Info</label>
+                        <input type="text" id="login-info" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
+                        <textarea id="notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="cancel-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="submit" id="save-asset-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Save Asset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- View by Employee Modal -->
+    <div id="employee-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold mb-6">View Assets by Employee</h2>
+                <div class="mb-4">
+                    <label for="employee-select" class="block text-sm font-medium text-gray-700">Select Employee</label>
+                    <select id="employee-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">-- Select an Employee --</option>
+                    </select>
+                </div>
+                <div id="employee-asset-list" class="mt-6 border-t pt-4">
+                    <!-- Assets will be listed here -->
+                </div>
+                 <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="employee-modal-close-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Alert/Message Box -->
+    <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
+        <p id="message-text"></p>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        let API_KEY = '';
+        let CLIENT_ID = '';
+        let SPREADSHEET_ID = '';
+        let SHEET_NAME = '';
+
+        const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+        const HEADERS = [
+            "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
+            "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", 
+            "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
+        ];
+
+        // --- STATE MANAGEMENT ---
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+        let allAssets = []; // Local cache of sheet data
+
+        // --- DOM ELEMENT REFERENCES ---
+        const setupSection = document.getElementById('setup-section');
+        const authSection = document.getElementById('auth-section');
+        const dashboardSection = document.getElementById('dashboard-section');
+        const authorizeButton = document.getElementById('authorize_button');
+        const signoutButton = document.getElementById('signout_button');
+        const addAssetBtn = document.getElementById('add-asset-btn');
+        const viewByEmployeeBtn = document.getElementById('view-by-employee-btn');
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        const assetModal = document.getElementById('asset-modal');
+        const assetForm = document.getElementById('asset-form');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const noDataMessage = document.getElementById('no-data-message');
+        const employeeModal = document.getElementById('employee-modal');
+        const employeeSelect = document.getElementById('employee-select');
+        const employeeAssetList = document.getElementById('employee-asset-list');
+        const employeeModalCloseBtn = document.getElementById('employee-modal-close-btn');
+        
+        // --- INITIALIZATION & GOOGLE API SETUP ---
+        window.onload = () => {
+            loadSettings();
+            setupEventListeners();
+            loadGoogleAPIs();
+        };
+
+        function loadGoogleAPIs() {
+            const scriptGapi = document.createElement('script');
+            scriptGapi.src = 'https://apis.google.com/js/api.js';
+            scriptGapi.onload = () => gapi.load('client', () => {
+                gapiInited = true;
+                checkAndInitialize();
+            });
+            scriptGapi.async = true;
+            document.head.appendChild(scriptGapi);
+
+            const scriptGis = document.createElement('script');
+            scriptGis.src = 'https://accounts.google.com/gsi/client';
+            scriptGis.onload = () => {
+                gisInited = true;
+                checkAndInitialize();
+            };
+            scriptGis.async = true;
+            document.head.appendChild(scriptGis);
+        }
+
+        function checkAndInitialize() {
+            // This function is called when either of the Google scripts load.
+            // We only proceed if BOTH are loaded and we have the necessary keys.
+            if (gapiInited && gisInited && API_KEY && CLIENT_ID) {
+                initializeGoogleClients().then(() => {
+                    // Check if user is already signed in from a previous session
+                    updateSigninStatus(gapi.client.getToken() !== null);
+                });
+            }
+        }
+
+        async function initializeGoogleClients() {
+            try {
+                await gapi.client.init({
+                    apiKey: API_KEY,
+                    discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
+                });
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: '', // Will be defined dynamically on auth click
+                });
+            } catch (error) {
+                console.error("Error initializing Google clients:", error);
+                showMessage("Failed to initialize Google services. Check your API Key and Client ID.");
+            }
+        }
+
+        // --- AUTHENTICATION ---
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) { throw (resp); }
+                updateSigninStatus(true);
+            };
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            } else {
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        }
+
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token, () => {
+                    gapi.client.setToken('');
+                    updateSigninStatus(false);
+                });
+            }
+        }
+
+        function updateSigninStatus(isSignedIn) {
+            setupSection.classList.toggle('hidden', isSignedIn || (API_KEY && CLIENT_ID && SPREADSHEET_ID));
+            authSection.classList.toggle('hidden', isSignedIn || !(API_KEY && CLIENT_ID && SPREADSHEET_ID));
+            dashboardSection.classList.toggle('hidden', !isSignedIn);
+            if (isSignedIn) loadSheetData();
+        }
+
+        // --- SETTINGS MANAGEMENT ---
+        function loadSettings() {
+            API_KEY = localStorage.getItem('techDashboard_apiKey') || '';
+            CLIENT_ID = localStorage.getItem('techDashboard_clientId') || '';
+            SPREADSHEET_ID = localStorage.getItem('techDashboard_spreadsheetId') || '';
+            SHEET_NAME = localStorage.getItem('techDashboard_sheetName') || 'Assets';
+            document.getElementById('api-key').value = API_KEY;
+            document.getElementById('client-id').value = CLIENT_ID;
+            document.getElementById('spreadsheet-id').value = SPREADSHEET_ID;
+            document.getElementById('sheet-name').value = SHEET_NAME;
+        }
+
+        function saveSettings() {
+            API_KEY = document.getElementById('api-key').value.trim();
+            CLIENT_ID = document.getElementById('client-id').value.trim();
+            SPREADSHEET_ID = document.getElementById('spreadsheet-id').value.trim();
+            SHEET_NAME = document.getElementById('sheet-name').value.trim();
+            if (!API_KEY || !CLIENT_ID || !SPREADSHEET_ID || !SHEET_NAME) {
+                showMessage('All settings fields are required.'); return;
+            }
+            localStorage.setItem('techDashboard_apiKey', API_KEY);
+            localStorage.setItem('techDashboard_clientId', CLIENT_ID);
+            localStorage.setItem('techDashboard_spreadsheetId', SPREADSHEET_ID);
+            localStorage.setItem('techDashboard_sheetName', SHEET_NAME);
+            
+            showMessage('Settings saved. Attempting to connect...', 'success');
+
+            if (gapiInited && gisInited) {
+                initializeGoogleClients().then(() => {
+                    updateSigninStatus(false);
+                });
+            } else {
+                showMessage("Google scripts not loaded yet. Please wait a moment and try again.");
+            }
+        }
+
+        // --- GOOGLE SHEETS API CALLS ---
+        async function loadSheetData() {
+            setLoading(true);
+            try {
+                const response = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: SPREADSHEET_ID, range: SHEET_NAME,
+                });
+                const values = response.result.values;
+                if (!values || values.length <= 1 || JSON.stringify(values[0]) !== JSON.stringify(HEADERS)) {
+                    await initializeSheet(values && values.length > 0);
+                    allAssets = [];
+                } else {
+                    allAssets = values.slice(1).map((row, index) => ({
+                        rowIndex: index + 2,
+                        id: row[0], name: row[1], quantity: row[2], site: row[3], location: row[4],
+                        container: row[5], intendedUserType: row[6], condition: row[7], type: row[8],
+                        idCode: row[9], serial: row[10], assignedTo: row[11], dateIssued: row[12],
+                        purchaseDate: row[13], specs: row[14], 
+                        loginInfo: row[15] ? atob(row[15]) : '', notes: row[16]
+                    }));
+                }
+                renderTable();
+            } catch (err) {
+                console.error(err);
+                showMessage(`Error loading data: ${err.result?.error?.message || 'Unknown error'}`);
+                handleSignoutClick();
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function initializeSheet(overwrite = false) {
+             try {
+                if (overwrite) {
+                    await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_ID, range: SHEET_NAME });
+                }
+                await gapi.client.sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID, range: `${SHEET_NAME}!A1`, valueInputOption: 'RAW',
+                    resource: { values: [HEADERS] }
+                });
+             } catch (err) {
+                console.error("Initialization failed:", err);
+                showMessage(`Could not initialize sheet: ${err.result.error.message}`);
+             }
+        }
+        
+        async function writeToSheet(data, isUpdate = false) {
+            setLoading(true);
+            const rowData = [
+                data.id || `ASSET-${Date.now()}`, data.name, data.quantity, data.site, data.location, data.container,
+                data.intendedUserType, data.condition, data.type, data.idCode, data.serial, data.assignedTo,
+                data.dateIssued, data.purchaseDate, data.specs, data.loginInfo ? btoa(data.loginInfo) : '', data.notes
+            ];
+            
+            try {
+                if (isUpdate) {
+                    await gapi.client.sheets.spreadsheets.values.update({
+                        spreadsheetId: SPREADSHEET_ID, range: `${SHEET_NAME}!A${data.rowIndex}`,
+                        valueInputOption: 'USER_ENTERED', resource: { values: [rowData] }
+                    });
+                } else {
+                    await gapi.client.sheets.spreadsheets.values.append({
+                        spreadsheetId: SPREADSHEET_ID, range: SHEET_NAME,
+                        valueInputOption: 'USER_ENTERED', resource: { values: [rowData] }
+                    });
+                }
+                await loadSheetData();
+            } catch (err) {
+                console.error(err);
+                showMessage(`Error saving asset: ${err.result.error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function deleteAsset(rowIndex) {
+            setLoading(true);
+            try {
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: SPREADSHEET_ID,
+                    resource: {
+                        requests: [{
+                            deleteDimension: {
+                                range: {
+                                    sheetId: 0, // Assuming first sheet
+                                    dimension: "ROWS",
+                                    startIndex: rowIndex - 1,
+                                    endIndex: rowIndex
+                                }
+                            }
+                        }]
+                    }
+                });
+                await loadSheetData();
+            } catch (err) {
+                console.error(err);
+                showMessage(`Error deleting asset: ${err.result.error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // --- UI & DOM MANIPULATION ---
+        function renderTable() {
+            const tableBody = document.getElementById('asset-table-body');
+            tableBody.innerHTML = '';
+            const validAssets = allAssets.filter(asset => asset.id && asset.name);
+            noDataMessage.classList.toggle('hidden', validAssets.length > 0);
+            validAssets.forEach(asset => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${asset.name || ''}</div></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.type || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.idCode || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.assignedTo || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.condition || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button class="text-indigo-600 hover:text-indigo-900 edit-btn" data-id="${asset.id}">Edit</button>
+                        <button class="text-red-600 hover:text-red-900 ml-4 delete-btn" data-row-index="${asset.rowIndex}">Delete</button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function toggleModal(modal, show) {
+            if (show) {
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.querySelector('.modal-backdrop').classList.remove('opacity-0');
+                    modal.querySelector('.modal-content').classList.remove('scale-95');
+                }, 10);
+            } else {
+                modal.querySelector('.modal-backdrop').classList.add('opacity-0');
+                modal.querySelector('.modal-content').classList.add('scale-95');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        }
+        
+        function openEditModal(assetId) {
+            const asset = allAssets.find(a => a.id === assetId);
+            if (!asset) return;
+
+            document.getElementById('modal-title').innerText = 'Edit Asset';
+            
+            document.getElementById('asset-id').value = asset.id || '';
+            document.getElementById('row-index').value = asset.rowIndex || '';
+            document.getElementById('asset-name').value = asset.name || '';
+            document.getElementById('quantity').value = asset.quantity || '';
+            document.getElementById('site').value = asset.site || '';
+            document.getElementById('location').value = asset.location || '';
+            document.getElementById('container').value = asset.container || '';
+            document.getElementById('intended-user-type').value = asset.intendedUserType || 'Staff';
+            document.getElementById('condition').value = asset.condition || 'Good';
+            document.getElementById('asset-type').value = asset.type || '';
+            document.getElementById('id-code').value = asset.idCode || '';
+            document.getElementById('serial-number').value = asset.serial || '';
+            document.getElementById('assigned-to').value = asset.assignedTo || '';
+            document.getElementById('date-issued').value = asset.dateIssued || '';
+            document.getElementById('purchase-date').value = asset.purchaseDate || '';
+            document.getElementById('specs').value = asset.specs || '';
+            document.getElementById('login-info').value = asset.loginInfo || '';
+            document.getElementById('notes').value = asset.notes || '';
+            
+            toggleModal(assetModal, true);
+        }
+
+        function openEmployeeViewModal() {
+            const employees = [...new Set(allAssets.map(a => a.assignedTo).filter(Boolean))].sort();
+            employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
+            employees.forEach(e => {
+                const option = document.createElement('option');
+                option.value = e;
+                option.textContent = e;
+                employeeSelect.appendChild(option);
+            });
+            employeeAssetList.innerHTML = '';
+            toggleModal(employeeModal, true);
+        }
+
+        function displayEmployeeAssets() {
+            const selectedEmployee = employeeSelect.value;
+            if (!selectedEmployee) {
+                employeeAssetList.innerHTML = '';
+                return;
+            }
+            const assets = allAssets.filter(a => a.assignedTo === selectedEmployee);
+            if (assets.length === 0) {
+                employeeAssetList.innerHTML = `<p class="text-gray-500">No assets assigned to this employee.</p>`;
+                return;
+            }
+            employeeAssetList.innerHTML = `
+                <ul class="divide-y divide-gray-200">
+                    ${assets.map(a => `
+                        <li class="py-3">
+                            <p class="text-sm font-medium text-gray-900">${a.name}</p>
+                            <p class="text-sm text-gray-500">${a.type || ''} (ID: ${a.idCode || 'N/A'})</p>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+
+        function setupEventListeners() {
+            authorizeButton.onclick = handleAuthClick;
+            signoutButton.onclick = handleSignoutClick;
+            saveSettingsBtn.onclick = saveSettings;
+            refreshBtn.onclick = loadSheetData;
+            addAssetBtn.onclick = () => {
+                assetForm.reset();
+                document.getElementById('modal-title').innerText = 'Add New Asset';
+                document.getElementById('asset-id').value = '';
+                toggleModal(assetModal, true);
+            };
+            viewByEmployeeBtn.onclick = openEmployeeViewModal;
+            cancelBtn.onclick = () => toggleModal(assetModal, false);
+            assetModal.querySelector('.modal-backdrop').onclick = () => toggleModal(assetModal, false);
+            employeeModalCloseBtn.onclick = () => toggleModal(employeeModal, false);
+            employeeModal.querySelector('.modal-backdrop').onclick = () => toggleModal(employeeModal, false);
+            employeeSelect.onchange = displayEmployeeAssets;
+
+            assetForm.onsubmit = (e) => {
+                e.preventDefault();
+                const assetData = {
+                    id: document.getElementById('asset-id').value,
+                    rowIndex: document.getElementById('row-index').value,
+                    name: document.getElementById('asset-name').value,
+                    quantity: document.getElementById('quantity').value,
+                    site: document.getElementById('site').value,
+                    location: document.getElementById('location').value,
+                    container: document.getElementById('container').value,
+                    intendedUserType: document.getElementById('intended-user-type').value,
+                    condition: document.getElementById('condition').value,
+                    type: document.getElementById('asset-type').value,
+                    idCode: document.getElementById('id-code').value,
+                    serial: document.getElementById('serial-number').value,
+                    assignedTo: document.getElementById('assigned-to').value,
+                    dateIssued: document.getElementById('date-issued').value,
+                    purchaseDate: document.getElementById('purchase-date').value,
+                    specs: document.getElementById('specs').value,
+                    loginInfo: document.getElementById('login-info').value,
+                    notes: document.getElementById('notes').value,
+                };
+                writeToSheet(assetData, !!assetData.id);
+                toggleModal(assetModal, false);
+            };
+
+            document.getElementById('asset-table-body').addEventListener('click', (e) => {
+                if (e.target.classList.contains('edit-btn')) openEditModal(e.target.dataset.id);
+                if (e.target.classList.contains('delete-btn')) deleteAsset(e.target.dataset.rowIndex);
+            });
+        }
+        
+        function setLoading(isLoading) {
+            loadingIndicator.classList.toggle('hidden', !isLoading);
+            loadingIndicator.classList.toggle('flex', isLoading);
+        }
+        
+        function showMessage(text, type = 'error') {
+            const box = document.getElementById('message-box');
+            const textEl = document.getElementById('message-text');
+            textEl.innerText = text;
+            box.className = 'fixed top-5 right-5 text-white py-3 px-5 rounded-lg shadow-lg z-50';
+            box.classList.add(type === 'error' ? 'bg-red-500' : 'bg-green-500');
+            box.classList.remove('hidden');
+            setTimeout(() => box.classList.add('hidden'), 5000);
+        }
+    </script>
+    
+</body>
+</html>
