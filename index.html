@@ -143,15 +143,18 @@
                     </div>
                     <div>
                         <label for="site" class="block text-sm font-medium text-gray-700">Site</label>
-                        <input type="text" id="site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <input list="site-list" id="site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <datalist id="site-list"></datalist>
                     </div>
                     <div>
                         <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
-                        <input type="text" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <input list="location-list" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <datalist id="location-list"></datalist>
                     </div>
                     <div>
                         <label for="container" class="block text-sm font-medium text-gray-700">Container</label>
-                        <input type="text" id="container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <input list="container-list" id="container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <datalist id="container-list"></datalist>
                     </div>
                     <div>
                         <label for="intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
@@ -173,7 +176,8 @@
                     </div>
                     <div>
                         <label for="asset-type" class="block text-sm font-medium text-gray-700">Item Type</label>
-                        <input type="text" id="asset-type" placeholder="e.g., Tablet, Accessory" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <input list="asset-type-list" id="asset-type" placeholder="e.g., Tablet, Accessory" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <datalist id="asset-type-list"></datalist>
                     </div>
                     
                     <!-- Column 2 -->
@@ -187,7 +191,8 @@
                     </div>
                     <div>
                         <label for="assigned-to" class="block text-sm font-medium text-gray-700">Assignment (Employee)</label>
-                        <input type="text" id="assigned-to" placeholder="Person's Name or Email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <input list="assigned-to-list" id="assigned-to" placeholder="Person's Name or Email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <datalist id="assigned-to-list"></datalist>
                     </div>
                     <div>
                         <label for="date-issued" class="block text-sm font-medium text-gray-700">Date Issued</label>
@@ -318,11 +323,8 @@
         }
 
         function checkAndInitialize() {
-            // This function is called when either of the Google scripts load.
-            // We only proceed if BOTH are loaded and we have the necessary keys.
             if (gapiInited && gisInited && API_KEY && CLIENT_ID) {
                 initializeGoogleClients().then(() => {
-                    // Check if user is already signed in from a previous session
                     updateSigninStatus(gapi.client.getToken() !== null);
                 });
             }
@@ -337,7 +339,7 @@
                 tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: CLIENT_ID,
                     scope: SCOPES,
-                    callback: '', // Will be defined dynamically on auth click
+                    callback: '', 
                 });
             } catch (error) {
                 console.error("Error initializing Google clients:", error);
@@ -433,6 +435,7 @@
                     }));
                 }
                 renderTable();
+                populateDatalists(); // <-- New function call
             } catch (err) {
                 console.error(err);
                 showMessage(`Error loading data: ${err.result?.error?.message || 'Unknown error'}`);
@@ -495,7 +498,7 @@
                         requests: [{
                             deleteDimension: {
                                 range: {
-                                    sheetId: 0, // Assuming first sheet
+                                    sheetId: 0, 
                                     dimension: "ROWS",
                                     startIndex: rowIndex - 1,
                                     endIndex: rowIndex
@@ -514,6 +517,30 @@
         }
 
         // --- UI & DOM MANIPULATION ---
+        function populateDatalists() {
+            const fieldsToPopulate = [
+                { id: 'site', key: 'site' },
+                { id: 'location', key: 'location' },
+                { id: 'container', key: 'container' },
+                { id: 'asset-type', key: 'type' },
+                { id: 'assigned-to', key: 'assignedTo' }
+            ];
+
+            fieldsToPopulate.forEach(field => {
+                const datalist = document.getElementById(`${field.id}-list`);
+                if (!datalist) return;
+
+                const uniqueValues = [...new Set(allAssets.map(asset => asset[field.key]).filter(Boolean))].sort();
+                datalist.innerHTML = '';
+
+                uniqueValues.forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    datalist.appendChild(option);
+                });
+            });
+        }
+
         function renderTable() {
             const tableBody = document.getElementById('asset-table-body');
             tableBody.innerHTML = '';
