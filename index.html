@@ -37,6 +37,14 @@
         #overview-panel canvas {
             cursor: pointer;
         }
+        #asset-table-body tr:hover {
+            background-color: #f9fafb;
+            cursor: pointer;
+        }
+        #employee-asset-list li:hover {
+            background-color: #f9fafb;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -173,7 +181,6 @@
                             <select id="site-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
                                 <option value="bar">Bar</option>
                                 <option value="doughnut">Doughnut</option>
-                                <option value="pie">Pie</option>
                                 <option value="line">Line</option>
                             </select>
                         </div>
@@ -184,7 +191,6 @@
                             <h3 class="text-lg font-semibold">Assets by Condition</h3>
                             <select id="condition-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
                                 <option value="doughnut">Doughnut</option>
-                                <option value="pie">Pie</option>
                                 <option value="bar">Bar</option>
                             </select>
                         </div>
@@ -196,7 +202,7 @@
                             <select id="type-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
                                 <option value="bar">Bar</option>
                                 <option value="line">Line</option>
-                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
                             </select>
                         </div>
                         <canvas id="type-chart"></canvas>
@@ -335,6 +341,21 @@
         </div>
     </div>
 
+    <!-- Asset Detail Modal -->
+    <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
+            <div class="p-8">
+                <h2 id="detail-modal-title" class="text-2xl font-bold mb-6">Asset Details</h2>
+                <div id="detail-modal-content" class="space-y-4 text-sm"></div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="detail-modal-edit-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Edit</button>
+                    <button type="button" id="detail-modal-close-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Alert/Message Box -->
     <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
         <p id="message-text"></p>
@@ -352,6 +373,11 @@
             "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
             "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", 
             "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
+        ];
+        const CHART_COLORS = [
+            'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)', 
+            'rgba(75, 192, 192, 0.6)', 'rgba(153, 102, 255, 0.6)', 'rgba(255, 159, 64, 0.6)',
+            'rgba(199, 199, 199, 0.6)', 'rgba(83, 102, 255, 0.6)', 'rgba(40, 230, 150, 0.6)'
         ];
 
         // --- STATE MANAGEMENT ---
@@ -384,6 +410,7 @@
         const overviewTab = document.getElementById('overview-tab');
         const inventoryPanel = document.getElementById('inventory-panel');
         const overviewPanel = document.getElementById('overview-panel');
+        const detailModal = document.getElementById('detail-modal');
         
         // --- INITIALIZATION & GOOGLE API SETUP ---
         window.onload = () => {
@@ -722,10 +749,15 @@
         function renderTable(assetsToRender) {
             const tableBody = document.getElementById('asset-table-body');
             tableBody.innerHTML = '';
-            const validAssets = assetsToRender.filter(asset => asset.id && asset.name);
+            
+            // Sort assets alphabetically by name
+            const sortedAssets = [...assetsToRender].sort((a, b) => a.name.localeCompare(b.name));
+
+            const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
             noDataMessage.classList.toggle('hidden', validAssets.length > 0);
             validAssets.forEach(asset => {
                 const tr = document.createElement('tr');
+                tr.dataset.id = asset.id; // Add data-id for click events
                 tr.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${asset.name || ''}</div></td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.type || ''}</td>
@@ -821,6 +853,32 @@
             toggleModal(assetModal, true);
         }
 
+        function openDetailModal(assetId) {
+            const asset = allAssets.find(a => a.id === assetId);
+            if (!asset) return;
+
+            document.getElementById('detail-modal-title').innerText = asset.name || 'Asset Details';
+            const content = document.getElementById('detail-modal-content');
+            
+            content.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                    ${Object.entries(asset).map(([key, value]) => {
+                        if (key === 'rowIndex' || key === 'id' || !value) return '';
+                        const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                        return `<div><strong class="font-semibold text-gray-600">${formattedKey}:</strong> ${value}</div>`;
+                    }).join('')}
+                </div>
+            `;
+            
+            const editBtn = document.getElementById('detail-modal-edit-btn');
+            editBtn.onclick = () => {
+                toggleModal(detailModal, false);
+                openEditModal(assetId);
+            };
+
+            toggleModal(detailModal, true);
+        }
+
         function openEmployeeViewModal() {
             const employees = [...new Set(allAssets.map(a => a.assignedTo).filter(Boolean))].sort();
             employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
@@ -848,7 +906,7 @@
             employeeAssetList.innerHTML = `
                 <ul class="divide-y divide-gray-200">
                     ${assets.map(a => `
-                        <li class="py-3">
+                        <li class="p-3 employee-asset-item" data-id="${a.id}">
                             <p class="text-sm font-medium text-gray-900">${a.name}</p>
                             <p class="text-sm text-gray-500">${a.type || ''} (ID: ${a.idCode || 'N/A'})</p>
                         </li>
@@ -877,6 +935,9 @@
             employeeModalCloseBtn.onclick = () => toggleModal(employeeModal, false);
             employeeModal.querySelector('.modal-backdrop').onclick = () => toggleModal(employeeModal, false);
             employeeSelect.onchange = displayEmployeeAssets;
+
+            document.getElementById('detail-modal-close-btn').onclick = () => toggleModal(detailModal, false);
+            detailModal.querySelector('.modal-backdrop').onclick = () => toggleModal(detailModal, false);
 
             inventoryTab.addEventListener('click', () => switchTab('inventory'));
             overviewTab.addEventListener('click', () => switchTab('overview'));
@@ -929,9 +990,26 @@
             };
 
             document.getElementById('asset-table-body').addEventListener('click', (e) => {
-                if (e.target.classList.contains('edit-btn')) openEditModal(e.target.dataset.id);
-                if (e.target.classList.contains('clone-btn')) openCloneModal(e.target.dataset.id);
-                if (e.target.classList.contains('delete-btn')) deleteAsset(e.target.dataset.rowIndex);
+                const targetRow = e.target.closest('tr');
+                if (!targetRow) return;
+                const assetId = targetRow.dataset.id;
+                
+                if (e.target.classList.contains('edit-btn')) {
+                    openEditModal(assetId);
+                } else if (e.target.classList.contains('clone-btn')) {
+                    openCloneModal(assetId);
+                } else if (e.target.classList.contains('delete-btn')) {
+                    deleteAsset(e.target.dataset.rowIndex);
+                } else {
+                    openDetailModal(assetId);
+                }
+            });
+
+            employeeAssetList.addEventListener('click', (e) => {
+                const targetItem = e.target.closest('.employee-asset-item');
+                if (targetItem) {
+                    openDetailModal(targetItem.dataset.id);
+                }
             });
         }
 
@@ -970,6 +1048,13 @@
                 const chart = elements[0].element.$context.chart;
                 const label = chart.data.labels[elementIndex];
                 
+                // Clear existing filters
+                document.getElementById('filter-search').value = '';
+                document.getElementById('filter-site').value = '';
+                document.getElementById('filter-asset-type').value = '';
+                document.getElementById('filter-condition').value = '';
+                document.getElementById('filter-intended-user').value = '';
+
                 const filterSelect = document.getElementById(filterId);
                 if (filterSelect) {
                     filterSelect.value = label;
@@ -1009,7 +1094,7 @@
                     datasets: [{
                         label: 'Assets per Site',
                         data: siteData.data,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        backgroundColor: siteChartType === 'doughnut' ? CHART_COLORS : 'rgba(75, 192, 192, 0.6)',
                         borderColor: 'rgba(75, 192, 192, 1)',
                         borderWidth: 1
                     }]
@@ -1027,11 +1112,7 @@
                     datasets: [{
                         label: 'Assets by Condition',
                         data: conditionData.data,
-                        backgroundColor: [
-                            'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)',
-                            'rgba(255, 99, 132, 0.6)', 'rgba(75, 192, 192, 0.6)',
-                            'rgba(153, 102, 255, 0.6)'
-                        ]
+                        backgroundColor: CHART_COLORS
                     }]
                 },
                 options: {
@@ -1046,7 +1127,7 @@
                     datasets: [{
                         label: 'Assets by Type',
                         data: typeData.data,
-                        backgroundColor: 'rgba(255, 159, 64, 0.6)',
+                        backgroundColor: typeChartType === 'doughnut' ? CHART_COLORS : 'rgba(255, 159, 64, 0.6)',
                         borderColor: 'rgba(255, 159, 64, 1)',
                         borderWidth: 1
                     }]
