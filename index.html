@@ -709,6 +709,7 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.condition || ''}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button class="text-indigo-600 hover:text-indigo-900 edit-btn" data-id="${asset.id}">Edit</button>
+                        <button class="text-yellow-600 hover:text-yellow-900 ml-4 clone-btn" data-id="${asset.id}">Clone</button>
                         <button class="text-red-600 hover:text-red-900 ml-4 delete-btn" data-row-index="${asset.rowIndex}">Delete</button>
                     </td>
                 `;
@@ -729,18 +730,12 @@
                 setTimeout(() => modal.classList.add('hidden'), 300);
             }
         }
-        
-        function openEditModal(assetId) {
-            const asset = allAssets.find(a => a.id === assetId);
-            if (!asset) return;
-            assetForm.reset(); // Reset form first
 
-            document.getElementById('modal-title').innerText = 'Edit Asset';
-            
+        function populateAssetForm(asset) {
             document.getElementById('asset-id').value = asset.id || '';
             document.getElementById('row-index').value = asset.rowIndex || '';
             document.getElementById('asset-name').value = asset.name || '';
-            document.getElementById('quantity').value = asset.quantity || '';
+            document.getElementById('quantity').value = asset.quantity || '1';
             document.getElementById('intended-user-type').value = asset.intendedUserType || 'Staff';
             document.getElementById('condition').value = asset.condition || 'Good';
             document.getElementById('id-code').value = asset.idCode || '';
@@ -751,7 +746,6 @@
             document.getElementById('login-info').value = asset.loginInfo || '';
             document.getElementById('notes').value = asset.notes || '';
 
-            // Handle dynamic dropdowns
             const dynamicFields = [
                 { id: 'site', key: 'site' }, { id: 'location', key: 'location' }, 
                 { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' }, 
@@ -775,7 +769,30 @@
                     newInp.classList.add('hidden');
                 }
             });
-            
+        }
+        
+        function openEditModal(assetId) {
+            const asset = allAssets.find(a => a.id === assetId);
+            if (!asset) return;
+            assetForm.reset();
+            document.getElementById('modal-title').innerText = 'Edit Asset';
+            populateAssetForm(asset);
+            toggleModal(assetModal, true);
+        }
+
+        function openCloneModal(assetId) {
+            const originalAsset = allAssets.find(a => a.id === assetId);
+            if (!originalAsset) return;
+
+            const clonedAsset = JSON.parse(JSON.stringify(originalAsset));
+            clonedAsset.id = '';
+            clonedAsset.rowIndex = '';
+            clonedAsset.idCode = '';
+            clonedAsset.serial = '';
+
+            assetForm.reset();
+            document.getElementById('modal-title').innerText = 'Clone Asset';
+            populateAssetForm(clonedAsset);
             toggleModal(assetModal, true);
         }
 
@@ -886,6 +903,7 @@
 
             document.getElementById('asset-table-body').addEventListener('click', (e) => {
                 if (e.target.classList.contains('edit-btn')) openEditModal(e.target.dataset.id);
+                if (e.target.classList.contains('clone-btn')) openCloneModal(e.target.dataset.id);
                 if (e.target.classList.contains('delete-btn')) deleteAsset(e.target.dataset.rowIndex);
             });
         }
@@ -894,13 +912,13 @@
             if (tabName === 'inventory') {
                 inventoryPanel.classList.remove('hidden');
                 overviewPanel.classList.add('hidden');
-                inventoryTab.classList.add('active');
-                overviewTab.classList.remove('active');
+                inventoryTab.classList.add('active', 'text-indigo-600', 'border-indigo-600');
+                overviewTab.classList.remove('active', 'text-indigo-600', 'border-indigo-600');
             } else {
                 inventoryPanel.classList.add('hidden');
                 overviewPanel.classList.remove('hidden');
-                inventoryTab.classList.remove('active');
-                overviewTab.classList.add('active');
+                inventoryTab.classList.remove('active', 'text-indigo-600', 'border-indigo-600');
+                overviewTab.classList.add('active', 'text-indigo-600', 'border-indigo-600');
             }
         }
         
@@ -920,7 +938,6 @@
         }
 
         function renderOverviewCharts() {
-            // Destroy existing charts if they exist to prevent duplicates
             Object.values(charts).forEach(chart => chart.destroy());
 
             const processData = (key) => {
@@ -939,7 +956,6 @@
             const conditionData = processData('condition');
             const typeData = processData('type');
 
-            // Site Chart (Bar)
             charts.siteChart = new Chart(document.getElementById('site-chart'), {
                 type: 'bar',
                 data: {
@@ -955,7 +971,6 @@
                 options: { scales: { y: { beginAtZero: true } } }
             });
 
-            // Condition Chart (Doughnut)
             charts.conditionChart = new Chart(document.getElementById('condition-chart'), {
                 type: 'doughnut',
                 data: {
@@ -972,7 +987,6 @@
                 }
             });
 
-            // Type Chart (Horizontal Bar)
             charts.typeChart = new Chart(document.getElementById('type-chart'), {
                 type: 'bar',
                 data: {
