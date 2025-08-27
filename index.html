@@ -97,6 +97,32 @@
                 </div>
             </div>
 
+             <!-- Filter and Search Section -->
+            <div id="filter-section" class="bg-white p-4 rounded-lg shadow-md mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div>
+                        <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
+                        <input type="text" id="filter-search" placeholder="Search all fields..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="filter-site" class="block text-sm font-medium text-gray-700">Site</label>
+                        <select id="filter-site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                    </div>
+                    <div>
+                        <label for="filter-asset-type" class="block text-sm font-medium text-gray-700">Asset Type</label>
+                        <select id="filter-asset-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                    </div>
+                    <div>
+                        <label for="filter-condition" class="block text-sm font-medium text-gray-700">Condition</label>
+                        <select id="filter-condition" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                    </div>
+                    <div>
+                        <label for="filter-intended-user" class="block text-sm font-medium text-gray-700">Intended User</label>
+                        <select id="filter-intended-user" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                    </div>
+                </div>
+            </div>
+
             <!-- Asset Table -->
             <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
@@ -457,8 +483,9 @@
                         notes: row[headerMap["Notes"]]
                     }));
                 }
-                renderTable();
-                populateDropdowns();
+                renderTable(allAssets);
+                populateFilterDropdowns();
+                populateModalDropdowns();
             } catch (err) {
                 console.error(err);
                 showMessage(`Error loading data: ${err.result?.error?.message || 'Unknown error'}`);
@@ -545,12 +572,10 @@
         }
 
         // --- UI & DOM MANIPULATION ---
-        function populateDropdowns() {
+        function populateModalDropdowns() {
             const fieldsToPopulate = [
-                { id: 'site', key: 'site' },
-                { id: 'location', key: 'location' },
-                { id: 'container', key: 'container' },
-                { id: 'asset-type', key: 'type' },
+                { id: 'site', key: 'site' }, { id: 'location', key: 'location' },
+                { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' },
                 { id: 'assigned-to', key: 'assignedTo' }
             ];
 
@@ -575,6 +600,50 @@
             });
         }
 
+        function populateFilterDropdowns() {
+            const filters = [
+                { id: 'filter-site', key: 'site' },
+                { id: 'filter-asset-type', key: 'type' },
+                { id: 'filter-condition', key: 'condition' },
+                { id: 'filter-intended-user', key: 'intendedUserType' }
+            ];
+
+            filters.forEach(filter => {
+                const select = document.getElementById(filter.id);
+                if (!select) return;
+
+                const uniqueValues = [...new Set(allAssets.map(asset => asset[filter.key]).filter(Boolean))].sort();
+                select.innerHTML = `<option value="">All ${filter.key.charAt(0).toUpperCase() + filter.key.slice(1)}s</option>`;
+
+                uniqueValues.forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function applyFiltersAndSearch() {
+            const searchTerm = document.getElementById('filter-search').value.toLowerCase();
+            const siteFilter = document.getElementById('filter-site').value;
+            const typeFilter = document.getElementById('filter-asset-type').value;
+            const conditionFilter = document.getElementById('filter-condition').value;
+            const userFilter = document.getElementById('filter-intended-user').value;
+
+            let filteredAssets = allAssets.filter(asset => {
+                const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
+                const matchesSite = siteFilter ? asset.site === siteFilter : true;
+                const matchesType = typeFilter ? asset.type === typeFilter : true;
+                const matchesCondition = conditionFilter ? asset.condition === conditionFilter : true;
+                const matchesUser = userFilter ? asset.intendedUserType === userFilter : true;
+
+                return matchesSearch && matchesSite && matchesType && matchesCondition && matchesUser;
+            });
+
+            renderTable(filteredAssets);
+        }
+
         function handleDynamicSelectChange(selectElement, newElement) {
             if (selectElement.value === '--new--') {
                 newElement.classList.remove('hidden');
@@ -585,10 +654,10 @@
             }
         }
 
-        function renderTable() {
+        function renderTable(assetsToRender) {
             const tableBody = document.getElementById('asset-table-body');
             tableBody.innerHTML = '';
-            const validAssets = allAssets.filter(asset => asset.id && asset.name);
+            const validAssets = assetsToRender.filter(asset => asset.id && asset.name);
             noDataMessage.classList.toggle('hidden', validAssets.length > 0);
             validAssets.forEach(asset => {
                 const tr = document.createElement('tr');
@@ -728,12 +797,19 @@
             employeeModal.querySelector('.modal-backdrop').onclick = () => toggleModal(employeeModal, false);
             employeeSelect.onchange = displayEmployeeAssets;
 
-            // Event listeners for dynamic dropdowns
+            // Event listeners for dynamic dropdowns in modal
             document.getElementById('site').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('site'), document.getElementById('site-new')));
             document.getElementById('location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('location'), document.getElementById('location-new')));
             document.getElementById('container').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('container'), document.getElementById('container-new')));
             document.getElementById('asset-type').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('asset-type'), document.getElementById('asset-type-new')));
             document.getElementById('assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('assigned-to'), document.getElementById('assigned-to-new')));
+
+            // Event listeners for filters
+            document.getElementById('filter-search').addEventListener('input', applyFiltersAndSearch);
+            document.getElementById('filter-site').addEventListener('change', applyFiltersAndSearch);
+            document.getElementById('filter-asset-type').addEventListener('change', applyFiltersAndSearch);
+            document.getElementById('filter-condition').addEventListener('change', applyFiltersAndSearch);
+            document.getElementById('filter-intended-user').addEventListener('change', applyFiltersAndSearch);
 
             assetForm.onsubmit = (e) => {
                 e.preventDefault();
