@@ -34,6 +34,9 @@
             color: #4f46e5;
             font-weight: 600;
         }
+        #overview-panel canvas {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -165,15 +168,37 @@
             <div id="overview-panel" class="hidden">
                  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div class="bg-white p-6 rounded-lg shadow-md">
-                        <h3 class="text-lg font-semibold mb-4">Assets by Site</h3>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Site</h3>
+                            <select id="site-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
+                                <option value="bar">Bar</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                                <option value="line">Line</option>
+                            </select>
+                        </div>
                         <canvas id="site-chart"></canvas>
                     </div>
                     <div class="bg-white p-6 rounded-lg shadow-md">
-                        <h3 class="text-lg font-semibold mb-4">Assets by Condition</h3>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Condition</h3>
+                            <select id="condition-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                                <option value="bar">Bar</option>
+                            </select>
+                        </div>
                         <canvas id="condition-chart"></canvas>
                     </div>
                     <div class="bg-white p-6 rounded-lg shadow-md lg:col-span-2">
-                        <h3 class="text-lg font-semibold mb-4">Assets by Type</h3>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Type</h3>
+                            <select id="type-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
+                                <option value="bar">Bar</option>
+                                <option value="line">Line</option>
+                                <option value="pie">Pie</option>
+                            </select>
+                        </div>
                         <canvas id="type-chart"></canvas>
                     </div>
                  </div>
@@ -868,6 +893,8 @@
             document.getElementById('filter-condition').addEventListener('change', applyFiltersAndSearch);
             document.getElementById('filter-intended-user').addEventListener('change', applyFiltersAndSearch);
 
+            document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', renderOverviewCharts));
+
             assetForm.onsubmit = (e) => {
                 e.preventDefault();
                 
@@ -937,6 +964,21 @@
             setTimeout(() => box.classList.add('hidden'), 5000);
         }
 
+        function handleChartClick(event, elements, filterId) {
+            if (elements.length > 0) {
+                const elementIndex = elements[0].index;
+                const chart = elements[0].element.$context.chart;
+                const label = chart.data.labels[elementIndex];
+                
+                const filterSelect = document.getElementById(filterId);
+                if (filterSelect) {
+                    filterSelect.value = label;
+                    switchTab('inventory');
+                    applyFiltersAndSearch();
+                }
+            }
+        }
+
         function renderOverviewCharts() {
             Object.values(charts).forEach(chart => chart.destroy());
 
@@ -956,8 +998,12 @@
             const conditionData = processData('condition');
             const typeData = processData('type');
 
+            const siteChartType = document.getElementById('site-chart-type').value;
+            const conditionChartType = document.getElementById('condition-chart-type').value;
+            const typeChartType = document.getElementById('type-chart-type').value;
+
             charts.siteChart = new Chart(document.getElementById('site-chart'), {
-                type: 'bar',
+                type: siteChartType,
                 data: {
                     labels: siteData.labels,
                     datasets: [{
@@ -968,11 +1014,14 @@
                         borderWidth: 1
                     }]
                 },
-                options: { scales: { y: { beginAtZero: true } } }
+                options: { 
+                    scales: { y: { beginAtZero: true } },
+                    onClick: (event, elements) => handleChartClick(event, elements, 'filter-site')
+                }
             });
 
             charts.conditionChart = new Chart(document.getElementById('condition-chart'), {
-                type: 'doughnut',
+                type: conditionChartType,
                 data: {
                     labels: conditionData.labels,
                     datasets: [{
@@ -984,11 +1033,14 @@
                             'rgba(153, 102, 255, 0.6)'
                         ]
                     }]
+                },
+                options: {
+                    onClick: (event, elements) => handleChartClick(event, elements, 'filter-condition')
                 }
             });
 
             charts.typeChart = new Chart(document.getElementById('type-chart'), {
-                type: 'bar',
+                type: typeChartType,
                 data: {
                     labels: typeData.labels,
                     datasets: [{
@@ -999,7 +1051,11 @@
                         borderWidth: 1
                     }]
                 },
-                options: { indexAxis: 'y', scales: { x: { beginAtZero: true } } }
+                options: { 
+                    indexAxis: typeChartType === 'bar' ? 'y' : 'x', 
+                    scales: { x: { beginAtZero: true } },
+                    onClick: (event, elements) => handleChartClick(event, elements, 'filter-asset-type')
+                }
             });
         }
     </script>
