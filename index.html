@@ -422,7 +422,10 @@
                 });
                 const values = response.result.values;
 
-                if (!values || values.length < 1 || JSON.stringify(values[0]) !== JSON.stringify(HEADERS)) {
+                const sheetHeaders = values ? values[0] : [];
+                const headersMatch = HEADERS.every(h => sheetHeaders.includes(h));
+
+                if (!values || values.length < 1 || !headersMatch) {
                     await initializeSheet(values && values.length > 0);
                     allAssets = [];
                 } else {
