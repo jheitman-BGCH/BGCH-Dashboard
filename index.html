@@ -143,18 +143,18 @@
                     </div>
                     <div>
                         <label for="site" class="block text-sm font-medium text-gray-700">Site</label>
-                        <input list="site-list" id="site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <datalist id="site-list"></datalist>
+                        <select id="site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        <input type="text" id="site-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new site...">
                     </div>
                     <div>
                         <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
-                        <input list="location-list" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <datalist id="location-list"></datalist>
+                        <select id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        <input type="text" id="location-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new location...">
                     </div>
                     <div>
                         <label for="container" class="block text-sm font-medium text-gray-700">Container</label>
-                        <input list="container-list" id="container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <datalist id="container-list"></datalist>
+                        <select id="container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        <input type="text" id="container-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new container...">
                     </div>
                     <div>
                         <label for="intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
@@ -176,8 +176,8 @@
                     </div>
                     <div>
                         <label for="asset-type" class="block text-sm font-medium text-gray-700">Item Type</label>
-                        <input list="asset-type-list" id="asset-type" placeholder="e.g., Tablet, Accessory" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <datalist id="asset-type-list"></datalist>
+                        <select id="asset-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        <input type="text" id="asset-type-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new item type...">
                     </div>
                     
                     <!-- Column 2 -->
@@ -191,8 +191,8 @@
                     </div>
                     <div>
                         <label for="assigned-to" class="block text-sm font-medium text-gray-700">Assignment (Employee)</label>
-                        <input list="assigned-to-list" id="assigned-to" placeholder="Person's Name or Email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <datalist id="assigned-to-list"></datalist>
+                        <select id="assigned-to" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        <input type="text" id="assigned-to-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new employee...">
                     </div>
                     <div>
                         <label for="date-issued" class="block text-sm font-medium text-gray-700">Date Issued</label>
@@ -458,7 +458,7 @@
                     }));
                 }
                 renderTable();
-                populateDatalists();
+                populateDropdowns();
             } catch (err) {
                 console.error(err);
                 showMessage(`Error loading data: ${err.result?.error?.message || 'Unknown error'}`);
@@ -485,11 +485,16 @@
         
         async function writeToSheet(data, isUpdate = false) {
             setLoading(true);
-            const rowData = [
-                data.id || `ASSET-${Date.now()}`, data.name, data.quantity, data.site, data.location, data.container,
-                data.intendedUserType, data.condition, data.type, data.idCode, data.serial, data.assignedTo,
-                data.dateIssued, data.purchaseDate, data.specs, data.loginInfo ? btoa(data.loginInfo) : '', data.notes
-            ];
+            const rowData = HEADERS.map(header => {
+                const keyMap = {
+                    "Asset ID": data.id || `ASSET-${Date.now()}`, "Asset Name": data.name, "Quantity": data.quantity, "Site": data.site,
+                    "Location": data.location, "Container": data.container, "Intended User Type": data.intendedUserType,
+                    "Condition": data.condition, "Asset Type": data.type, "ID Code": data.idCode, "Serial Number": data.serial,
+                    "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, "Purchase Date": data.purchaseDate,
+                    "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', "Notes": data.notes
+                };
+                return keyMap[header] || '';
+            });
             
             try {
                 if (isUpdate) {
@@ -540,7 +545,7 @@
         }
 
         // --- UI & DOM MANIPULATION ---
-        function populateDatalists() {
+        function populateDropdowns() {
             const fieldsToPopulate = [
                 { id: 'site', key: 'site' },
                 { id: 'location', key: 'location' },
@@ -550,18 +555,34 @@
             ];
 
             fieldsToPopulate.forEach(field => {
-                const datalist = document.getElementById(`${field.id}-list`);
-                if (!datalist) return;
+                const select = document.getElementById(field.id);
+                if (!select) return;
 
                 const uniqueValues = [...new Set(allAssets.map(asset => asset[field.key]).filter(Boolean))].sort();
-                datalist.innerHTML = '';
+                select.innerHTML = '<option value="">-- Select --</option>';
 
                 uniqueValues.forEach(value => {
                     const option = document.createElement('option');
                     option.value = value;
-                    datalist.appendChild(option);
+                    option.textContent = value;
+                    select.appendChild(option);
                 });
+                
+                const addNewOption = document.createElement('option');
+                addNewOption.value = '--new--';
+                addNewOption.textContent = 'Add New...';
+                select.appendChild(addNewOption);
             });
+        }
+
+        function handleDynamicSelectChange(selectElement, newElement) {
+            if (selectElement.value === '--new--') {
+                newElement.classList.remove('hidden');
+                newElement.focus();
+            } else {
+                newElement.classList.add('hidden');
+                newElement.value = '';
+            }
         }
 
         function renderTable() {
@@ -603,6 +624,7 @@
         function openEditModal(assetId) {
             const asset = allAssets.find(a => a.id === assetId);
             if (!asset) return;
+            assetForm.reset(); // Reset form first
 
             document.getElementById('modal-title').innerText = 'Edit Asset';
             
@@ -610,20 +632,40 @@
             document.getElementById('row-index').value = asset.rowIndex || '';
             document.getElementById('asset-name').value = asset.name || '';
             document.getElementById('quantity').value = asset.quantity || '';
-            document.getElementById('site').value = asset.site || '';
-            document.getElementById('location').value = asset.location || '';
-            document.getElementById('container').value = asset.container || '';
             document.getElementById('intended-user-type').value = asset.intendedUserType || 'Staff';
             document.getElementById('condition').value = asset.condition || 'Good';
-            document.getElementById('asset-type').value = asset.type || '';
             document.getElementById('id-code').value = asset.idCode || '';
             document.getElementById('serial-number').value = asset.serial || '';
-            document.getElementById('assigned-to').value = asset.assignedTo || '';
             document.getElementById('date-issued').value = asset.dateIssued || '';
             document.getElementById('purchase-date').value = asset.purchaseDate || '';
             document.getElementById('specs').value = asset.specs || '';
             document.getElementById('login-info').value = asset.loginInfo || '';
             document.getElementById('notes').value = asset.notes || '';
+
+            // Handle dynamic dropdowns
+            const dynamicFields = [
+                { id: 'site', key: 'site' }, { id: 'location', key: 'location' }, 
+                { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' }, 
+                { id: 'assigned-to', key: 'assignedTo' }
+            ];
+            dynamicFields.forEach(field => {
+                const select = document.getElementById(field.id);
+                const newInp = document.getElementById(`${field.id}-new`);
+                const value = asset[field.key];
+                const optionExists = [...select.options].some(opt => opt.value === value);
+                
+                if (value && optionExists) {
+                    select.value = value;
+                    newInp.classList.add('hidden');
+                } else if (value) {
+                    select.value = '--new--';
+                    newInp.value = value;
+                    newInp.classList.remove('hidden');
+                } else {
+                    select.value = '';
+                    newInp.classList.add('hidden');
+                }
+            });
             
             toggleModal(assetModal, true);
         }
@@ -673,6 +715,10 @@
                 assetForm.reset();
                 document.getElementById('modal-title').innerText = 'Add New Asset';
                 document.getElementById('asset-id').value = '';
+                // Hide all 'new' input fields
+                ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
+                    document.getElementById(`${id}-new`).classList.add('hidden');
+                });
                 toggleModal(assetModal, true);
             };
             viewByEmployeeBtn.onclick = openEmployeeViewModal;
@@ -682,22 +728,36 @@
             employeeModal.querySelector('.modal-backdrop').onclick = () => toggleModal(employeeModal, false);
             employeeSelect.onchange = displayEmployeeAssets;
 
+            // Event listeners for dynamic dropdowns
+            document.getElementById('site').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('site'), document.getElementById('site-new')));
+            document.getElementById('location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('location'), document.getElementById('location-new')));
+            document.getElementById('container').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('container'), document.getElementById('container-new')));
+            document.getElementById('asset-type').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('asset-type'), document.getElementById('asset-type-new')));
+            document.getElementById('assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('assigned-to'), document.getElementById('assigned-to-new')));
+
             assetForm.onsubmit = (e) => {
                 e.preventDefault();
+                
+                const getSelectValue = (id) => {
+                    const select = document.getElementById(id);
+                    const newInp = document.getElementById(`${id}-new`);
+                    return select.value === '--new--' ? newInp.value : select.value;
+                };
+
                 const assetData = {
                     id: document.getElementById('asset-id').value,
                     rowIndex: document.getElementById('row-index').value,
                     name: document.getElementById('asset-name').value,
                     quantity: document.getElementById('quantity').value,
-                    site: document.getElementById('site').value,
-                    location: document.getElementById('location').value,
-                    container: document.getElementById('container').value,
+                    site: getSelectValue('site'),
+                    location: getSelectValue('location'),
+                    container: getSelectValue('container'),
                     intendedUserType: document.getElementById('intended-user-type').value,
                     condition: document.getElementById('condition').value,
-                    type: document.getElementById('asset-type').value,
+                    type: getSelectValue('asset-type'),
                     idCode: document.getElementById('id-code').value,
                     serial: document.getElementById('serial-number').value,
-                    assignedTo: document.getElementById('assigned-to').value,
+                    assignedTo: getSelectValue('assigned-to'),
                     dateIssued: document.getElementById('date-issued').value,
                     purchaseDate: document.getElementById('purchase-date').value,
                     specs: document.getElementById('specs').value,
