@@ -925,29 +925,39 @@
             };
 
             document.getElementById('asset-table-body').addEventListener('click', (e) => {
-                const menuButton = e.target.closest('.actions-btn');
-                if (menuButton) {
-                    const dropdown = menuButton.nextElementSibling;
+                const target = e.target;
+                const assetId = target.closest('tr')?.dataset.id;
+
+                if (target.closest('.actions-btn')) {
+                    const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
                     document.querySelectorAll('.actions-dropdown.show').forEach(d => {
                         if (d !== dropdown) d.classList.remove('show');
                     });
                     dropdown.classList.toggle('show');
                     return;
                 }
-
-                const assetId = e.target.closest('tr')?.dataset.id;
-                if (!assetId) return;
-
-                if (e.target.classList.contains('edit-btn')) {
-                    openEditModal(e.target.dataset.id);
-                } else if (e.target.classList.contains('clone-btn')) {
-                    openCloneModal(e.target.dataset.id);
-                } else if (e.target.classList.contains('delete-btn')) {
-                    deleteAsset(e.target.dataset.rowIndex);
-                } else if (!e.target.closest('.actions-menu')) {
+                
+                if (target.classList.contains('edit-btn')) {
+                    openEditModal(target.dataset.id);
+                } else if (target.classList.contains('clone-btn')) {
+                    openCloneModal(target.dataset.id);
+                } else if (target.classList.contains('delete-btn')) {
+                    deleteAsset(target.dataset.rowIndex);
+                } else if (assetId) {
                     openDetailModal(assetId);
                 }
             });
+            
+            employeeAssetList.addEventListener('click', (e) => {
+                const targetItem = e.target.closest('.employee-asset-item');
+                if (targetItem) {
+                    openDetailModal(targetItem.dataset.id);
+                }
+            });
+
+            document.getElementById('detail-modal-close-btn').onclick = () => toggleModal(detailModal, false);
+            detailModal.querySelector('.modal-backdrop').onclick = () => toggleModal(detailModal, false);
+
 
             // Close dropdowns if clicking elsewhere
             window.addEventListener('click', function(e) {
