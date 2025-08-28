@@ -36,6 +36,9 @@
         #overview-panel canvas {
             cursor: pointer;
         }
+        #asset-table-body tr {
+            cursor: pointer;
+        }
         #asset-table-body tr:hover {
             background-color: #f9fafb;
         }
@@ -335,6 +338,21 @@
         </div>
     </div>
 
+    <!-- Asset Detail Modal -->
+    <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
+            <div class="p-8">
+                <h2 id="detail-modal-title" class="text-2xl font-bold mb-6">Asset Details</h2>
+                <div id="detail-modal-content" class="space-y-4 text-sm"></div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="detail-modal-edit-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Edit</button>
+                    <button type="button" id="detail-modal-close-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Alert/Message Box -->
     <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
         <p id="message-text"></p>
@@ -352,6 +370,11 @@
             "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
             "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", 
             "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
+        ];
+        const CHART_COLORS = [
+            'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)', 
+            'rgba(75, 192, 192, 0.6)', 'rgba(153, 102, 255, 0.6)', 'rgba(255, 159, 64, 0.6)',
+            'rgba(199, 199, 199, 0.6)', 'rgba(83, 102, 255, 0.6)', 'rgba(40, 230, 150, 0.6)'
         ];
 
         // --- STATE MANAGEMENT ---
@@ -382,6 +405,7 @@
         const overviewTab = document.getElementById('overview-tab');
         const inventoryPanel = document.getElementById('inventory-panel');
         const overviewPanel = document.getElementById('overview-panel');
+        const detailModal = document.getElementById('detail-modal');
         
         // --- INITIALIZATION & GOOGLE API SETUP ---
         window.onload = () => {
@@ -682,10 +706,14 @@
         function renderTable(assetsToRender) {
             const tableBody = document.getElementById('asset-table-body');
             tableBody.innerHTML = '';
-            const validAssets = assetsToRender.filter(asset => asset.id && asset.name);
+            
+            const sortedAssets = [...assetsToRender].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+            const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
             noDataMessage.classList.toggle('hidden', validAssets.length > 0);
             validAssets.forEach(asset => {
                 const tr = document.createElement('tr');
+                tr.dataset.id = asset.id;
                 tr.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${asset.name || ''}</div></td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.type || ''}</td>
@@ -817,7 +845,7 @@
             employeeAssetList.innerHTML = `
                 <ul class="divide-y divide-gray-200">
                     ${assets.map(a => `
-                        <li class="py-3">
+                        <li class="p-3 employee-asset-item" data-id="${a.id}">
                             <p class="text-sm font-medium text-gray-900">${a.name}</p>
                             <p class="text-sm text-gray-500">${a.type || ''} (ID: ${a.idCode || 'N/A'})</p>
                         </li>
@@ -897,20 +925,28 @@
             };
 
             document.getElementById('asset-table-body').addEventListener('click', (e) => {
-                const menu = e.target.closest('.actions-menu');
-                if (menu) {
-                    const dropdown = menu.querySelector('.actions-dropdown');
-                    // Close all other dropdowns
+                const menuButton = e.target.closest('.actions-btn');
+                if (menuButton) {
+                    const dropdown = menuButton.nextElementSibling;
                     document.querySelectorAll('.actions-dropdown.show').forEach(d => {
                         if (d !== dropdown) d.classList.remove('show');
                     });
-                    // Toggle the clicked one
-                    if (dropdown) dropdown.classList.toggle('show');
+                    dropdown.classList.toggle('show');
+                    return;
                 }
 
-                if (e.target.classList.contains('edit-btn')) openEditModal(e.target.dataset.id);
-                if (e.target.classList.contains('clone-btn')) openCloneModal(e.target.dataset.id);
-                if (e.target.classList.contains('delete-btn')) deleteAsset(e.target.dataset.rowIndex);
+                const assetId = e.target.closest('tr')?.dataset.id;
+                if (!assetId) return;
+
+                if (e.target.classList.contains('edit-btn')) {
+                    openEditModal(e.target.dataset.id);
+                } else if (e.target.classList.contains('clone-btn')) {
+                    openCloneModal(e.target.dataset.id);
+                } else if (e.target.classList.contains('delete-btn')) {
+                    deleteAsset(e.target.dataset.rowIndex);
+                } else if (!e.target.closest('.actions-menu')) {
+                    openDetailModal(assetId);
+                }
             });
 
             // Close dropdowns if clicking elsewhere
