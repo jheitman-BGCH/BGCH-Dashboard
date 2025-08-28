@@ -16,7 +16,6 @@
         .modal-content {
             transition: transform 0.3s ease-in-out;
         }
-        /* Simple spinner for loading states */
         .loader {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #3498db;
@@ -39,12 +38,34 @@
         }
         #asset-table-body tr:hover {
             background-color: #f9fafb;
-            cursor: pointer;
         }
         #employee-asset-list li:hover {
             background-color: #f9fafb;
             cursor: pointer;
         }
+        .actions-menu { position: relative; }
+        .actions-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            z-index: 10;
+            background-color: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 0.5rem 0;
+            min-width: 8rem;
+        }
+        .actions-dropdown.show { display: block; }
+        .actions-dropdown a {
+            display: block;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: #374151;
+            cursor: pointer;
+        }
+        .actions-dropdown a:hover { background-color: #f3f4f6; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -55,36 +76,9 @@
             <h1 class="text-4xl font-bold text-gray-900">Technology Asset Dashboard</h1>
             <p class="text-gray-600 mt-1">Manage your organization's technology assets directly from a Google Sheet.</p>
         </header>
-
-        <!-- Setup Instructions & User Credentials -->
-        <div id="setup-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h2 class="text-2xl font-semibold mb-4">Initial Setup</h2>
-            <p class="mb-4">Before you begin, you need to configure your Google API credentials and the target spreadsheet.</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="api-key" class="block text-sm font-medium text-gray-700">Google API Key</label>
-                    <input type="password" id="api-key" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Paste your API Key here">
-                </div>
-                <div>
-                    <label for="client-id" class="block text-sm font-medium text-gray-700">Google Client ID</label>
-                    <input type="password" id="client-id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Paste your Client ID here">
-                </div>
-                <div>
-                    <label for="spreadsheet-id" class="block text-sm font-medium text-gray-700">Google Spreadsheet ID</label>
-                    <input type="text" id="spreadsheet-id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Paste your Spreadsheet ID here">
-                </div>
-                 <div>
-                    <label for="sheet-name" class="block text-sm font-medium text-gray-700">Sheet Name</label>
-                    <input type="text" id="sheet-name" value="Assets" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                </div>
-            </div>
-             <div class="mt-4">
-                <button id="save-settings-btn" class="w-full md:w-auto bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Save Settings & Connect</button>
-            </div>
-        </div>
         
         <!-- Authentication Section -->
-        <div id="auth-section" class="text-center my-12 hidden">
+        <div id="auth-section" class="text-center my-12">
             <p class="text-lg mb-4">Please connect your Google Account to access the spreadsheet.</p>
             <button id="authorize_button" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                 Connect to Google
@@ -341,21 +335,6 @@
         </div>
     </div>
 
-    <!-- Asset Detail Modal -->
-    <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
-        <div class="modal-backdrop fixed inset-0"></div>
-        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
-            <div class="p-8">
-                <h2 id="detail-modal-title" class="text-2xl font-bold mb-6">Asset Details</h2>
-                <div id="detail-modal-content" class="space-y-4 text-sm"></div>
-                <div class="flex justify-end gap-4 mt-8">
-                    <button type="button" id="detail-modal-edit-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Edit</button>
-                    <button type="button" id="detail-modal-close-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Custom Alert/Message Box -->
     <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
         <p id="message-text"></p>
@@ -363,21 +342,16 @@
 
     <script>
         // --- CONFIGURATION ---
-        let API_KEY = '';
-        let CLIENT_ID = '';
-        let SPREADSHEET_ID = '';
-        let SHEET_NAME = '';
+        const API_KEY = 'AIzaSyBw8-Fw_RHDGkllATR6w8xP9D0SbNo7zjY';
+        const CLIENT_ID = '525866256494-i4g16ahgtjvm851k1q5k9qg05vjbv1dt.apps.googleusercontent.com';
+        const SPREADSHEET_ID = '1YZ1bACVHyudX08jqSuojSBAxSPO5_bRp9czImJhShhY';
+        const SHEET_NAME = 'Asset';
 
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         const HEADERS = [
             "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
             "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", 
             "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
-        ];
-        const CHART_COLORS = [
-            'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)', 
-            'rgba(75, 192, 192, 0.6)', 'rgba(153, 102, 255, 0.6)', 'rgba(255, 159, 64, 0.6)',
-            'rgba(199, 199, 199, 0.6)', 'rgba(83, 102, 255, 0.6)', 'rgba(40, 230, 150, 0.6)'
         ];
 
         // --- STATE MANAGEMENT ---
@@ -388,7 +362,6 @@
         let charts = {}; // To hold chart instances
 
         // --- DOM ELEMENT REFERENCES ---
-        const setupSection = document.getElementById('setup-section');
         const authSection = document.getElementById('auth-section');
         const dashboardSection = document.getElementById('dashboard-section');
         const authorizeButton = document.getElementById('authorize_button');
@@ -399,7 +372,6 @@
         const assetModal = document.getElementById('asset-modal');
         const assetForm = document.getElementById('asset-form');
         const cancelBtn = document.getElementById('cancel-btn');
-        const saveSettingsBtn = document.getElementById('save-settings-btn');
         const loadingIndicator = document.getElementById('loading-indicator');
         const noDataMessage = document.getElementById('no-data-message');
         const employeeModal = document.getElementById('employee-modal');
@@ -410,11 +382,9 @@
         const overviewTab = document.getElementById('overview-tab');
         const inventoryPanel = document.getElementById('inventory-panel');
         const overviewPanel = document.getElementById('overview-panel');
-        const detailModal = document.getElementById('detail-modal');
         
         // --- INITIALIZATION & GOOGLE API SETUP ---
         window.onload = () => {
-            loadSettings();
             setupEventListeners();
             loadGoogleAPIs();
         };
@@ -440,7 +410,7 @@
         }
 
         function checkAndInitialize() {
-            if (gapiInited && gisInited && API_KEY && CLIENT_ID) {
+            if (gapiInited && gisInited) {
                 initializeGoogleClients().then(() => {
                     updateSigninStatus(gapi.client.getToken() !== null);
                 });
@@ -488,46 +458,9 @@
         }
 
         function updateSigninStatus(isSignedIn) {
-            setupSection.classList.toggle('hidden', isSignedIn || (API_KEY && CLIENT_ID && SPREADSHEET_ID));
-            authSection.classList.toggle('hidden', isSignedIn || !(API_KEY && CLIENT_ID && SPREADSHEET_ID));
+            authSection.classList.toggle('hidden', isSignedIn);
             dashboardSection.classList.toggle('hidden', !isSignedIn);
             if (isSignedIn) loadSheetData();
-        }
-
-        // --- SETTINGS MANAGEMENT ---
-        function loadSettings() {
-            API_KEY = localStorage.getItem('techDashboard_apiKey') || '';
-            CLIENT_ID = localStorage.getItem('techDashboard_clientId') || '';
-            SPREADSHEET_ID = localStorage.getItem('techDashboard_spreadsheetId') || '';
-            SHEET_NAME = localStorage.getItem('techDashboard_sheetName') || 'Assets';
-            document.getElementById('api-key').value = API_KEY;
-            document.getElementById('client-id').value = CLIENT_ID;
-            document.getElementById('spreadsheet-id').value = SPREADSHEET_ID;
-            document.getElementById('sheet-name').value = SHEET_NAME;
-        }
-
-        function saveSettings() {
-            API_KEY = document.getElementById('api-key').value.trim();
-            CLIENT_ID = document.getElementById('client-id').value.trim();
-            SPREADSHEET_ID = document.getElementById('spreadsheet-id').value.trim();
-            SHEET_NAME = document.getElementById('sheet-name').value.trim();
-            if (!API_KEY || !CLIENT_ID || !SPREADSHEET_ID || !SHEET_NAME) {
-                showMessage('All settings fields are required.'); return;
-            }
-            localStorage.setItem('techDashboard_apiKey', API_KEY);
-            localStorage.setItem('techDashboard_clientId', CLIENT_ID);
-            localStorage.setItem('techDashboard_spreadsheetId', SPREADSHEET_ID);
-            localStorage.setItem('techDashboard_sheetName', SHEET_NAME);
-            
-            showMessage('Settings saved. Attempting to connect...', 'success');
-
-            if (gapiInited && gisInited) {
-                initializeGoogleClients().then(() => {
-                    updateSigninStatus(false);
-                });
-            } else {
-                showMessage("Google scripts not loaded yet. Please wait a moment and try again.");
-            }
         }
 
         // --- GOOGLE SHEETS API CALLS ---
@@ -749,15 +682,10 @@
         function renderTable(assetsToRender) {
             const tableBody = document.getElementById('asset-table-body');
             tableBody.innerHTML = '';
-            
-            // Sort assets alphabetically by name
-            const sortedAssets = [...assetsToRender].sort((a, b) => a.name.localeCompare(b.name));
-
-            const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
+            const validAssets = assetsToRender.filter(asset => asset.id && asset.name);
             noDataMessage.classList.toggle('hidden', validAssets.length > 0);
             validAssets.forEach(asset => {
                 const tr = document.createElement('tr');
-                tr.dataset.id = asset.id; // Add data-id for click events
                 tr.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${asset.name || ''}</div></td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.type || ''}</td>
@@ -765,9 +693,18 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.assignedTo || ''}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.condition || ''}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button class="text-indigo-600 hover:text-indigo-900 edit-btn" data-id="${asset.id}">Edit</button>
-                        <button class="text-yellow-600 hover:text-yellow-900 ml-4 clone-btn" data-id="${asset.id}">Clone</button>
-                        <button class="text-red-600 hover:text-red-900 ml-4 delete-btn" data-row-index="${asset.rowIndex}">Delete</button>
+                        <div class="actions-menu">
+                            <button class="actions-btn p-1 rounded-full hover:bg-gray-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                            </button>
+                            <div class="actions-dropdown">
+                                <a class="edit-btn" data-id="${asset.id}">Edit</a>
+                                <a class="clone-btn" data-id="${asset.id}">Clone</a>
+                                <a class="delete-btn" data-row-index="${asset.rowIndex}">Delete</a>
+                            </div>
+                        </div>
                     </td>
                 `;
                 tableBody.appendChild(tr);
@@ -853,32 +790,6 @@
             toggleModal(assetModal, true);
         }
 
-        function openDetailModal(assetId) {
-            const asset = allAssets.find(a => a.id === assetId);
-            if (!asset) return;
-
-            document.getElementById('detail-modal-title').innerText = asset.name || 'Asset Details';
-            const content = document.getElementById('detail-modal-content');
-            
-            content.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-                    ${Object.entries(asset).map(([key, value]) => {
-                        if (key === 'rowIndex' || key === 'id' || !value) return '';
-                        const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                        return `<div><strong class="font-semibold text-gray-600">${formattedKey}:</strong> ${value}</div>`;
-                    }).join('')}
-                </div>
-            `;
-            
-            const editBtn = document.getElementById('detail-modal-edit-btn');
-            editBtn.onclick = () => {
-                toggleModal(detailModal, false);
-                openEditModal(assetId);
-            };
-
-            toggleModal(detailModal, true);
-        }
-
         function openEmployeeViewModal() {
             const employees = [...new Set(allAssets.map(a => a.assignedTo).filter(Boolean))].sort();
             employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
@@ -906,7 +817,7 @@
             employeeAssetList.innerHTML = `
                 <ul class="divide-y divide-gray-200">
                     ${assets.map(a => `
-                        <li class="p-3 employee-asset-item" data-id="${a.id}">
+                        <li class="py-3">
                             <p class="text-sm font-medium text-gray-900">${a.name}</p>
                             <p class="text-sm text-gray-500">${a.type || ''} (ID: ${a.idCode || 'N/A'})</p>
                         </li>
@@ -918,7 +829,6 @@
         function setupEventListeners() {
             authorizeButton.onclick = handleAuthClick;
             signoutButton.onclick = handleSignoutClick;
-            saveSettingsBtn.onclick = saveSettings;
             refreshBtn.onclick = loadSheetData;
             addAssetBtn.onclick = () => {
                 assetForm.reset();
@@ -935,9 +845,6 @@
             employeeModalCloseBtn.onclick = () => toggleModal(employeeModal, false);
             employeeModal.querySelector('.modal-backdrop').onclick = () => toggleModal(employeeModal, false);
             employeeSelect.onchange = displayEmployeeAssets;
-
-            document.getElementById('detail-modal-close-btn').onclick = () => toggleModal(detailModal, false);
-            detailModal.querySelector('.modal-backdrop').onclick = () => toggleModal(detailModal, false);
 
             inventoryTab.addEventListener('click', () => switchTab('inventory'));
             overviewTab.addEventListener('click', () => switchTab('overview'));
@@ -990,25 +897,26 @@
             };
 
             document.getElementById('asset-table-body').addEventListener('click', (e) => {
-                const targetRow = e.target.closest('tr');
-                if (!targetRow) return;
-                const assetId = targetRow.dataset.id;
-                
-                if (e.target.classList.contains('edit-btn')) {
-                    openEditModal(assetId);
-                } else if (e.target.classList.contains('clone-btn')) {
-                    openCloneModal(assetId);
-                } else if (e.target.classList.contains('delete-btn')) {
-                    deleteAsset(e.target.dataset.rowIndex);
-                } else {
-                    openDetailModal(assetId);
+                const menu = e.target.closest('.actions-menu');
+                if (menu) {
+                    const dropdown = menu.querySelector('.actions-dropdown');
+                    // Close all other dropdowns
+                    document.querySelectorAll('.actions-dropdown.show').forEach(d => {
+                        if (d !== dropdown) d.classList.remove('show');
+                    });
+                    // Toggle the clicked one
+                    if (dropdown) dropdown.classList.toggle('show');
                 }
+
+                if (e.target.classList.contains('edit-btn')) openEditModal(e.target.dataset.id);
+                if (e.target.classList.contains('clone-btn')) openCloneModal(e.target.dataset.id);
+                if (e.target.classList.contains('delete-btn')) deleteAsset(e.target.dataset.rowIndex);
             });
 
-            employeeAssetList.addEventListener('click', (e) => {
-                const targetItem = e.target.closest('.employee-asset-item');
-                if (targetItem) {
-                    openDetailModal(targetItem.dataset.id);
+            // Close dropdowns if clicking elsewhere
+            window.addEventListener('click', function(e) {
+                if (!e.target.closest('.actions-menu')) {
+                    document.querySelectorAll('.actions-dropdown.show').forEach(d => d.classList.remove('show'));
                 }
             });
         }
@@ -1048,13 +956,6 @@
                 const chart = elements[0].element.$context.chart;
                 const label = chart.data.labels[elementIndex];
                 
-                // Clear existing filters
-                document.getElementById('filter-search').value = '';
-                document.getElementById('filter-site').value = '';
-                document.getElementById('filter-asset-type').value = '';
-                document.getElementById('filter-condition').value = '';
-                document.getElementById('filter-intended-user').value = '';
-
                 const filterSelect = document.getElementById(filterId);
                 if (filterSelect) {
                     filterSelect.value = label;
@@ -1094,7 +995,7 @@
                     datasets: [{
                         label: 'Assets per Site',
                         data: siteData.data,
-                        backgroundColor: siteChartType === 'doughnut' ? CHART_COLORS : 'rgba(75, 192, 192, 0.6)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
                         borderColor: 'rgba(75, 192, 192, 1)',
                         borderWidth: 1
                     }]
@@ -1112,7 +1013,11 @@
                     datasets: [{
                         label: 'Assets by Condition',
                         data: conditionData.data,
-                        backgroundColor: CHART_COLORS
+                        backgroundColor: [
+                            'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)',
+                            'rgba(255, 99, 132, 0.6)', 'rgba(75, 192, 192, 0.6)',
+                            'rgba(153, 102, 255, 0.6)'
+                        ]
                     }]
                 },
                 options: {
@@ -1127,7 +1032,7 @@
                     datasets: [{
                         label: 'Assets by Type',
                         data: typeData.data,
-                        backgroundColor: typeChartType === 'doughnut' ? CHART_COLORS : 'rgba(255, 159, 64, 0.6)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.6)',
                         borderColor: 'rgba(255, 159, 64, 1)',
                         borderWidth: 1
                     }]
