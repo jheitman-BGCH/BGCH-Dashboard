@@ -85,7 +85,7 @@
     <div class="container mx-auto p-4 md:p-8">
         <header class="mb-8">
             <h1 class="text-4xl font-bold text-gray-900">Technology Asset Dashboard</h1>
-            <p class="text-gray-600 mt-1">Manage your organization's technology assets directly from a Google Sheet.</p>
+            <p class="text-gray-600 mt-1">Complete Technology Inventory Management System for Boys & Girls Club of Harlem</p>
         </header>
         
         <!-- Authentication Section -->
@@ -199,7 +199,17 @@
                         </div>
                         <canvas id="condition-chart"></canvas>
                     </div>
-                    <div class="bg-white p-6 rounded-lg shadow-md lg:col-span-2">
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assignments per Employee</h3>
+                            <select id="employee-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
+                                <option value="bar">Bar</option>
+                                <option value="doughnut">Doughnut</option>
+                            </select>
+                        </div>
+                        <canvas id="employee-chart"></canvas>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-semibold">Assets by Type</h3>
                             <select id="type-chart-type" class="chart-type-select rounded-md border-gray-300 shadow-sm text-sm">
@@ -271,6 +281,7 @@
                         <select id="intended-user-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                             <option>Staff</option>
                             <option>Youth</option>
+                            <option>Staff & Youth</option>
                             <option>Other</option>
                         </select>
                     </div>
@@ -298,6 +309,10 @@
                     <div>
                         <label for="serial-number" class="block text-sm font-medium text-gray-700">Serial Number</label>
                         <input type="text" id="serial-number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                     <div>
+                        <label for="model-number" class="block text-sm font-medium text-gray-700">Model Number</label>
+                        <input type="text" id="model-number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                     </div>
                     <div>
                         <label for="assigned-to" class="block text-sm font-medium text-gray-700">Assignment (Employee)</label>
@@ -368,7 +383,7 @@
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         const HEADERS = [
             "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
-            "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", 
+            "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", "Model Number",
             "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
         ];
         const CHART_COLORS = [
@@ -495,14 +510,34 @@
                 });
                 const values = response.result.values;
 
-                const sheetHeaders = values ? values[0] : [];
-                const headersMatch = HEADERS.every(h => sheetHeaders.includes(h));
-
-                if (!values || values.length < 1 || !headersMatch) {
-                    await initializeSheet(values && values.length > 0);
+                let sheetHeaders = values ? values[0] : [];
+                
+                if (!values || values.length < 1) {
+                    await initializeSheet(false);
+                    sheetHeaders = [...HEADERS];
                     allAssets = [];
                 } else {
-                    const headers = values[0];
+                     // Non-destructively add new columns if they are missing
+                    const missingHeaders = HEADERS.filter(h => !sheetHeaders.includes(h));
+                    if (missingHeaders.length > 0) {
+                        try {
+                            const newColumnIndex = sheetHeaders.length;
+                            const newColumnLetter = String.fromCharCode(65 + newColumnIndex);
+                            await gapi.client.sheets.spreadsheets.values.update({
+                                spreadsheetId: SPREADSHEET_ID,
+                                range: `${SHEET_NAME}!${newColumnLetter}1`,
+                                valueInputOption: 'RAW',
+                                resource: { values: [missingHeaders] }
+                            });
+                            sheetHeaders.push(...missingHeaders);
+                             showMessage(`Added missing column(s): ${missingHeaders.join(', ')}`, 'success');
+                        } catch(err) {
+                             console.error("Failed to add new column(s):", err);
+                             showMessage("Could not update sheet headers. Please add them manually.");
+                        }
+                    }
+
+                    const headers = sheetHeaders;
                     const dataRows = values.slice(1);
                     const headerMap = {};
                     headers.forEach((header, index) => {
@@ -522,6 +557,7 @@
                         type: row[headerMap["Asset Type"]],
                         idCode: row[headerMap["ID Code"]],
                         serial: row[headerMap["Serial Number"]],
+                        modelNumber: row[headerMap["Model Number"]],
                         assignedTo: row[headerMap["Assigned To"]],
                         dateIssued: row[headerMap["Date Issued"]],
                         purchaseDate: row[headerMap["Purchase Date"]],
@@ -536,9 +572,9 @@
                 populateEmployeeDropdown();
                 renderOverviewCharts();
             } catch (err) {
-                console.error(err);
-                showMessage(`Error loading data: ${err.result?.error?.message || 'Unknown error'}`);
-                // handleSignoutClick(); // Commenting this out to avoid signing out on JS errors
+                console.error("Caught error during data load:", err);
+                const errorMessage = err.result?.error?.message || err.message || 'Unknown error';
+                showMessage(`Error loading data: ${errorMessage}`);
             } finally {
                 setLoading(false);
             }
@@ -566,8 +602,9 @@
                     "Asset ID": data.id || `ASSET-${Date.now()}`, "Asset Name": data.name, "Quantity": data.quantity, "Site": data.site,
                     "Location": data.location, "Container": data.container, "Intended User Type": data.intendedUserType,
                     "Condition": data.condition, "Asset Type": data.type, "ID Code": data.idCode, "Serial Number": data.serial,
-                    "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, "Purchase Date": data.purchaseDate,
-                    "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', "Notes": data.notes
+                    "Model Number": data.modelNumber, "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, 
+                    "Purchase Date": data.purchaseDate, "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', 
+                    "Notes": data.notes
                 };
                 return keyMap[header] || '';
             });
@@ -776,8 +813,9 @@
                     ${Object.entries({
                         "Asset ID": asset.id, "Quantity": asset.quantity, "Site": asset.site, "Location": asset.location,
                         "Container": asset.container, "Intended User": asset.intendedUserType, "Condition": asset.condition,
-                        "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial,
-                        "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued, "Purchase Date": asset.purchaseDate
+                        "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial, 
+                        "Model Number": asset.modelNumber, "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued, 
+                        "Purchase Date": asset.purchaseDate
                     }).map(([key, value]) => `
                         <div>
                             <dt>${key}:</dt>
@@ -816,6 +854,7 @@
             document.getElementById('condition').value = asset.condition || 'Good';
             document.getElementById('id-code').value = asset.idCode || '';
             document.getElementById('serial-number').value = asset.serial || '';
+            document.getElementById('model-number').value = asset.modelNumber || '';
             document.getElementById('date-issued').value = asset.dateIssued || '';
             document.getElementById('purchase-date').value = asset.purchaseDate || '';
             document.getElementById('specs').value = asset.specs || '';
@@ -952,6 +991,7 @@
                     type: getSelectValue('asset-type'),
                     idCode: document.getElementById('id-code').value,
                     serial: document.getElementById('serial-number').value,
+                    modelNumber: document.getElementById('model-number').value,
                     assignedTo: getSelectValue('assigned-to'),
                     dateIssued: document.getElementById('date-issued').value,
                     purchaseDate: document.getElementById('purchase-date').value,
@@ -1015,25 +1055,21 @@
         }
 
         function switchTab(tabName) {
-            // Hide all panels
-            inventoryPanel.classList.add('hidden');
-            overviewPanel.classList.add('hidden');
-            employeesPanel.classList.add('hidden');
+            const tabs = {
+                inventory: { panel: inventoryPanel, button: inventoryTab },
+                overview: { panel: overviewPanel, button: overviewTab },
+                employees: { panel: employeesPanel, button: employeesTab }
+            };
 
-            // Deactivate all tabs
-            [inventoryTab, overviewTab, employeesTab].forEach(tab => tab.classList.remove('active'));
-            
-            if (tabName === 'inventory') {
-                inventoryPanel.classList.remove('hidden');
-                inventoryTab.classList.add('active');
-            } else if (tabName === 'overview') {
-                overviewPanel.classList.remove('hidden');
-                overviewTab.classList.add('active');
-                renderOverviewCharts();
-            } else if (tabName === 'employees') {
-                employeesPanel.classList.remove('hidden');
-                employeesTab.classList.add('active');
-            }
+            Object.values(tabs).forEach(tab => {
+                tab.panel.classList.add('hidden');
+                tab.button.classList.remove('active');
+            });
+
+            tabs[tabName].panel.classList.remove('hidden');
+            tabs[tabName].button.classList.add('active');
+
+            if (tabName === 'overview') renderOverviewCharts();
         }
         
         function setLoading(isLoading) {
@@ -1057,17 +1093,23 @@
                 const chart = elements[0].element.$context.chart;
                 const label = chart.data.labels[elementIndex];
                 
-                // Clear existing filters
-                document.getElementById('filter-search').value = '';
-                ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-intended-user'].forEach(id => {
-                    document.getElementById(id).value = '';
-                });
+                if (filterId === 'employee-select') {
+                    switchTab('employees');
+                    const employeeDropdown = document.getElementById('employee-select');
+                    employeeDropdown.value = label;
+                    displayEmployeeAssets();
+                } else {
+                    document.getElementById('filter-search').value = '';
+                    ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-intended-user'].forEach(id => {
+                        document.getElementById(id).value = '';
+                    });
 
-                const filterSelect = document.getElementById(filterId);
-                if (filterSelect) {
-                    filterSelect.value = label;
-                    switchTab('inventory');
-                    applyFiltersAndSearch();
+                    const filterSelect = document.getElementById(filterId);
+                    if (filterSelect) {
+                        filterSelect.value = label;
+                        switchTab('inventory');
+                        applyFiltersAndSearch();
+                    }
                 }
             }
         }
@@ -1078,6 +1120,7 @@
             const processData = (key) => {
                 const counts = allAssets.reduce((acc, asset) => {
                     const value = asset[key] || 'Uncategorized';
+                    if (key === 'assignedTo' && value === 'Uncategorized') return acc; // Skip unassigned for this chart
                     acc[value] = (acc[value] || 0) + 1;
                     return acc;
                 }, {});
@@ -1090,19 +1133,17 @@
             const siteData = processData('site');
             const conditionData = processData('condition');
             const typeData = processData('type');
+            const employeeData = processData('assignedTo');
 
             const siteChartType = document.getElementById('site-chart-type').value;
             const conditionChartType = document.getElementById('condition-chart-type').value;
             const typeChartType = document.getElementById('type-chart-type').value;
+            const employeeChartType = document.getElementById('employee-chart-type').value;
 
             const createChartConfig = (type, data, label, filterId, defaultBgColor) => {
                 const isDoughnut = type === 'doughnut';
+                const bgColors = (isDoughnut || Array.isArray(defaultBgColor)) ? CHART_COLORS : defaultBgColor;
                 
-                const bgColors = isDoughnut ? CHART_COLORS : defaultBgColor;
-                const borderColors = Array.isArray(bgColors) 
-                    ? bgColors.map(c => c.replace('0.6', '1'))
-                    : bgColors.replace('0.6', '1');
-
                 const config = {
                     type: type,
                     data: {
@@ -1111,7 +1152,6 @@
                             label: label,
                             data: data.data,
                             backgroundColor: bgColors,
-                            borderColor: borderColors,
                             borderWidth: 1
                         }]
                     },
@@ -1132,8 +1172,9 @@
             };
             
             charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(siteChartType, siteData, 'Assets per Site', 'filter-site', 'rgba(75, 192, 192, 0.6)'));
-            charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS)); // Note: defaultBgColor is CHART_COLORS for doughnut
+            charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS));
             charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(typeChartType, typeData, 'Assets by Type', 'filter-asset-type', 'rgba(255, 159, 64, 0.6)'));
+            charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(employeeChartType, employeeData, 'Assignments per Employee', 'employee-select', 'rgba(153, 102, 255, 0.6)'));
         }
     </script>
     
