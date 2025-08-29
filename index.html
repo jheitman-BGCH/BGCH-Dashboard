@@ -538,7 +538,7 @@
             } catch (err) {
                 console.error(err);
                 showMessage(`Error loading data: ${err.result?.error?.message || 'Unknown error'}`);
-                handleSignoutClick();
+                // handleSignoutClick(); // Commenting this out to avoid signing out on JS errors
             } finally {
                 setLoading(false);
             }
@@ -1021,9 +1021,7 @@
             employeesPanel.classList.add('hidden');
 
             // Deactivate all tabs
-            inventoryTab.classList.remove('active');
-            overviewTab.classList.remove('active');
-            employeesTab.classList.remove('active');
+            [inventoryTab, overviewTab, employeesTab].forEach(tab => tab.classList.remove('active'));
             
             if (tabName === 'inventory') {
                 inventoryPanel.classList.remove('hidden');
@@ -1099,6 +1097,12 @@
 
             const createChartConfig = (type, data, label, filterId, defaultBgColor) => {
                 const isDoughnut = type === 'doughnut';
+                
+                const bgColors = isDoughnut ? CHART_COLORS : defaultBgColor;
+                const borderColors = Array.isArray(bgColors) 
+                    ? bgColors.map(c => c.replace('0.6', '1'))
+                    : bgColors.replace('0.6', '1');
+
                 const config = {
                     type: type,
                     data: {
@@ -1106,8 +1110,8 @@
                         datasets: [{
                             label: label,
                             data: data.data,
-                            backgroundColor: isDoughnut ? CHART_COLORS : defaultBgColor,
-                            borderColor: defaultBgColor.replace('0.6', '1'),
+                            backgroundColor: bgColors,
+                            borderColor: borderColors,
                             borderWidth: 1
                         }]
                     },
@@ -1126,9 +1130,9 @@
                 }
                 return config;
             };
-
+            
             charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(siteChartType, siteData, 'Assets per Site', 'filter-site', 'rgba(75, 192, 192, 0.6)'));
-            charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS));
+            charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS)); // Note: defaultBgColor is CHART_COLORS for doughnut
             charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(typeChartType, typeData, 'Assets by Type', 'filter-asset-type', 'rgba(255, 159, 64, 0.6)'));
         }
     </script>
