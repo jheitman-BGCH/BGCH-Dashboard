@@ -615,28 +615,25 @@
         
         async function writeToSheet(data, isUpdate = false) {
             setLoading(true);
-             const rowData = [
-                data.id || `ASSET-${Date.now()}`,
-                data.name || '',
-                data.quantity || '',
-                data.site || '',
-                data.location || '',
-                data.container || '',
-                data.intendedUserType || '',
-                data.condition || '',
-                data.type || '',
-                data.idCode || '',
-                data.serial || '',
-                data.modelNumber || '',
-                data.assignedTo || '',
-                data.dateIssued || '',
-                data.purchaseDate || '',
-                data.specs || '',
-                data.loginInfo ? btoa(data.loginInfo) : '',
-                data.notes || ''
-            ];
-            
             try {
+                // Get the current headers from the sheet to ensure correct column order
+                const headerResponse = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${SHEET_NAME}!1:1`,
+                });
+                const sheetHeaders = headerResponse.result.values ? headerResponse.result.values[0] : HEADERS;
+
+                const dataMap = {
+                    "Asset ID": data.id || `ASSET-${Date.now()}`, "Asset Name": data.name, "Quantity": data.quantity, "Site": data.site,
+                    "Location": data.location, "Container": data.container, "Intended User Type": data.intendedUserType,
+                    "Condition": data.condition, "Asset Type": data.type, "ID Code": data.idCode, "Serial Number": data.serial,
+                    "Model Number": data.modelNumber, "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, 
+                    "Purchase Date": data.purchaseDate, "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', 
+                    "Notes": data.notes
+                };
+
+                const rowData = sheetHeaders.map(header => dataMap[header] || '');
+
                 if (isUpdate) {
                     await gapi.client.sheets.spreadsheets.values.update({
                         spreadsheetId: SPREADSHEET_ID, range: `${SHEET_NAME}!A${data.rowIndex}`,
