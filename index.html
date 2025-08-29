@@ -544,27 +544,40 @@
                         headerMap[header] = index;
                     });
 
-                    allAssets = dataRows.map((row, index) => ({
-                        rowIndex: index + 2,
-                        id: row[headerMap["Asset ID"]],
-                        name: row[headerMap["Asset Name"]],
-                        quantity: row[headerMap["Quantity"]],
-                        site: row[headerMap["Site"]],
-                        location: row[headerMap["Location"]],
-                        container: row[headerMap["Container"]],
-                        intendedUserType: row[headerMap["Intended User Type"]],
-                        condition: row[headerMap["Condition"]],
-                        type: row[headerMap["Asset Type"]],
-                        idCode: row[headerMap["ID Code"]],
-                        serial: row[headerMap["Serial Number"]],
-                        modelNumber: row[headerMap["Model Number"]],
-                        assignedTo: row[headerMap["Assigned To"]],
-                        dateIssued: row[headerMap["Date Issued"]],
-                        purchaseDate: row[headerMap["Purchase Date"]],
-                        specs: row[headerMap["Specs"]],
-                        loginInfo: row[headerMap["Login Info"]] ? atob(row[headerMap["Login Info"]]) : '',
-                        notes: row[headerMap["Notes"]]
-                    }));
+                    allAssets = dataRows.map((row, index) => {
+                        const loginInfoRaw = row[headerMap["Login Info"]];
+                        let loginInfoDecoded = '';
+                        if (loginInfoRaw) {
+                            try {
+                                loginInfoDecoded = atob(loginInfoRaw);
+                            } catch (e) {
+                                console.warn("Could not decode login info, treating as plain text:", loginInfoRaw);
+                                loginInfoDecoded = loginInfoRaw;
+                            }
+                        }
+
+                        return {
+                            rowIndex: index + 2,
+                            id: row[headerMap["Asset ID"]],
+                            name: row[headerMap["Asset Name"]],
+                            quantity: row[headerMap["Quantity"]],
+                            site: row[headerMap["Site"]],
+                            location: row[headerMap["Location"]],
+                            container: row[headerMap["Container"]],
+                            intendedUserType: row[headerMap["Intended User Type"]],
+                            condition: row[headerMap["Condition"]],
+                            type: row[headerMap["Asset Type"]],
+                            idCode: row[headerMap["ID Code"]],
+                            serial: row[headerMap["Serial Number"]],
+                            modelNumber: row[headerMap["Model Number"]],
+                            assignedTo: row[headerMap["Assigned To"]],
+                            dateIssued: row[headerMap["Date Issued"]],
+                            purchaseDate: row[headerMap["Purchase Date"]],
+                            specs: row[headerMap["Specs"]],
+                            loginInfo: loginInfoDecoded,
+                            notes: row[headerMap["Notes"]]
+                        }
+                    });
                 }
                 renderTable(allAssets);
                 populateFilterDropdowns();
