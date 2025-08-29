@@ -69,6 +69,14 @@
             cursor: pointer;
         }
         .actions-dropdown a:hover { background-color: #f3f4f6; }
+        #detail-modal-content dt {
+            font-weight: 600;
+            color: #4b5563; /* text-gray-600 */
+        }
+        #detail-modal-content dd {
+            color: #1f2937; /* text-gray-800 */
+            word-break: break-word;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -752,6 +760,48 @@
                 setTimeout(() => modal.classList.add('hidden'), 300);
             }
         }
+        
+        function openDetailModal(assetId) {
+            const asset = allAssets.find(a => a.id === assetId);
+            if (!asset) return;
+
+            document.getElementById('detail-modal-title').textContent = asset.name || 'Asset Details';
+            
+            const content = document.getElementById('detail-modal-content');
+            content.innerHTML = `
+                <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                    ${Object.entries({
+                        "Asset ID": asset.id, "Quantity": asset.quantity, "Site": asset.site, "Location": asset.location,
+                        "Container": asset.container, "Intended User": asset.intendedUserType, "Condition": asset.condition,
+                        "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial,
+                        "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued, "Purchase Date": asset.purchaseDate
+                    }).map(([key, value]) => `
+                        <div>
+                            <dt>${key}:</dt>
+                            <dd>${value || 'N/A'}</dd>
+                        </div>
+                    `).join('')}
+                    <div class="md:col-span-2">
+                        <dt>Specs:</dt>
+                        <dd class="whitespace-pre-wrap">${asset.specs || 'N/A'}</dd>
+                    </div>
+                     <div class="md:col-span-2">
+                        <dt>Notes:</dt>
+                        <dd class="whitespace-pre-wrap">${asset.notes || 'N/A'}</dd>
+                    </div>
+                </dl>
+            `;
+
+            const editBtn = document.getElementById('detail-modal-edit-btn');
+            const newEditBtn = editBtn.cloneNode(true);
+            editBtn.parentNode.replaceChild(newEditBtn, editBtn);
+            newEditBtn.addEventListener('click', () => {
+                toggleModal(detailModal, false);
+                openEditModal(assetId);
+            });
+
+            toggleModal(detailModal, true);
+        }
 
         function populateAssetForm(asset) {
             document.getElementById('asset-id').value = asset.id || '';
@@ -978,6 +1028,7 @@
                 overviewPanel.classList.remove('hidden');
                 inventoryTab.classList.remove('active', 'text-indigo-600', 'border-indigo-600');
                 overviewTab.classList.add('active', 'text-indigo-600', 'border-indigo-600');
+                renderOverviewCharts(); // Refresh charts when switching to the tab
             }
         }
         
@@ -1002,6 +1053,12 @@
                 const chart = elements[0].element.$context.chart;
                 const label = chart.data.labels[elementIndex];
                 
+                // Clear existing filters
+                document.getElementById('filter-search').value = '';
+                ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-intended-user'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+
                 const filterSelect = document.getElementById(filterId);
                 if (filterSelect) {
                     filterSelect.value = label;
@@ -1034,14 +1091,14 @@
             const conditionChartType = document.getElementById('condition-chart-type').value;
             const typeChartType = document.getElementById('type-chart-type').value;
 
-            charts.siteChart = new Chart(document.getElementById('site-chart'), {
+            const siteChartConfig = {
                 type: siteChartType,
                 data: {
                     labels: siteData.labels,
                     datasets: [{
                         label: 'Assets per Site',
                         data: siteData.data,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        backgroundColor: siteChartType === 'doughnut' ? CHART_COLORS : 'rgba(75, 192, 192, 0.6)',
                         borderColor: 'rgba(75, 192, 192, 1)',
                         borderWidth: 1
                     }]
@@ -1050,35 +1107,31 @@
                     scales: { y: { beginAtZero: true } },
                     onClick: (event, elements) => handleChartClick(event, elements, 'filter-site')
                 }
-            });
+            };
 
-            charts.conditionChart = new Chart(document.getElementById('condition-chart'), {
+            const conditionChartConfig = {
                 type: conditionChartType,
                 data: {
                     labels: conditionData.labels,
                     datasets: [{
                         label: 'Assets by Condition',
                         data: conditionData.data,
-                        backgroundColor: [
-                            'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)',
-                            'rgba(255, 99, 132, 0.6)', 'rgba(75, 192, 192, 0.6)',
-                            'rgba(153, 102, 255, 0.6)'
-                        ]
+                        backgroundColor: CHART_COLORS
                     }]
                 },
                 options: {
                     onClick: (event, elements) => handleChartClick(event, elements, 'filter-condition')
                 }
-            });
-
-            charts.typeChart = new Chart(document.getElementById('type-chart'), {
+            };
+            
+            const typeChartConfig = {
                 type: typeChartType,
                 data: {
                     labels: typeData.labels,
                     datasets: [{
                         label: 'Assets by Type',
                         data: typeData.data,
-                        backgroundColor: 'rgba(255, 159, 64, 0.6)',
+                        backgroundColor: typeChartType === 'doughnut' ? CHART_COLORS : 'rgba(255, 159, 64, 0.6)',
                         borderColor: 'rgba(255, 159, 64, 1)',
                         borderWidth: 1
                     }]
@@ -1088,9 +1141,26 @@
                     scales: { x: { beginAtZero: true } },
                     onClick: (event, elements) => handleChartClick(event, elements, 'filter-asset-type')
                 }
-            });
+            };
+            
+            if (siteChartType === 'line' || siteChartType === 'bar') {
+                siteChartConfig.options.scales = { y: { beginAtZero: true }};
+            }
+             if (conditionChartType === 'line' || conditionChartType === 'bar') {
+                conditionChartConfig.options.scales = { y: { beginAtZero: true }};
+            }
+            if (typeChartType === 'line' || typeChartType === 'bar') {
+                typeChartConfig.options.scales = { x: { beginAtZero: true }};
+                 if (typeChartType === 'bar') typeChartConfig.options.indexAxis = 'y';
+            }
+
+
+            charts.siteChart = new Chart(document.getElementById('site-chart'), siteChartConfig);
+            charts.conditionChart = new Chart(document.getElementById('condition-chart'), conditionChartConfig);
+            charts.typeChart = new Chart(document.getElementById('type-chart'), typeChartConfig);
         }
     </script>
     
 </body>
 </html>
+
