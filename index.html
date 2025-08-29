@@ -549,7 +549,12 @@
                         let loginInfoDecoded = '';
                         if (loginInfoRaw) {
                             try {
-                                loginInfoDecoded = atob(loginInfoRaw);
+                                // Check if it's base64 before decoding
+                                if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(loginInfoRaw)) {
+                                     loginInfoDecoded = atob(loginInfoRaw);
+                                } else {
+                                     loginInfoDecoded = loginInfoRaw;
+                                }
                             } catch (e) {
                                 console.warn("Could not decode login info, treating as plain text:", loginInfoRaw);
                                 loginInfoDecoded = loginInfoRaw;
@@ -610,17 +615,26 @@
         
         async function writeToSheet(data, isUpdate = false) {
             setLoading(true);
-            const rowData = HEADERS.map(header => {
-                const keyMap = {
-                    "Asset ID": data.id || `ASSET-${Date.now()}`, "Asset Name": data.name, "Quantity": data.quantity, "Site": data.site,
-                    "Location": data.location, "Container": data.container, "Intended User Type": data.intendedUserType,
-                    "Condition": data.condition, "Asset Type": data.type, "ID Code": data.idCode, "Serial Number": data.serial,
-                    "Model Number": data.modelNumber, "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, 
-                    "Purchase Date": data.purchaseDate, "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', 
-                    "Notes": data.notes
-                };
-                return keyMap[header] || '';
-            });
+             const rowData = [
+                data.id || `ASSET-${Date.now()}`,
+                data.name || '',
+                data.quantity || '',
+                data.site || '',
+                data.location || '',
+                data.container || '',
+                data.intendedUserType || '',
+                data.condition || '',
+                data.type || '',
+                data.idCode || '',
+                data.serial || '',
+                data.modelNumber || '',
+                data.assignedTo || '',
+                data.dateIssued || '',
+                data.purchaseDate || '',
+                data.specs || '',
+                data.loginInfo ? btoa(data.loginInfo) : '',
+                data.notes || ''
+            ];
             
             try {
                 if (isUpdate) {
