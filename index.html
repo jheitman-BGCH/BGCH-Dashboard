@@ -103,9 +103,6 @@
                     <button id="add-asset-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
                         Add New Asset
                     </button>
-                    <button id="view-by-employee-btn" class="bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2">
-                        View by Employee
-                    </button>
                 </div>
                 <div class="flex items-center gap-4">
                      <div id="loading-indicator" class="hidden items-center gap-2 text-gray-600">
@@ -124,6 +121,7 @@
                 <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                     <button id="inventory-tab" class="tab-btn active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Inventory</button>
                     <button id="overview-tab" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">Overview</button>
+                    <button id="employees-tab" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">Employees</button>
                 </nav>
             </div>
 
@@ -212,6 +210,22 @@
                         </div>
                         <canvas id="type-chart"></canvas>
                     </div>
+                 </div>
+            </div>
+
+            <!-- Employees Panel -->
+            <div id="employees-panel" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow-md">
+                     <h2 class="text-2xl font-bold mb-6">View Assets by Employee</h2>
+                     <div class="mb-4 max-w-sm">
+                         <label for="employee-select" class="block text-sm font-medium text-gray-700">Select Employee</label>
+                         <select id="employee-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                             <option value="">-- Select an Employee --</option>
+                         </select>
+                     </div>
+                     <div id="employee-asset-list" class="mt-6 border-t pt-4">
+                         <!-- Assets will be listed here -->
+                     </div>
                  </div>
             </div>
 
@@ -323,28 +337,6 @@
             </form>
         </div>
     </div>
-    
-    <!-- View by Employee Modal -->
-    <div id="employee-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
-        <div class="modal-backdrop fixed inset-0"></div>
-        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
-            <div class="p-8">
-                <h2 class="text-2xl font-bold mb-6">View Assets by Employee</h2>
-                <div class="mb-4">
-                    <label for="employee-select" class="block text-sm font-medium text-gray-700">Select Employee</label>
-                    <select id="employee-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <option value="">-- Select an Employee --</option>
-                    </select>
-                </div>
-                <div id="employee-asset-list" class="mt-6 border-t pt-4">
-                    <!-- Assets will be listed here -->
-                </div>
-                 <div class="flex justify-end gap-4 mt-8">
-                    <button type="button" id="employee-modal-close-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Asset Detail Modal -->
     <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
@@ -398,21 +390,20 @@
         const authorizeButton = document.getElementById('authorize_button');
         const signoutButton = document.getElementById('signout_button');
         const addAssetBtn = document.getElementById('add-asset-btn');
-        const viewByEmployeeBtn = document.getElementById('view-by-employee-btn');
         const refreshBtn = document.getElementById('refresh-data-btn');
         const assetModal = document.getElementById('asset-modal');
         const assetForm = document.getElementById('asset-form');
         const cancelBtn = document.getElementById('cancel-btn');
         const loadingIndicator = document.getElementById('loading-indicator');
         const noDataMessage = document.getElementById('no-data-message');
-        const employeeModal = document.getElementById('employee-modal');
         const employeeSelect = document.getElementById('employee-select');
         const employeeAssetList = document.getElementById('employee-asset-list');
-        const employeeModalCloseBtn = document.getElementById('employee-modal-close-btn');
         const inventoryTab = document.getElementById('inventory-tab');
         const overviewTab = document.getElementById('overview-tab');
+        const employeesTab = document.getElementById('employees-tab');
         const inventoryPanel = document.getElementById('inventory-panel');
         const overviewPanel = document.getElementById('overview-panel');
+        const employeesPanel = document.getElementById('employees-panel');
         const detailModal = document.getElementById('detail-modal');
         
         // --- INITIALIZATION & GOOGLE API SETUP ---
@@ -542,6 +533,7 @@
                 renderTable(allAssets);
                 populateFilterDropdowns();
                 populateModalDropdowns();
+                populateEmployeeDropdown();
                 renderOverviewCharts();
             } catch (err) {
                 console.error(err);
@@ -681,6 +673,17 @@
             });
         }
 
+        function populateEmployeeDropdown() {
+            const employees = [...new Set(allAssets.map(a => a.assignedTo).filter(Boolean))].sort();
+            employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
+            employees.forEach(e => {
+                const option = document.createElement('option');
+                option.value = e;
+                option.textContent = e;
+                employeeSelect.appendChild(option);
+            });
+        }
+
         function applyFiltersAndSearch() {
             const searchTerm = document.getElementById('filter-search').value.toLowerCase();
             const siteFilter = document.getElementById('filter-site').value;
@@ -793,6 +796,7 @@
             `;
 
             const editBtn = document.getElementById('detail-modal-edit-btn');
+            // This cloning is important to remove old event listeners before adding a new one
             const newEditBtn = editBtn.cloneNode(true);
             editBtn.parentNode.replaceChild(newEditBtn, editBtn);
             newEditBtn.addEventListener('click', () => {
@@ -868,19 +872,6 @@
             toggleModal(assetModal, true);
         }
 
-        function openEmployeeViewModal() {
-            const employees = [...new Set(allAssets.map(a => a.assignedTo).filter(Boolean))].sort();
-            employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
-            employees.forEach(e => {
-                const option = document.createElement('option');
-                option.value = e;
-                option.textContent = e;
-                employeeSelect.appendChild(option);
-            });
-            employeeAssetList.innerHTML = '';
-            toggleModal(employeeModal, true);
-        }
-
         function displayEmployeeAssets() {
             const selectedEmployee = employeeSelect.value;
             if (!selectedEmployee) {
@@ -917,15 +908,13 @@
                 });
                 toggleModal(assetModal, true);
             };
-            viewByEmployeeBtn.onclick = openEmployeeViewModal;
             cancelBtn.onclick = () => toggleModal(assetModal, false);
             assetModal.querySelector('.modal-backdrop').onclick = () => toggleModal(assetModal, false);
-            employeeModalCloseBtn.onclick = () => toggleModal(employeeModal, false);
-            employeeModal.querySelector('.modal-backdrop').onclick = () => toggleModal(employeeModal, false);
             employeeSelect.onchange = displayEmployeeAssets;
 
             inventoryTab.addEventListener('click', () => switchTab('inventory'));
             overviewTab.addEventListener('click', () => switchTab('overview'));
+            employeesTab.addEventListener('click', () => switchTab('employees'));
 
             document.getElementById('site').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('site'), document.getElementById('site-new')));
             document.getElementById('location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('location'), document.getElementById('location-new')));
@@ -978,22 +967,31 @@
                 const target = e.target;
                 const assetId = target.closest('tr')?.dataset.id;
 
+                // Handle action menu button click
                 if (target.closest('.actions-btn')) {
                     const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
                     document.querySelectorAll('.actions-dropdown.show').forEach(d => {
                         if (d !== dropdown) d.classList.remove('show');
                     });
                     dropdown.classList.toggle('show');
-                    return;
+                    return; // Stop further execution
                 }
                 
-                if (target.classList.contains('edit-btn')) {
-                    openEditModal(target.dataset.id);
-                } else if (target.classList.contains('clone-btn')) {
-                    openCloneModal(target.dataset.id);
-                } else if (target.classList.contains('delete-btn')) {
-                    deleteAsset(target.dataset.rowIndex);
-                } else if (assetId) {
+                // Handle clicks inside the action menu
+                if (target.closest('.actions-dropdown')) {
+                    if (target.classList.contains('edit-btn')) {
+                        openEditModal(target.dataset.id);
+                    } else if (target.classList.contains('clone-btn')) {
+                        openCloneModal(target.dataset.id);
+                    } else if (target.classList.contains('delete-btn')) {
+                        deleteAsset(target.dataset.rowIndex);
+                    }
+                    target.closest('.actions-dropdown').classList.remove('show');
+                    return; // Stop further execution
+                }
+
+                // If the click was on the row but not in the action menu, open detail view
+                if (assetId) {
                     openDetailModal(assetId);
                 }
             });
@@ -1008,7 +1006,6 @@
             document.getElementById('detail-modal-close-btn').onclick = () => toggleModal(detailModal, false);
             detailModal.querySelector('.modal-backdrop').onclick = () => toggleModal(detailModal, false);
 
-
             // Close dropdowns if clicking elsewhere
             window.addEventListener('click', function(e) {
                 if (!e.target.closest('.actions-menu')) {
@@ -1018,17 +1015,26 @@
         }
 
         function switchTab(tabName) {
+            // Hide all panels
+            inventoryPanel.classList.add('hidden');
+            overviewPanel.classList.add('hidden');
+            employeesPanel.classList.add('hidden');
+
+            // Deactivate all tabs
+            inventoryTab.classList.remove('active');
+            overviewTab.classList.remove('active');
+            employeesTab.classList.remove('active');
+            
             if (tabName === 'inventory') {
                 inventoryPanel.classList.remove('hidden');
-                overviewPanel.classList.add('hidden');
-                inventoryTab.classList.add('active', 'text-indigo-600', 'border-indigo-600');
-                overviewTab.classList.remove('active', 'text-indigo-600', 'border-indigo-600');
-            } else {
-                inventoryPanel.classList.add('hidden');
+                inventoryTab.classList.add('active');
+            } else if (tabName === 'overview') {
                 overviewPanel.classList.remove('hidden');
-                inventoryTab.classList.remove('active', 'text-indigo-600', 'border-indigo-600');
-                overviewTab.classList.add('active', 'text-indigo-600', 'border-indigo-600');
-                renderOverviewCharts(); // Refresh charts when switching to the tab
+                overviewTab.classList.add('active');
+                renderOverviewCharts();
+            } else if (tabName === 'employees') {
+                employeesPanel.classList.remove('hidden');
+                employeesTab.classList.add('active');
             }
         }
         
@@ -1091,73 +1097,39 @@
             const conditionChartType = document.getElementById('condition-chart-type').value;
             const typeChartType = document.getElementById('type-chart-type').value;
 
-            const siteChartConfig = {
-                type: siteChartType,
-                data: {
-                    labels: siteData.labels,
-                    datasets: [{
-                        label: 'Assets per Site',
-                        data: siteData.data,
-                        backgroundColor: siteChartType === 'doughnut' ? CHART_COLORS : 'rgba(75, 192, 192, 0.6)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: { 
-                    scales: { y: { beginAtZero: true } },
-                    onClick: (event, elements) => handleChartClick(event, elements, 'filter-site')
+            const createChartConfig = (type, data, label, filterId, defaultBgColor) => {
+                const isDoughnut = type === 'doughnut';
+                const config = {
+                    type: type,
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: label,
+                            data: data.data,
+                            backgroundColor: isDoughnut ? CHART_COLORS : defaultBgColor,
+                            borderColor: defaultBgColor.replace('0.6', '1'),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        onClick: (event, elements) => handleChartClick(event, elements, filterId),
+                        scales: {},
+                        indexAxis: 'x'
+                    }
+                };
+                if (type === 'bar' || type === 'line') {
+                    config.options.scales.y = { beginAtZero: true };
                 }
+                if (type === 'bar') {
+                   config.options.indexAxis = 'y';
+                   config.options.scales = { x: { beginAtZero: true } };
+                }
+                return config;
             };
 
-            const conditionChartConfig = {
-                type: conditionChartType,
-                data: {
-                    labels: conditionData.labels,
-                    datasets: [{
-                        label: 'Assets by Condition',
-                        data: conditionData.data,
-                        backgroundColor: CHART_COLORS
-                    }]
-                },
-                options: {
-                    onClick: (event, elements) => handleChartClick(event, elements, 'filter-condition')
-                }
-            };
-            
-            const typeChartConfig = {
-                type: typeChartType,
-                data: {
-                    labels: typeData.labels,
-                    datasets: [{
-                        label: 'Assets by Type',
-                        data: typeData.data,
-                        backgroundColor: typeChartType === 'doughnut' ? CHART_COLORS : 'rgba(255, 159, 64, 0.6)',
-                        borderColor: 'rgba(255, 159, 64, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: { 
-                    indexAxis: typeChartType === 'bar' ? 'y' : 'x', 
-                    scales: { x: { beginAtZero: true } },
-                    onClick: (event, elements) => handleChartClick(event, elements, 'filter-asset-type')
-                }
-            };
-            
-            if (siteChartType === 'line' || siteChartType === 'bar') {
-                siteChartConfig.options.scales = { y: { beginAtZero: true }};
-            }
-             if (conditionChartType === 'line' || conditionChartType === 'bar') {
-                conditionChartConfig.options.scales = { y: { beginAtZero: true }};
-            }
-            if (typeChartType === 'line' || typeChartType === 'bar') {
-                typeChartConfig.options.scales = { x: { beginAtZero: true }};
-                 if (typeChartType === 'bar') typeChartConfig.options.indexAxis = 'y';
-            }
-
-
-            charts.siteChart = new Chart(document.getElementById('site-chart'), siteChartConfig);
-            charts.conditionChart = new Chart(document.getElementById('condition-chart'), conditionChartConfig);
-            charts.typeChart = new Chart(document.getElementById('type-chart'), typeChartConfig);
+            charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(siteChartType, siteData, 'Assets per Site', 'filter-site', 'rgba(75, 192, 192, 0.6)'));
+            charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS));
+            charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(typeChartType, typeData, 'Assets by Type', 'filter-asset-type', 'rgba(255, 159, 64, 0.6)'));
         }
     </script>
     
