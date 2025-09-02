@@ -39,7 +39,7 @@
         #asset-table-body tr:not(.no-hover):hover {
             background-color: #f9fafb;
         }
-        #asset-table-body tr td:first-child {
+        #asset-table-body tr td:not(:first-child):not(:last-child) {
             cursor: pointer;
         }
         #employee-asset-list li:hover {
@@ -131,8 +131,8 @@
             <!-- Inventory Panel -->
             <div id="inventory-panel">
                 <!-- Filter and Search Section -->
-                <div id="filter-section" class="bg-white p-4 rounded-lg shadow-md mb-6">
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                 <div id="filter-section" class="bg-white p-4 rounded-lg shadow-md mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div>
                             <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
                             <input type="text" id="filter-search" placeholder="Search all fields..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
@@ -153,25 +153,17 @@
                             <label for="filter-intended-user" class="block text-sm font-medium text-gray-700">Intended User</label>
                             <select id="filter-intended-user" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
+                        <div class="flex items-end">
+                            <button id="customize-cols-btn" class="w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700">Customize Columns</button>
+                        </div>
                     </div>
                 </div>
+
 
                 <!-- Asset Table -->
                 <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th scope="col" class="relative px-6 py-3">
-                                    <input type="checkbox" id="select-all-assets" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Name</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Type</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Code</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condition</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
+                        <thead id="asset-table-head" class="bg-gray-50"></thead>
                         <tbody id="asset-table-body" class="bg-white divide-y divide-gray-200"></tbody>
                     </table>
                     <div id="no-data-message" class="text-center py-12 text-gray-500 hidden">
@@ -455,6 +447,23 @@
         </div>
     </div>
 
+    <!-- Customize Columns Modal -->
+    <div id="column-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-md mx-auto rounded-lg shadow-xl z-10 transform scale-95">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold mb-6">Customize Inventory Columns</h2>
+                <div id="column-checkboxes" class="grid grid-cols-2 gap-4">
+                    <!-- Checkboxes will be inserted here -->
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="column-cancel-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="button" id="column-save-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Alert/Message Box -->
     <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
         <p id="message-text"></p>
@@ -485,6 +494,7 @@
         let gisInited = false;
         let allAssets = []; // Local cache of sheet data
         let charts = {}; // To hold chart instances
+        let visibleColumns = [];
 
         // --- DOM ELEMENT REFERENCES ---
         const authSection = document.getElementById('auth-section');
@@ -509,12 +519,24 @@
         const employeesPanel = document.getElementById('employees-panel');
         const detailModal = document.getElementById('detail-modal');
         const bulkEditModal = document.getElementById('bulk-edit-modal');
+        const columnModal = document.getElementById('column-modal');
         
         // --- INITIALIZATION & GOOGLE API SETUP ---
         window.onload = () => {
+            loadVisibleColumns();
             setupEventListeners();
             loadGoogleAPIs();
         };
+
+        function loadVisibleColumns() {
+            const savedCols = localStorage.getItem('visibleColumns');
+            if(savedCols) {
+                visibleColumns = JSON.parse(savedCols);
+            } else {
+                // Default columns
+                visibleColumns = ["Asset Name", "Asset Type", "ID Code", "Assigned To", "Condition"];
+            }
+        }
 
         function loadGoogleAPIs() {
             const scriptGapi = document.createElement('script');
@@ -606,7 +628,6 @@
                     sheetHeaders = [...HEADERS];
                     allAssets = [];
                 } else {
-                     // Non-destructively add new columns if they are missing
                     const missingHeaders = HEADERS.filter(h => !sheetHeaders.includes(h));
                     if (missingHeaders.length > 0) {
                         try {
@@ -672,11 +693,12 @@
                         }
                     });
                 }
-                renderTable(allAssets);
+                applyFiltersAndSearch(); // This calls renderTable
                 populateFilterDropdowns();
                 populateModalDropdowns();
                 populateEmployeeDropdown();
                 renderOverviewCharts();
+                populateColumnSelector();
             } catch (err) {
                 console.error("Caught error during data load:", err);
                 const errorMessage = err.result?.error?.message || err.message || 'Unknown error';
@@ -904,31 +926,63 @@
         }
 
         function renderTable(assetsToRender) {
+            const tableHead = document.getElementById('asset-table-head');
             const tableBody = document.getElementById('asset-table-body');
+            tableHead.innerHTML = '';
             tableBody.innerHTML = '';
             
+            // Build Header
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `
+                <th scope="col" class="relative px-6 py-3">
+                    <input type="checkbox" id="select-all-assets" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                </th>
+                ${visibleColumns.map(colName => `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${colName}</th>`).join('')}
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            `;
+            tableHead.appendChild(headerRow);
+            
+            // Re-attach listener for select-all
+            document.getElementById('select-all-assets').addEventListener('change', (e) => {
+                document.querySelectorAll('.asset-checkbox').forEach(checkbox => {
+                    checkbox.checked = e.target.checked;
+                });
+                updateBulkEditButtonVisibility();
+            });
+
+            // Build Body
             const sortedAssets = [...assetsToRender].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
             noDataMessage.classList.toggle('hidden', validAssets.length > 0);
+            
+            const headerToKeyMap = {
+                "Asset Name": "name", "Quantity": "quantity", "Site": "site", "Location": "location", "Container": "container",
+                "Intended User Type": "intendedUserType", "Condition": "condition", "Asset Type": "type", "ID Code": "idCode",
+                "Serial Number": "serial", "Model Number": "modelNumber", "Assigned To": "assignedTo", "Date Issued": "dateIssued",
+                "Purchase Date": "purchaseDate", "Specs": "specs", "Notes": "notes"
+            };
+
             validAssets.forEach(asset => {
                 const tr = document.createElement('tr');
                 tr.dataset.id = asset.id;
-                tr.innerHTML = `
+                
+                let rowHtml = `
                     <td class="relative px-6 py-4 whitespace-nowrap">
                         <input type="checkbox" data-id="${asset.id}" class="asset-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${asset.name || ''}</div></td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.type || ''}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.idCode || ''}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.assignedTo || ''}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.condition || ''}</td>
+                    </td>`;
+                
+                visibleColumns.forEach(colName => {
+                    const key = headerToKeyMap[colName];
+                    const value = asset[key] || '';
+                     rowHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${value}</td>`;
+                });
+
+                rowHtml += `
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div class="actions-menu">
                             <button class="actions-btn p-1 rounded-full hover:bg-gray-200">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
                             </button>
                             <div class="actions-dropdown">
                                 <a class="edit-btn" data-id="${asset.id}">Edit</a>
@@ -936,8 +990,8 @@
                                 <a class="delete-btn" data-row-index="${asset.rowIndex}">Delete</a>
                             </div>
                         </div>
-                    </td>
-                `;
+                    </td>`;
+                tr.innerHTML = rowHtml;
                 tableBody.appendChild(tr);
             });
              updateBulkEditButtonVisibility();
@@ -967,7 +1021,7 @@
             content.innerHTML = `
                 <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                     ${Object.entries({
-                        "Asset ID": asset.id, "Quantity": asset.quantity, "Site": asset.site, "Location": asset.location,
+                        "Asset ID": asset.id, "Asset Name": asset.name, "Quantity": asset.quantity, "Site": asset.site, "Location": asset.location,
                         "Container": asset.container, "Intended User": asset.intendedUserType, "Condition": asset.condition,
                         "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial, 
                         "Model Number": asset.modelNumber, "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued, 
@@ -1210,13 +1264,6 @@
             });
 
             // --- Bulk Edit Listeners ---
-            document.getElementById('select-all-assets').addEventListener('change', (e) => {
-                document.querySelectorAll('.asset-checkbox').forEach(checkbox => {
-                    checkbox.checked = e.target.checked;
-                });
-                updateBulkEditButtonVisibility();
-            });
-            
             bulkEditBtn.addEventListener('click', () => {
                 document.getElementById('bulk-edit-form').reset();
                 document.querySelectorAll('#bulk-edit-form [disabled]').forEach(el => el.disabled = true);
@@ -1229,7 +1276,7 @@
 
             document.querySelectorAll('[id^="bulk-update-"]').forEach(checkbox => {
                  checkbox.addEventListener('change', (e) => {
-                    const fieldName = e.target.id.split('-')[2];
+                    const fieldName = e.target.id.replace('bulk-update-', '').replace('-check', '');
                     const inputEl = document.getElementById(`bulk-${fieldName}`) || document.getElementById(`bulk-${fieldName}-type`);
                     if(inputEl) inputEl.disabled = !e.target.checked;
                 });
@@ -1244,6 +1291,24 @@
                 e.preventDefault();
                 handleBulkUpdate();
             };
+            
+            // --- Column Customization Listeners ---
+            document.getElementById('customize-cols-btn').addEventListener('click', () => {
+                populateColumnSelector();
+                toggleModal(columnModal, true)
+            });
+            document.getElementById('column-cancel-btn').onclick = () => toggleModal(columnModal, false);
+            columnModal.querySelector('.modal-backdrop').onclick = () => toggleModal(columnModal, false);
+            document.getElementById('column-save-btn').addEventListener('click', () => {
+                const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
+                if (selectedCols.length === 0 && !document.querySelector('#column-checkboxes input[value="Asset Name"]:checked')) {
+                    selectedCols.push("Asset Name"); // Ensure at least one column is visible
+                }
+                visibleColumns = ["Asset Name", ...selectedCols.filter(c => c !== "Asset Name")];
+                localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
+                applyFiltersAndSearch();
+                toggleModal(columnModal, false);
+            });
         }
 
         function switchTab(tabName) {
@@ -1422,6 +1487,25 @@
             const newInp = document.getElementById(`${id}-new`);
             return select.value === '--new--' ? newInp.value : select.value;
         };
+
+        function populateColumnSelector() {
+            const container = document.getElementById('column-checkboxes');
+            container.innerHTML = '';
+            // Exclude Asset ID and fields not meant for direct viewing from the main list
+            const selectableColumns = HEADERS.filter(h => !["Asset ID", "Specs", "Login Info", "Notes"].includes(h));
+
+            selectableColumns.forEach(colName => {
+                const isChecked = visibleColumns.includes(colName);
+                const isDisabled = colName === "Asset Name";
+                const div = document.createElement('div');
+                div.className = "flex items-center";
+                div.innerHTML = `
+                    <input id="col-${colName.replace(/\s+/g, '')}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    <label for="col-${colName.replace(/\s+/g, '')}" class="ml-2 block text-sm text-gray-900 ${isDisabled ? 'text-gray-400' : ''}">${colName}</label>
+                `;
+                container.appendChild(div);
+            });
+        }
 
     </script>
     
