@@ -133,28 +133,37 @@
                 <!-- Filter and Search Section -->
                  <div id="filter-section" class="bg-white p-4 rounded-lg shadow-md mb-6">
                     <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
-                        <div>
+                        <div id="filter-search-wrapper">
                             <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
                             <input type="text" id="filter-search" placeholder="Search all fields..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                         </div>
-                        <div>
+                        <div id="filter-site-wrapper" class="hidden">
                             <label for="filter-site" class="block text-sm font-medium text-gray-700">Site</label>
                             <select id="filter-site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
-                        <div>
+                        <div id="filter-asset-type-wrapper" class="hidden">
                             <label for="filter-asset-type" class="block text-sm font-medium text-gray-700">Asset Type</label>
                             <select id="filter-asset-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
-                        <div>
+                        <div id="filter-condition-wrapper" class="hidden">
                             <label for="filter-condition" class="block text-sm font-medium text-gray-700">Condition</label>
                             <select id="filter-condition" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
-                        <div>
-                            <label for="filter-intended-user" class="block text-sm font-medium text-gray-700">Intended User</label>
-                            <select id="filter-intended-user" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                         <div id="filter-assigned-to-wrapper" class="hidden">
+                            <label for="filter-assigned-to" class="block text-sm font-medium text-gray-700">Assigned To</label>
+                            <select id="filter-assigned-to" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        </div>
+                         <div id="filter-model-number-wrapper" class="hidden">
+                            <label for="filter-model-number" class="block text-sm font-medium text-gray-700">Model Number</label>
+                            <select id="filter-model-number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
                         <div class="flex items-end">
-                            <button id="customize-cols-btn" class="w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700">Customize Columns</button>
+                            <button id="customize-cols-btn" class="w-full h-10 flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" />
+                                </svg>
+                                <span>View</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -495,6 +504,7 @@
         let allAssets = []; // Local cache of sheet data
         let charts = {}; // To hold chart instances
         let visibleColumns = [];
+        let sortState = { column: 'Asset Name', direction: 'asc' };
 
         // --- DOM ELEMENT REFERENCES ---
         const authSection = document.getElementById('auth-section');
@@ -693,8 +703,7 @@
                         }
                     });
                 }
-                applyFiltersAndSearch(); // This calls renderTable
-                populateFilterDropdowns();
+                applyFiltersAndSearch();
                 populateModalDropdowns();
                 populateEmployeeDropdown();
                 renderOverviewCharts();
@@ -862,10 +871,9 @@
 
         function populateFilterDropdowns() {
             const filters = [
-                { id: 'filter-site', key: 'site' },
-                { id: 'filter-asset-type', key: 'type' },
-                { id: 'filter-condition', key: 'condition' },
-                { id: 'filter-intended-user', key: 'intendedUserType' }
+                { id: 'filter-site', key: 'site' }, { id: 'filter-asset-type', key: 'type' },
+                { id: 'filter-condition', key: 'condition' }, { id: 'filter-assigned-to', key: 'assignedTo'},
+                { id: 'filter-model-number', key: 'modelNumber'}
             ];
 
             filters.forEach(filter => {
@@ -873,7 +881,7 @@
                 if (!select) return;
 
                 const uniqueValues = [...new Set(allAssets.map(asset => asset[filter.key]).filter(Boolean))].sort();
-                select.innerHTML = `<option value="">All ${filter.key.charAt(0).toUpperCase() + filter.key.slice(1)}s</option>`;
+                select.innerHTML = `<option value="">All</option>`;
 
                 uniqueValues.forEach(value => {
                     const option = document.createElement('option');
@@ -882,6 +890,7 @@
                     select.appendChild(option);
                 });
             });
+            renderFilters();
         }
 
         function populateEmployeeDropdown() {
@@ -900,16 +909,18 @@
             const siteFilter = document.getElementById('filter-site').value;
             const typeFilter = document.getElementById('filter-asset-type').value;
             const conditionFilter = document.getElementById('filter-condition').value;
-            const userFilter = document.getElementById('filter-intended-user').value;
+            const assignedToFilter = document.getElementById('filter-assigned-to').value;
+            const modelNumberFilter = document.getElementById('filter-model-number').value;
 
             let filteredAssets = allAssets.filter(asset => {
                 const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
                 const matchesSite = siteFilter ? asset.site === siteFilter : true;
                 const matchesType = typeFilter ? asset.type === typeFilter : true;
                 const matchesCondition = conditionFilter ? asset.condition === conditionFilter : true;
-                const matchesUser = userFilter ? asset.intendedUserType === userFilter : true;
+                const matchesAssigned = assignedToFilter ? asset.assignedTo === assignedToFilter : true;
+                const matchesModel = modelNumberFilter ? asset.modelNumber === modelNumberFilter : true;
 
-                return matchesSearch && matchesSite && matchesType && matchesCondition && matchesUser;
+                return matchesSearch && matchesSite && matchesType && matchesCondition && matchesAssigned && matchesModel;
             });
 
             renderTable(filteredAssets);
@@ -933,16 +944,22 @@
             
             // Build Header
             const headerRow = document.createElement('tr');
-            headerRow.innerHTML = `
+            let headerHTML = `
                 <th scope="col" class="relative px-6 py-3">
                     <input type="checkbox" id="select-all-assets" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                </th>
-                ${visibleColumns.map(colName => `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${colName}</th>`).join('')}
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            `;
+                </th>`;
+            visibleColumns.forEach(colName => {
+                let sortArrow = '';
+                if(sortState.column === colName){
+                    sortArrow = sortState.direction === 'asc' ? '▲' : '▼';
+                }
+                headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" data-column="${colName}">${colName} <span class="sort-arrow">${sortArrow}</span></th>`
+            });
+            headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>`;
+            headerRow.innerHTML = headerHTML;
             tableHead.appendChild(headerRow);
             
-            // Re-attach listener for select-all
+            // Re-attach listeners
             document.getElementById('select-all-assets').addEventListener('change', (e) => {
                 document.querySelectorAll('.asset-checkbox').forEach(checkbox => {
                     checkbox.checked = e.target.checked;
@@ -950,18 +967,39 @@
                 updateBulkEditButtonVisibility();
             });
 
-            // Build Body
-            const sortedAssets = [...assetsToRender].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            tableHead.querySelectorAll('th[data-column]').forEach(th => {
+                th.addEventListener('click', () => {
+                    const colName = th.dataset.column;
+                    if(sortState.column === colName){
+                        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortState.column = colName;
+                        sortState.direction = 'asc';
+                    }
+                    applyFiltersAndSearch();
+                });
+            });
 
-            const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
-            noDataMessage.classList.toggle('hidden', validAssets.length > 0);
-            
+            // Build Body
             const headerToKeyMap = {
                 "Asset Name": "name", "Quantity": "quantity", "Site": "site", "Location": "location", "Container": "container",
                 "Intended User Type": "intendedUserType", "Condition": "condition", "Asset Type": "type", "ID Code": "idCode",
                 "Serial Number": "serial", "Model Number": "modelNumber", "Assigned To": "assignedTo", "Date Issued": "dateIssued",
                 "Purchase Date": "purchaseDate", "Specs": "specs", "Notes": "notes"
             };
+            const sortKey = headerToKeyMap[sortState.column];
+            
+            const sortedAssets = [...assetsToRender].sort((a, b) => {
+                const valA = a[sortKey] || '';
+                const valB = b[sortKey] || '';
+                if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+
+            const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
+            noDataMessage.classList.toggle('hidden', validAssets.length > 0);
 
             validAssets.forEach(asset => {
                 const tr = document.createElement('tr');
@@ -1174,7 +1212,8 @@
             document.getElementById('filter-site').addEventListener('change', applyFiltersAndSearch);
             document.getElementById('filter-asset-type').addEventListener('change', applyFiltersAndSearch);
             document.getElementById('filter-condition').addEventListener('change', applyFiltersAndSearch);
-            document.getElementById('filter-intended-user').addEventListener('change', applyFiltersAndSearch);
+            document.getElementById('filter-assigned-to').addEventListener('change', applyFiltersAndSearch);
+            document.getElementById('filter-model-number').addEventListener('change', applyFiltersAndSearch);
 
             document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', renderOverviewCharts));
 
@@ -1307,6 +1346,7 @@
                 visibleColumns = ["Asset Name", ...selectedCols.filter(c => c !== "Asset Name")];
                 localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
                 applyFiltersAndSearch();
+                renderFilters();
                 toggleModal(columnModal, false);
             });
         }
@@ -1357,7 +1397,7 @@
                     displayEmployeeAssets();
                 } else {
                     document.getElementById('filter-search').value = '';
-                    ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-intended-user'].forEach(id => {
+                    ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
                         document.getElementById(id).value = '';
                     });
 
@@ -1370,6 +1410,28 @@
                 }
             }
         }
+        
+        function renderFilters() {
+            const filterMap = {
+                "Site": "filter-site-wrapper", "Asset Type": "filter-asset-type-wrapper",
+                "Condition": "filter-condition-wrapper", "Assigned To": "filter-assigned-to-wrapper",
+                "Model Number": "filter-model-number-wrapper"
+            };
+
+            Object.values(filterMap).forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+
+            visibleColumns.forEach(colName => {
+                const wrapperId = filterMap[colName];
+                if (wrapperId) {
+                    const el = document.getElementById(wrapperId);
+                    if (el) el.classList.remove('hidden');
+                }
+            });
+        }
+
 
         function renderOverviewCharts() {
             Object.values(charts).forEach(chart => chart.destroy());
@@ -1492,16 +1554,15 @@
             const container = document.getElementById('column-checkboxes');
             container.innerHTML = '';
             // Exclude Asset ID and fields not meant for direct viewing from the main list
-            const selectableColumns = HEADERS.filter(h => !["Asset ID", "Specs", "Login Info", "Notes"].includes(h));
+            const selectableColumns = HEADERS.filter(h => !["Asset ID", "Specs", "Login Info", "Notes", "Asset Name"].includes(h));
 
             selectableColumns.forEach(colName => {
                 const isChecked = visibleColumns.includes(colName);
-                const isDisabled = colName === "Asset Name";
                 const div = document.createElement('div');
                 div.className = "flex items-center";
                 div.innerHTML = `
-                    <input id="col-${colName.replace(/\s+/g, '')}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                    <label for="col-${colName.replace(/\s+/g, '')}" class="ml-2 block text-sm text-gray-900 ${isDisabled ? 'text-gray-400' : ''}">${colName}</label>
+                    <input id="col-${colName.replace(/\s+/g, '')}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    <label for="col-${colName.replace(/\s+/g, '')}" class="ml-2 block text-sm text-gray-900">${colName}</label>
                 `;
                 container.appendChild(div);
             });
