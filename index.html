@@ -36,11 +36,11 @@
         #overview-panel canvas {
             cursor: pointer;
         }
-        #asset-table-body tr {
-            cursor: pointer;
-        }
-        #asset-table-body tr:hover {
+        #asset-table-body tr:not(.no-hover):hover {
             background-color: #f9fafb;
+        }
+        #asset-table-body tr td:first-child {
+            cursor: pointer;
         }
         #employee-asset-list li:hover {
             background-color: #f9fafb;
@@ -103,6 +103,9 @@
                     <button id="add-asset-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
                         Add New Asset
                     </button>
+                    <button id="bulk-edit-btn" class="hidden bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2">
+                        Bulk Edit Selected
+                    </button>
                 </div>
                 <div class="flex items-center gap-4">
                      <div id="loading-indicator" class="hidden items-center gap-2 text-gray-600">
@@ -158,6 +161,9 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
+                                <th scope="col" class="relative px-6 py-3">
+                                    <input type="checkbox" id="select-all-assets" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                </th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Name</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Type</th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Code</th>
@@ -352,6 +358,87 @@
             </form>
         </div>
     </div>
+    
+    <!-- Bulk Edit Modal -->
+    <div id="bulk-edit-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-lg mx-auto rounded-lg shadow-xl z-10 transform scale-95">
+            <form id="bulk-edit-form" class="p-8">
+                <h2 class="text-2xl font-bold mb-6">Bulk Edit Assets</h2>
+                <p class="mb-4 text-sm text-gray-600">Check the box next to a field to update it for all selected assets. Unchecked fields will not be changed.</p>
+                <div class="space-y-4">
+                    <!-- Site -->
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="bulk-update-site-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                        <div class="flex-grow">
+                            <label for="bulk-site" class="block text-sm font-medium text-gray-700">Site</label>
+                            <select id="bulk-site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100" disabled></select>
+                            <input type="text" id="bulk-site-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new site...">
+                        </div>
+                    </div>
+                    <!-- Location -->
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="bulk-update-location-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                        <div class="flex-grow">
+                            <label for="bulk-location" class="block text-sm font-medium text-gray-700">Location</label>
+                            <select id="bulk-location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100" disabled></select>
+                            <input type="text" id="bulk-location-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new location...">
+                        </div>
+                    </div>
+                    <!-- Container -->
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="bulk-update-container-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                        <div class="flex-grow">
+                            <label for="bulk-container" class="block text-sm font-medium text-gray-700">Container</label>
+                            <select id="bulk-container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100" disabled></select>
+                            <input type="text" id="bulk-container-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new container...">
+                        </div>
+                    </div>
+                    <!-- Intended User -->
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="bulk-update-intended-user-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                        <div class="flex-grow">
+                             <label for="bulk-intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
+                            <select id="bulk-intended-user-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100" disabled>
+                                <option>Staff</option>
+                                <option>Youth</option>
+                                <option>Staff & Youth</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Condition -->
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="bulk-update-condition-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                        <div class="flex-grow">
+                            <label for="bulk-condition" class="block text-sm font-medium text-gray-700">Condition</label>
+                            <select id="bulk-condition" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100" disabled>
+                                <option>New</option>
+                                <option>Good</option>
+                                <option>Fair</option>
+                                <option>Damaged</option>
+                                <option>For Repair</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Assigned To -->
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="bulk-update-assigned-to-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                        <div class="flex-grow">
+                            <label for="bulk-assigned-to" class="block text-sm font-medium text-gray-700">Assignment (Employee)</label>
+                            <select id="bulk-assigned-to" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100" disabled></select>
+                             <input type="text" id="bulk-assigned-to-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new employee...">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="bulk-cancel-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="submit" id="bulk-save-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Apply Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 
     <!-- Asset Detail Modal -->
     <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
@@ -405,6 +492,7 @@
         const authorizeButton = document.getElementById('authorize_button');
         const signoutButton = document.getElementById('signout_button');
         const addAssetBtn = document.getElementById('add-asset-btn');
+        const bulkEditBtn = document.getElementById('bulk-edit-btn');
         const refreshBtn = document.getElementById('refresh-data-btn');
         const assetModal = document.getElementById('asset-modal');
         const assetForm = document.getElementById('asset-form');
@@ -420,6 +508,7 @@
         const overviewPanel = document.getElementById('overview-panel');
         const employeesPanel = document.getElementById('employees-panel');
         const detailModal = document.getElementById('detail-modal');
+        const bulkEditModal = document.getElementById('bulk-edit-modal');
         
         // --- INITIALIZATION & GOOGLE API SETUP ---
         window.onload = () => {
@@ -549,7 +638,6 @@
                         let loginInfoDecoded = '';
                         if (loginInfoRaw) {
                             try {
-                                // Check if it's base64 before decoding
                                 if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(loginInfoRaw)) {
                                      loginInfoDecoded = atob(loginInfoRaw);
                                 } else {
@@ -616,7 +704,6 @@
         async function writeToSheet(data, isUpdate = false) {
             setLoading(true);
             try {
-                // Get the current headers from the sheet to ensure correct column order
                 const headerResponse = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: SPREADSHEET_ID,
                     range: `${SHEET_NAME}!1:1`,
@@ -654,6 +741,43 @@
             }
         }
 
+        async function bulkWriteToSheet(updates) {
+             setLoading(true);
+            try {
+                const headerResponse = await gapi.client.sheets.spreadsheets.values.get({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${SHEET_NAME}!1:1`,
+                });
+                const sheetHeaders = headerResponse.result.values ? headerResponse.result.values[0] : [];
+                const headerMap = {};
+                sheetHeaders.forEach((header, i) => headerMap[header] = i);
+                
+                const data = updates.map(update => {
+                    const range = `${SHEET_NAME}!${String.fromCharCode(65 + headerMap[update.field])}${update.rowIndex}`;
+                    return {
+                        range: range,
+                        values: [[update.value]]
+                    }
+                });
+
+                await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: SPREADSHEET_ID,
+                    resource: {
+                        valueInputOption: 'USER_ENTERED',
+                        data: data
+                    }
+                });
+
+                await loadSheetData();
+            } catch (err) {
+                 console.error(err);
+                showMessage(`Error with bulk update: ${err.result.error.message}`);
+            } finally {
+                 setLoading(false);
+            }
+        }
+
+
         async function deleteAsset(rowIndex) {
             setLoading(true);
             try {
@@ -683,31 +807,35 @@
 
         // --- UI & DOM MANIPULATION ---
         function populateModalDropdowns() {
-            const fieldsToPopulate = [
+            const fields = [
                 { id: 'site', key: 'site' }, { id: 'location', key: 'location' },
                 { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' },
                 { id: 'assigned-to', key: 'assignedTo' }
             ];
+             const bulkFields = [
+                { id: 'bulk-site', key: 'site' }, { id: 'bulk-location', key: 'location' },
+                { id: 'bulk-container', key: 'container' }, { id: 'bulk-assigned-to', key: 'assignedTo' }
+            ];
 
-            fieldsToPopulate.forEach(field => {
-                const select = document.getElementById(field.id);
-                if (!select) return;
-
-                const uniqueValues = [...new Set(allAssets.map(asset => asset[field.key]).filter(Boolean))].sort();
-                select.innerHTML = '<option value="">-- Select --</option>';
-
-                uniqueValues.forEach(value => {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = value;
-                    select.appendChild(option);
-                });
-                
-                const addNewOption = document.createElement('option');
-                addNewOption.value = '--new--';
-                addNewOption.textContent = 'Add New...';
-                select.appendChild(addNewOption);
-            });
+            const populate = (field) => {
+                 const select = document.getElementById(field.id);
+                 if (!select) return;
+                 const uniqueValues = [...new Set(allAssets.map(asset => asset[field.key]).filter(Boolean))].sort();
+                 select.innerHTML = '<option value="">-- Select --</option>';
+                 uniqueValues.forEach(value => {
+                     const option = document.createElement('option');
+                     option.value = value;
+                     option.textContent = value;
+                     select.appendChild(option);
+                 });
+                 const addNewOption = document.createElement('option');
+                 addNewOption.value = '--new--';
+                 addNewOption.textContent = 'Add New...';
+                 select.appendChild(addNewOption);
+            }
+            
+            fields.forEach(populate);
+            bulkFields.forEach(populate)
         }
 
         function populateFilterDropdowns() {
@@ -787,6 +915,9 @@
                 const tr = document.createElement('tr');
                 tr.dataset.id = asset.id;
                 tr.innerHTML = `
+                    <td class="relative px-6 py-4 whitespace-nowrap">
+                        <input type="checkbox" data-id="${asset.id}" class="asset-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${asset.name || ''}</div></td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.type || ''}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asset.idCode || ''}</td>
@@ -809,6 +940,7 @@
                 `;
                 tableBody.appendChild(tr);
             });
+             updateBulkEditButtonVisibility();
         }
 
         function toggleModal(modal, show) {
@@ -858,7 +990,6 @@
             `;
 
             const editBtn = document.getElementById('detail-modal-edit-btn');
-            // This cloning is important to remove old event listeners before adding a new one
             const newEditBtn = editBtn.cloneNode(true);
             editBtn.parentNode.replaceChild(newEditBtn, editBtn);
             newEditBtn.addEventListener('click', () => {
@@ -1029,19 +1160,22 @@
 
             document.getElementById('asset-table-body').addEventListener('click', (e) => {
                 const target = e.target;
+                
+                if(target.classList.contains('asset-checkbox')) {
+                    updateBulkEditButtonVisibility();
+                    return;
+                }
                 const assetId = target.closest('tr')?.dataset.id;
-
-                // Handle action menu button click
+                
                 if (target.closest('.actions-btn')) {
                     const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
                     document.querySelectorAll('.actions-dropdown.show').forEach(d => {
                         if (d !== dropdown) d.classList.remove('show');
                     });
                     dropdown.classList.toggle('show');
-                    return; // Stop further execution
+                    return; 
                 }
                 
-                // Handle clicks inside the action menu
                 if (target.closest('.actions-dropdown')) {
                     if (target.classList.contains('edit-btn')) {
                         openEditModal(target.dataset.id);
@@ -1051,10 +1185,9 @@
                         deleteAsset(target.dataset.rowIndex);
                     }
                     target.closest('.actions-dropdown').classList.remove('show');
-                    return; // Stop further execution
+                    return;
                 }
 
-                // If the click was on the row but not in the action menu, open detail view
                 if (assetId) {
                     openDetailModal(assetId);
                 }
@@ -1070,12 +1203,47 @@
             document.getElementById('detail-modal-close-btn').onclick = () => toggleModal(detailModal, false);
             detailModal.querySelector('.modal-backdrop').onclick = () => toggleModal(detailModal, false);
 
-            // Close dropdowns if clicking elsewhere
             window.addEventListener('click', function(e) {
                 if (!e.target.closest('.actions-menu')) {
                     document.querySelectorAll('.actions-dropdown.show').forEach(d => d.classList.remove('show'));
                 }
             });
+
+            // --- Bulk Edit Listeners ---
+            document.getElementById('select-all-assets').addEventListener('change', (e) => {
+                document.querySelectorAll('.asset-checkbox').forEach(checkbox => {
+                    checkbox.checked = e.target.checked;
+                });
+                updateBulkEditButtonVisibility();
+            });
+            
+            bulkEditBtn.addEventListener('click', () => {
+                document.getElementById('bulk-edit-form').reset();
+                document.querySelectorAll('#bulk-edit-form [disabled]').forEach(el => el.disabled = true);
+                document.querySelectorAll('#bulk-edit-form input[type="text"].hidden').forEach(el => el.classList.add('hidden'));
+                toggleModal(bulkEditModal, true);
+            });
+
+            document.getElementById('bulk-cancel-btn').onclick = () => toggleModal(bulkEditModal, false);
+            bulkEditModal.querySelector('.modal-backdrop').onclick = () => toggleModal(bulkEditModal, false);
+
+            document.querySelectorAll('[id^="bulk-update-"]').forEach(checkbox => {
+                 checkbox.addEventListener('change', (e) => {
+                    const fieldName = e.target.id.split('-')[2];
+                    const inputEl = document.getElementById(`bulk-${fieldName}`) || document.getElementById(`bulk-${fieldName}-type`);
+                    if(inputEl) inputEl.disabled = !e.target.checked;
+                });
+            });
+
+            document.getElementById('bulk-site').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-site'), document.getElementById('bulk-site-new')));
+            document.getElementById('bulk-location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-location'), document.getElementById('bulk-location-new')));
+            document.getElementById('bulk-container').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-container'), document.getElementById('bulk-container-new')));
+            document.getElementById('bulk-assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-assigned-to'), document.getElementById('bulk-assigned-to-new')));
+            
+            document.getElementById('bulk-edit-form').onsubmit = (e) => {
+                e.preventDefault();
+                handleBulkUpdate();
+            };
         }
 
         function switchTab(tabName) {
@@ -1144,7 +1312,7 @@
             const processData = (key) => {
                 const counts = allAssets.reduce((acc, asset) => {
                     const value = asset[key] || 'Uncategorized';
-                    if (key === 'assignedTo' && value === 'Uncategorized') return acc; // Skip unassigned for this chart
+                    if (key === 'assignedTo' && value === 'Uncategorized') return acc; 
                     acc[value] = (acc[value] || 0) + 1;
                     return acc;
                 }, {});
@@ -1200,6 +1368,61 @@
             charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(typeChartType, typeData, 'Assets by Type', 'filter-asset-type', 'rgba(255, 159, 64, 0.6)'));
             charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(employeeChartType, employeeData, 'Assignments per Employee', 'employee-select', 'rgba(153, 102, 255, 0.6)'));
         }
+
+        // --- Bulk Edit Specific Functions ---
+        function updateBulkEditButtonVisibility() {
+            const selectedCount = document.querySelectorAll('.asset-checkbox:checked').length;
+            if (selectedCount > 0) {
+                bulkEditBtn.classList.remove('hidden');
+                bulkEditBtn.textContent = `Bulk Edit (${selectedCount}) Selected`;
+            } else {
+                bulkEditBtn.classList.add('hidden');
+            }
+        }
+
+        function handleBulkUpdate() {
+            const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
+            if (selectedAssetIds.length === 0) {
+                showMessage("No assets selected for bulk edit.");
+                return;
+            }
+            
+            const updates = [];
+            const fields = [
+                { checkId: 'bulk-update-site-check', fieldName: 'Site', getValue: () => getSelectValue('bulk-site') },
+                { checkId: 'bulk-update-location-check', fieldName: 'Location', getValue: () => getSelectValue('bulk-location') },
+                { checkId: 'bulk-update-container-check', fieldName: 'Container', getValue: () => getSelectValue('bulk-container') },
+                { checkId: 'bulk-update-intended-user-check', fieldName: 'Intended User Type', getValue: () => document.getElementById('bulk-intended-user-type').value },
+                { checkId: 'bulk-update-condition-check', fieldName: 'Condition', getValue: () => document.getElementById('bulk-condition').value },
+                { checkId: 'bulk-update-assigned-to-check', fieldName: 'Assigned To', getValue: () => getSelectValue('bulk-assigned-to') }
+            ];
+
+            fields.forEach(field => {
+                if (document.getElementById(field.checkId).checked) {
+                    const value = field.getValue();
+                    selectedAssetIds.forEach(id => {
+                        const asset = allAssets.find(a => a.id === id);
+                        if(asset) {
+                            updates.push({ rowIndex: asset.rowIndex, field: field.fieldName, value: value });
+                        }
+                    });
+                }
+            });
+
+            if (updates.length > 0) {
+                bulkWriteToSheet(updates);
+            } else {
+                showMessage("No fields were selected to update.");
+            }
+            toggleModal(bulkEditModal, false);
+        }
+
+         const getSelectValue = (id) => {
+            const select = document.getElementById(id);
+            const newInp = document.getElementById(`${id}-new`);
+            return select.value === '--new--' ? newInp.value : select.value;
+        };
+
     </script>
     
 </body>
