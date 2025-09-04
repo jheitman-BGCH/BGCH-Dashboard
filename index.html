@@ -77,6 +77,9 @@
             color: #1f2937; /* text-gray-800 */
             word-break: break-word;
         }
+        #asset-table-head th {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -131,15 +134,19 @@
             <!-- Inventory Panel -->
             <div id="inventory-panel">
                 <!-- Filter and Search Section -->
-                 <div id="filter-section" class="bg-white p-4 rounded-lg shadow-md mb-6">
-                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
-                        <div id="filter-search-wrapper">
+                 <div class="bg-white p-4 rounded-lg shadow-md mb-6">
+                    <div id="filter-section" class="flex flex-wrap items-end gap-4">
+                         <div id="filter-search-wrapper">
                             <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
-                            <input type="text" id="filter-search" placeholder="Search all fields..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                            <input type="text" id="filter-search" placeholder="Search..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                         </div>
                         <div id="filter-site-wrapper" class="hidden">
                             <label for="filter-site" class="block text-sm font-medium text-gray-700">Site</label>
                             <select id="filter-site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        </div>
+                        <div id="filter-location-wrapper" class="hidden">
+                            <label for="filter-location" class="block text-sm font-medium text-gray-700">Location</label>
+                            <select id="filter-location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
                         <div id="filter-asset-type-wrapper" class="hidden">
                             <label for="filter-asset-type" class="block text-sm font-medium text-gray-700">Asset Type</label>
@@ -149,6 +156,10 @@
                             <label for="filter-condition" class="block text-sm font-medium text-gray-700">Condition</label>
                             <select id="filter-condition" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
+                        <div id="filter-intended-user-type-wrapper" class="hidden">
+                            <label for="filter-intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
+                            <select id="filter-intended-user-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        </div>
                          <div id="filter-assigned-to-wrapper" class="hidden">
                             <label for="filter-assigned-to" class="block text-sm font-medium text-gray-700">Assigned To</label>
                             <select id="filter-assigned-to" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
@@ -157,7 +168,32 @@
                             <label for="filter-model-number" class="block text-sm font-medium text-gray-700">Model Number</label>
                             <select id="filter-model-number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
-                        <div class="flex items-end">
+                        <div id="filter-quantity-wrapper" class="hidden">
+                             <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                             <div class="flex items-center mt-1">
+                                <input type="number" id="filter-quantity-min" placeholder="Min" class="block w-20 rounded-md border-gray-300 shadow-sm">
+                                <span class="mx-2 text-gray-500">-</span>
+                                <input type="number" id="filter-quantity-max" placeholder="Max" class="block w-20 rounded-md border-gray-300 shadow-sm">
+                             </div>
+                        </div>
+                        <div id="filter-date-issued-wrapper" class="hidden">
+                             <label class="block text-sm font-medium text-gray-700">Date Issued</label>
+                             <div class="flex items-center mt-1">
+                                <input type="date" id="filter-date-issued-min" class="block w-36 rounded-md border-gray-300 shadow-sm">
+                                <span class="mx-2 text-gray-500">to</span>
+                                <input type="date" id="filter-date-issued-max" class="block w-36 rounded-md border-gray-300 shadow-sm">
+                             </div>
+                        </div>
+                        <div id="filter-purchase-date-wrapper" class="hidden">
+                             <label class="block text-sm font-medium text-gray-700">Purchase Date</label>
+                             <div class="flex items-center mt-1">
+                                <input type="date" id="filter-purchase-date-min" class="block w-36 rounded-md border-gray-300 shadow-sm">
+                                <span class="mx-2 text-gray-500">to</span>
+                                <input type="date" id="filter-purchase-date-max" class="block w-36 rounded-md border-gray-300 shadow-sm">
+                             </div>
+                        </div>
+
+                        <div class="ml-auto">
                             <button id="customize-cols-btn" class="w-full h-10 flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                   <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" />
@@ -167,7 +203,6 @@
                         </div>
                     </div>
                 </div>
-
 
                 <!-- Asset Table -->
                 <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
@@ -874,7 +909,8 @@
             const filters = [
                 { id: 'filter-site', key: 'site' }, { id: 'filter-asset-type', key: 'type' },
                 { id: 'filter-condition', key: 'condition' }, { id: 'filter-assigned-to', key: 'assignedTo'},
-                { id: 'filter-model-number', key: 'modelNumber'}
+                { id: 'filter-model-number', key: 'modelNumber'}, { id: 'filter-location', key: 'location'},
+                { id: 'filter-intended-user-type', key: 'intendedUserType'}
             ];
 
             filters.forEach(filter => {
@@ -908,20 +944,41 @@
         function applyFiltersAndSearch() {
             const searchTerm = document.getElementById('filter-search').value.toLowerCase();
             const siteFilter = document.getElementById('filter-site').value;
+            const locationFilter = document.getElementById('filter-location').value;
             const typeFilter = document.getElementById('filter-asset-type').value;
             const conditionFilter = document.getElementById('filter-condition').value;
+            const intendedUserFilter = document.getElementById('filter-intended-user-type').value;
             const assignedToFilter = document.getElementById('filter-assigned-to').value;
             const modelNumberFilter = document.getElementById('filter-model-number').value;
 
+            const quantityMin = parseInt(document.getElementById('filter-quantity-min').value, 10);
+            const quantityMax = parseInt(document.getElementById('filter-quantity-max').value, 10);
+            const dateIssuedMin = document.getElementById('filter-date-issued-min').value;
+            const dateIssuedMax = document.getElementById('filter-date-issued-max').value;
+            const purchaseDateMin = document.getElementById('filter-purchase-date-min').value;
+            const purchaseDateMax = document.getElementById('filter-purchase-date-max').value;
+
+
             let filteredAssets = allAssets.filter(asset => {
+                const assetQuantity = parseInt(asset.quantity, 10);
+                const assetDateIssued = asset.dateIssued;
+                const assetPurchaseDate = asset.purchaseDate;
+
                 const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
                 const matchesSite = siteFilter ? asset.site === siteFilter : true;
+                const matchesLocation = locationFilter ? asset.location === locationFilter : true;
                 const matchesType = typeFilter ? asset.type === typeFilter : true;
                 const matchesCondition = conditionFilter ? asset.condition === conditionFilter : true;
+                const matchesIntendedUser = intendedUserFilter ? asset.intendedUserType === intendedUserFilter : true;
                 const matchesAssigned = assignedToFilter ? asset.assignedTo === assignedToFilter : true;
                 const matchesModel = modelNumberFilter ? asset.modelNumber === modelNumberFilter : true;
+                
+                const matchesQuantity = (isNaN(quantityMin) || assetQuantity >= quantityMin) && (isNaN(quantityMax) || assetQuantity <= quantityMax);
+                const matchesDateIssued = (!dateIssuedMin || (assetDateIssued && assetDateIssued >= dateIssuedMin)) && (!dateIssuedMax || (assetDateIssued && assetDateIssued <= dateIssuedMax));
+                const matchesPurchaseDate = (!purchaseDateMin || (assetPurchaseDate && assetPurchaseDate >= purchaseDateMin)) && (!purchaseDateMax || (assetPurchaseDate && assetPurchaseDate <= purchaseDateMax));
 
-                return matchesSearch && matchesSite && matchesType && matchesCondition && matchesAssigned && matchesModel;
+
+                return matchesSearch && matchesSite && matchesLocation && matchesType && matchesCondition && matchesIntendedUser && matchesAssigned && matchesModel && matchesQuantity && matchesDateIssued && matchesPurchaseDate;
             });
 
             renderTable(filteredAssets);
@@ -1209,12 +1266,11 @@
             document.getElementById('asset-type').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('asset-type'), document.getElementById('asset-type-new')));
             document.getElementById('assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('assigned-to'), document.getElementById('assigned-to-new')));
 
-            document.getElementById('filter-search').addEventListener('input', applyFiltersAndSearch);
-            document.getElementById('filter-site').addEventListener('change', applyFiltersAndSearch);
-            document.getElementById('filter-asset-type').addEventListener('change', applyFiltersAndSearch);
-            document.getElementById('filter-condition').addEventListener('change', applyFiltersAndSearch);
-            document.getElementById('filter-assigned-to').addEventListener('change', applyFiltersAndSearch);
-            document.getElementById('filter-model-number').addEventListener('change', applyFiltersAndSearch);
+            // Add event listeners for all filter inputs
+            document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
+                el.addEventListener('input', applyFiltersAndSearch); // 'input' for instant search, 'change' for selects
+            });
+
 
             document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', renderOverviewCharts));
 
@@ -1399,7 +1455,8 @@
                 } else {
                     document.getElementById('filter-search').value = '';
                     ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
-                        document.getElementById(id).value = '';
+                        const el = document.getElementById(id);
+                        if(el) el.value = '';
                     });
 
                     const filterSelect = document.getElementById(filterId);
@@ -1416,7 +1473,9 @@
             const filterMap = {
                 "Site": "filter-site-wrapper", "Asset Type": "filter-asset-type-wrapper",
                 "Condition": "filter-condition-wrapper", "Assigned To": "filter-assigned-to-wrapper",
-                "Model Number": "filter-model-number-wrapper"
+                "Model Number": "filter-model-number-wrapper", "Location": "filter-location-wrapper",
+                "Intended User Type": "filter-intended-user-type-wrapper", "Quantity": "filter-quantity-wrapper",
+                "Date Issued": "filter-date-issued-wrapper", "Purchase Date": "filter-purchase-date-wrapper"
             };
 
             Object.values(filterMap).forEach(id => {
@@ -1573,5 +1632,4 @@
     
 </body>
 </html>
-
 
