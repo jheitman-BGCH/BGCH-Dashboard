@@ -1,3 +1,4 @@
+// js/script.js
 // --- CONFIGURATION ---
 const API_KEY = 'AIzaSyBw8-Fw_RHDGkllATR6w8xP9D0SbNo7zjY';
 const CLIENT_ID = '525866256494-i4g16ahgtjvm851k1q5k9qg05vjbv1dt.apps.googleusercontent.com';
@@ -1124,3 +1125,4 @@ function populateColumnSelector() {
         container.appendChild(div);
     });
 }
+

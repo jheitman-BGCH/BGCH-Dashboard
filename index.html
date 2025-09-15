@@ -443,12 +443,13 @@
         <p id="message-text"></p>
     </div>
 
-    <!-- Google API Scripts -->
+    <!-- SCRIPT LOADING ORDER IS CRITICAL -->
+    <!-- First, load our script which defines the callback functions -->
+    <script src="script.js"></script>
+    <!-- Then, load the Google API scripts which will call our functions on load -->
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
     
-    <!-- Custom Application Script -->
-    <script src="script.js"></script>
-    
 </body>
 </html>
+
