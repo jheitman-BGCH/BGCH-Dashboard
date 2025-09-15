@@ -1,0 +1,1126 @@
+// --- CONFIGURATION ---
+const API_KEY = 'AIzaSyBw8-Fw_RHDGkllATR6w8xP9D0SbNo7zjY';
+const CLIENT_ID = '525866256494-i4g16ahgtjvm851k1q5k9qg05vjbv1dt.apps.googleusercontent.com';
+const SPREADSHEET_ID = '1YZ1bACVHyudX08jqSuojSBAxSPO5_bRp9czImJhShhY';
+const SHEET_NAME = 'Asset';
+
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const HEADERS = [
+    "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
+    "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", "Model Number",
+    "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
+];
+const CHART_COLORS = [
+    'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)', 
+    'rgba(75, 192, 192, 0.6)', 'rgba(153, 102, 255, 0.6)', 'rgba(255, 159, 64, 0.6)',
+    'rgba(199, 199, 199, 0.6)', 'rgba(83, 102, 255, 0.6)', 'rgba(40, 230, 150, 0.6)'
+];
+
+// --- STATE MANAGEMENT ---
+let tokenClient;
+let gapiInited = false;
+let gisInited = false;
+let allAssets = []; // Local cache of sheet data
+let charts = {}; // To hold chart instances
+let visibleColumns = [];
+let sortState = { column: 'Asset Name', direction: 'asc' };
+
+// --- DOM ELEMENT REFERENCES ---
+const authSection = document.getElementById('auth-section');
+const dashboardSection = document.getElementById('dashboard-section');
+const authorizeButton = document.getElementById('authorize_button');
+const signoutButton = document.getElementById('signout_button');
+const addAssetBtn = document.getElementById('add-asset-btn');
+const bulkEditBtn = document.getElementById('bulk-edit-btn');
+const refreshBtn = document.getElementById('refresh-data-btn');
+const assetModal = document.getElementById('asset-modal');
+const assetForm = document.getElementById('asset-form');
+const cancelBtn = document.getElementById('cancel-btn');
+const loadingIndicator = document.getElementById('loading-indicator');
+const noDataMessage = document.getElementById('no-data-message');
+const employeeSelect = document.getElementById('employee-select');
+const employeeAssetList = document.getElementById('employee-asset-list');
+const inventoryTab = document.getElementById('inventory-tab');
+const overviewTab = document.getElementById('overview-tab');
+const employeesTab = document.getElementById('employees-tab');
+const inventoryPanel = document.getElementById('inventory-panel');
+const overviewPanel = document.getElementById('overview-panel');
+const employeesPanel = document.getElementById('employees-panel');
+const detailModal = document.getElementById('detail-modal');
+const bulkEditModal = document.getElementById('bulk-edit-modal');
+const columnModal = document.getElementById('column-modal');
+
+// --- GOOGLE API SCRIPT LOAD CALLBACKS ---
+function gapiLoaded() {
+    gapi.load('client', () => {
+        gapiInited = true;
+        checkAndInitialize();
+    });
+}
+
+function gisLoaded() {
+    gisInited = true;
+    checkAndInitialize();
+}
+
+
+// --- INITIALIZATION ---
+window.onload = () => {
+    loadVisibleColumns();
+    setupEventListeners();
+};
+
+function loadVisibleColumns() {
+    const savedCols = localStorage.getItem('visibleColumns');
+    if(savedCols) {
+        visibleColumns = JSON.parse(savedCols);
+    } else {
+        // Default columns
+        visibleColumns = ["Asset Name", "Asset Type", "ID Code", "Assigned To", "Condition"];
+    }
+}
+
+function checkAndInitialize() {
+    if (gapiInited && gisInited) {
+        initializeGoogleClients().then(() => {
+            // Check if user is already signed in
+            const token = gapi.client.getToken();
+            updateSigninStatus(token !== null);
+        });
+    }
+}
+
+async function initializeGoogleClients() {
+    try {
+        await gapi.client.init({
+            apiKey: API_KEY,
+            discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
+        });
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: '', 
+        });
+    } catch (error) {
+        console.error("Error initializing Google clients:", error);
+        showMessage("Failed to initialize Google services. Check your API Key and Client ID.");
+    }
+}
+
+// --- AUTHENTICATION ---
+function handleAuthClick() {
+    tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) { 
+            console.error(resp);
+            showMessage("Authentication failed. Please try again.");
+            return;
+        }
+        updateSigninStatus(true);
+    };
+
+    if (gapi.client.getToken() === null) {
+        // Prompt the user to select a Google Account and ask for consent to share their data
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        // Skip display of account chooser and consent dialog for an existing session.
+        tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+function handleSignoutClick() {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token, () => {
+            gapi.client.setToken('');
+            updateSigninStatus(false);
+        });
+    }
+}
+
+function updateSigninStatus(isSignedIn) {
+    authSection.classList.toggle('hidden', isSignedIn);
+    dashboardSection.classList.toggle('hidden', !isSignedIn);
+    if (isSignedIn) {
+        loadSheetData();
+    }
+}
+
+// --- GOOGLE SHEETS API CALLS ---
+async function loadSheetData() {
+    setLoading(true);
+    try {
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID, range: SHEET_NAME,
+        });
+        const values = response.result.values;
+
+        let sheetHeaders = values ? values[0] : [];
+        
+        if (!values || values.length < 1) {
+            await initializeSheet(false);
+            sheetHeaders = [...HEADERS];
+            allAssets = [];
+        } else {
+            const missingHeaders = HEADERS.filter(h => !sheetHeaders.includes(h));
+            if (missingHeaders.length > 0) {
+                try {
+                    const newColumnIndex = sheetHeaders.length;
+                    const newColumnLetter = String.fromCharCode(65 + newColumnIndex);
+                    await gapi.client.sheets.spreadsheets.values.update({
+                        spreadsheetId: SPREADSHEET_ID,
+                        range: `${SHEET_NAME}!${newColumnLetter}1`,
+                        valueInputOption: 'RAW',
+                        resource: { values: [missingHeaders] }
+                    });
+                    sheetHeaders.push(...missingHeaders);
+                     showMessage(`Added missing column(s): ${missingHeaders.join(', ')}`, 'success');
+                } catch(err) {
+                     console.error("Failed to add new column(s):", err);
+                     showMessage("Could not update sheet headers. Please add them manually.");
+                }
+            }
+
+            const headers = sheetHeaders;
+            const dataRows = values.slice(1);
+            const headerMap = {};
+            headers.forEach((header, index) => {
+                headerMap[header] = index;
+            });
+
+            allAssets = dataRows.map((row, index) => {
+                const loginInfoRaw = row[headerMap["Login Info"]];
+                let loginInfoDecoded = '';
+                if (loginInfoRaw) {
+                    try {
+                        // Simple check if it's base64
+                        if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(loginInfoRaw)) {
+                             loginInfoDecoded = atob(loginInfoRaw);
+                        } else {
+                             loginInfoDecoded = loginInfoRaw;
+                        }
+                    } catch (e) {
+                        console.warn("Could not decode login info, treating as plain text:", loginInfoRaw);
+                        loginInfoDecoded = loginInfoRaw;
+                    }
+                }
+
+                return {
+                    rowIndex: index + 2,
+                    id: row[headerMap["Asset ID"]],
+                    name: row[headerMap["Asset Name"]],
+                    quantity: row[headerMap["Quantity"]],
+                    site: row[headerMap["Site"]],
+                    location: row[headerMap["Location"]],
+                    container: row[headerMap["Container"]],
+                    intendedUserType: row[headerMap["Intended User Type"]],
+                    condition: row[headerMap["Condition"]],
+                    type: row[headerMap["Asset Type"]],
+                    idCode: row[headerMap["ID Code"]],
+                    serial: row[headerMap["Serial Number"]],
+                    modelNumber: row[headerMap["Model Number"]],
+                    assignedTo: row[headerMap["Assigned To"]],
+                    dateIssued: row[headerMap["Date Issued"]],
+                    purchaseDate: row[headerMap["Purchase Date"]],
+                    specs: row[headerMap["Specs"]],
+                    loginInfo: loginInfoDecoded,
+                    notes: row[headerMap["Notes"]]
+                }
+            });
+        }
+        applyFiltersAndSearch();
+        populateFilterDropdowns();
+        populateModalDropdowns();
+        populateEmployeeDropdown();
+        renderOverviewCharts();
+        populateColumnSelector();
+    } catch (err) {
+        console.error("Caught error during data load:", err);
+        const errorMessage = err.result?.error?.message || err.message || 'Unknown error';
+        showMessage(`Error loading data: ${errorMessage}`);
+    } finally {
+        setLoading(false);
+    }
+}
+
+async function initializeSheet(overwrite = false) {
+     try {
+        if (overwrite) {
+            await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_ID, range: SHEET_NAME });
+        }
+        await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID, range: `${SHEET_NAME}!A1`, valueInputOption: 'RAW',
+            resource: { values: [HEADERS] }
+        });
+     } catch (err) {
+        console.error("Initialization failed:", err);
+        showMessage(`Could not initialize sheet: ${err.result.error.message}`);
+     }
+}
+
+async function writeToSheet(data, isUpdate = false) {
+    setLoading(true);
+    try {
+        const headerResponse = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEET_NAME}!1:1`,
+        });
+        const sheetHeaders = headerResponse.result.values ? headerResponse.result.values[0] : HEADERS;
+
+        const dataMap = {
+            "Asset ID": data.id || `ASSET-${Date.now()}`, "Asset Name": data.name, "Quantity": data.quantity, "Site": data.site,
+            "Location": data.location, "Container": data.container, "Intended User Type": data.intendedUserType,
+            "Condition": data.condition, "Asset Type": data.type, "ID Code": data.idCode, "Serial Number": data.serial,
+            "Model Number": data.modelNumber, "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, 
+            "Purchase Date": data.purchaseDate, "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', 
+            "Notes": data.notes
+        };
+
+        const rowData = sheetHeaders.map(header => dataMap[header] || '');
+
+        if (isUpdate) {
+            await gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_ID, range: `${SHEET_NAME}!A${data.rowIndex}`,
+                valueInputOption: 'USER_ENTERED', resource: { values: [rowData] }
+            });
+        } else {
+            await gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_ID, range: SHEET_NAME,
+                valueInputOption: 'USER_ENTERED', resource: { values: [rowData] }
+            });
+        }
+        await loadSheetData();
+    } catch (err) {
+        console.error(err);
+        showMessage(`Error saving asset: ${err.result.error.message}`);
+    } finally {
+        setLoading(false);
+    }
+}
+
+async function bulkWriteToSheet(updates) {
+     setLoading(true);
+    try {
+        const headerResponse = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEET_NAME}!1:1`,
+        });
+        const sheetHeaders = headerResponse.result.values ? headerResponse.result.values[0] : [];
+        const headerMap = {};
+        sheetHeaders.forEach((header, i) => headerMap[header] = i);
+        
+        const data = updates.map(update => {
+            const range = `${SHEET_NAME}!${String.fromCharCode(65 + headerMap[update.field])}${update.rowIndex}`;
+            return {
+                range: range,
+                values: [[update.value]]
+            }
+        });
+
+        await gapi.client.sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            resource: {
+                valueInputOption: 'USER_ENTERED',
+                data: data
+            }
+        });
+
+        await loadSheetData();
+    } catch (err) {
+         console.error(err);
+        showMessage(`Error with bulk update: ${err.result.error.message}`);
+    } finally {
+         setLoading(false);
+    }
+}
+
+
+async function deleteAsset(rowIndex) {
+    setLoading(true);
+    try {
+        await gapi.client.sheets.spreadsheets.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            resource: {
+                requests: [{
+                    deleteDimension: {
+                        range: {
+                            sheetId: 0, 
+                            dimension: "ROWS",
+                            startIndex: rowIndex - 1,
+                            endIndex: rowIndex
+                        }
+                    }
+                }]
+            }
+        });
+        await loadSheetData();
+    } catch (err) {
+        console.error(err);
+        showMessage(`Error deleting asset: ${err.result.error.message}`);
+    } finally {
+        setLoading(false);
+    }
+}
+
+// --- UI & DOM MANIPULATION ---
+function populateModalDropdowns() {
+    const fields = [
+        { id: 'site', key: 'site' }, { id: 'location', key: 'location' },
+        { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' },
+        { id: 'assigned-to', key: 'assignedTo' }
+    ];
+     const bulkFields = [
+        { id: 'bulk-site', key: 'site' }, { id: 'bulk-location', key: 'location' },
+        { id: 'bulk-container', key: 'container' }, { id: 'bulk-assigned-to', key: 'assignedTo' }
+    ];
+
+    const populate = (field) => {
+         const select = document.getElementById(field.id);
+         if (!select) return;
+         const uniqueValues = [...new Set(allAssets.map(asset => asset[field.key]).filter(Boolean))].sort();
+         select.innerHTML = '<option value="">-- Select --</option>';
+         uniqueValues.forEach(value => {
+             const option = document.createElement('option');
+             option.value = value;
+             option.textContent = value;
+             select.appendChild(option);
+         });
+         const addNewOption = document.createElement('option');
+         addNewOption.value = '--new--';
+         addNewOption.textContent = 'Add New...';
+         select.appendChild(addNewOption);
+    }
+    
+    fields.forEach(populate);
+    bulkFields.forEach(populate)
+}
+
+function populateFilterDropdowns() {
+    const filters = [
+        { id: 'filter-site', key: 'site' }, { id: 'filter-asset-type', key: 'type' },
+        { id: 'filter-condition', key: 'condition' }, { id: 'filter-assigned-to', key: 'assignedTo'},
+        { id: 'filter-model-number', key: 'modelNumber'}, { id: 'filter-location', key: 'location'},
+        { id: 'filter-intended-user-type', key: 'intendedUserType'}
+    ];
+
+    filters.forEach(filter => {
+        const select = document.getElementById(filter.id);
+        if (!select) return;
+
+        const uniqueValues = [...new Set(allAssets.map(asset => asset[filter.key]).filter(Boolean))].sort();
+        select.innerHTML = `<option value="">All</option>`;
+
+        uniqueValues.forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+        });
+    });
+    renderFilters();
+}
+
+function populateEmployeeDropdown() {
+    const employees = [...new Set(allAssets.map(a => a.assignedTo).filter(Boolean))].sort();
+    employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
+    employees.forEach(e => {
+        const option = document.createElement('option');
+        option.value = e;
+        option.textContent = e;
+        employeeSelect.appendChild(option);
+    });
+}
+
+function applyFiltersAndSearch() {
+    const searchTerm = document.getElementById('filter-search').value.toLowerCase();
+    const siteFilter = document.getElementById('filter-site').value;
+    const locationFilter = document.getElementById('filter-location').value;
+    const typeFilter = document.getElementById('filter-asset-type').value;
+    const conditionFilter = document.getElementById('filter-condition').value;
+    const intendedUserFilter = document.getElementById('filter-intended-user-type').value;
+    const assignedToFilter = document.getElementById('filter-assigned-to').value;
+    const modelNumberFilter = document.getElementById('filter-model-number').value;
+
+    const quantityMin = parseInt(document.getElementById('filter-quantity-min').value, 10);
+    const quantityMax = parseInt(document.getElementById('filter-quantity-max').value, 10);
+    const dateIssuedMin = document.getElementById('filter-date-issued-min').value;
+    const dateIssuedMax = document.getElementById('filter-date-issued-max').value;
+    const purchaseDateMin = document.getElementById('filter-purchase-date-min').value;
+    const purchaseDateMax = document.getElementById('filter-purchase-date-max').value;
+
+
+    let filteredAssets = allAssets.filter(asset => {
+        const assetQuantity = parseInt(asset.quantity, 10);
+        const assetDateIssued = asset.dateIssued;
+        const assetPurchaseDate = asset.purchaseDate;
+
+        const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
+        const matchesSite = siteFilter ? asset.site === siteFilter : true;
+        const matchesLocation = locationFilter ? asset.location === locationFilter : true;
+        const matchesType = typeFilter ? asset.type === typeFilter : true;
+        const matchesCondition = conditionFilter ? asset.condition === conditionFilter : true;
+        const matchesIntendedUser = intendedUserFilter ? asset.intendedUserType === intendedUserFilter : true;
+        const matchesAssigned = assignedToFilter ? asset.assignedTo === assignedToFilter : true;
+        const matchesModel = modelNumberFilter ? asset.modelNumber === modelNumberFilter : true;
+        
+        const matchesQuantity = (isNaN(quantityMin) || assetQuantity >= quantityMin) && (isNaN(quantityMax) || assetQuantity <= quantityMax);
+        const matchesDateIssued = (!dateIssuedMin || (assetDateIssued && assetDateIssued >= dateIssuedMin)) && (!dateIssuedMax || (assetDateIssued && assetDateIssued <= dateIssuedMax));
+        const matchesPurchaseDate = (!purchaseDateMin || (assetPurchaseDate && assetPurchaseDate >= purchaseDateMin)) && (!purchaseDateMax || (assetPurchaseDate && assetPurchaseDate <= purchaseDateMax));
+
+
+        return matchesSearch && matchesSite && matchesLocation && matchesType && matchesCondition && matchesIntendedUser && matchesAssigned && matchesModel && matchesQuantity && matchesDateIssued && matchesPurchaseDate;
+    });
+
+    renderTable(filteredAssets);
+}
+
+function handleDynamicSelectChange(selectElement, newElement) {
+    if (selectElement.value === '--new--') {
+        newElement.classList.remove('hidden');
+        newElement.focus();
+    } else {
+        newElement.classList.add('hidden');
+        newElement.value = '';
+    }
+}
+
+function renderTable(assetsToRender) {
+    const tableHead = document.getElementById('asset-table-head');
+    const tableBody = document.getElementById('asset-table-body');
+    tableHead.innerHTML = '';
+    tableBody.innerHTML = '';
+    
+    // Build Header
+    const headerRow = document.createElement('tr');
+    let headerHTML = `
+        <th scope="col" class="relative px-6 py-3">
+            <input type="checkbox" id="select-all-assets" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+        </th>`;
+    visibleColumns.forEach(colName => {
+        let sortArrow = '';
+        if(sortState.column === colName){
+            sortArrow = sortState.direction === 'asc' ? '▲' : '▼';
+        }
+        headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" data-column="${colName}">${colName} <span class="sort-arrow">${sortArrow}</span></th>`
+    });
+    headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>`;
+    headerRow.innerHTML = headerHTML;
+    tableHead.appendChild(headerRow);
+    
+    // Re-attach listeners
+    document.getElementById('select-all-assets').addEventListener('change', (e) => {
+        document.querySelectorAll('.asset-checkbox').forEach(checkbox => {
+            checkbox.checked = e.target.checked;
+        });
+        updateBulkEditButtonVisibility();
+    });
+
+    tableHead.querySelectorAll('th[data-column]').forEach(th => {
+        th.addEventListener('click', () => {
+            const colName = th.dataset.column;
+            if(sortState.column === colName){
+                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState.column = colName;
+                sortState.direction = 'asc';
+            }
+            applyFiltersAndSearch();
+        });
+    });
+
+    // Build Body
+    const headerToKeyMap = {
+        "Asset Name": "name", "Quantity": "quantity", "Site": "site", "Location": "location", "Container": "container",
+        "Intended User Type": "intendedUserType", "Condition": "condition", "Asset Type": "type", "ID Code": "idCode",
+        "Serial Number": "serial", "Model Number": "modelNumber", "Assigned To": "assignedTo", "Date Issued": "dateIssued",
+        "Purchase Date": "purchaseDate", "Specs": "specs", "Notes": "notes"
+    };
+    const sortKey = headerToKeyMap[sortState.column];
+    
+    const sortedAssets = [...assetsToRender].sort((a, b) => {
+        const valA = a[sortKey] || '';
+        const valB = b[sortKey] || '';
+        if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+
+    const validAssets = sortedAssets.filter(asset => asset.id && asset.name);
+    noDataMessage.classList.toggle('hidden', validAssets.length > 0);
+
+    validAssets.forEach(asset => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = asset.id;
+        
+        let rowHtml = `
+            <td class="relative px-6 py-4 whitespace-nowrap">
+                <input type="checkbox" data-id="${asset.id}" class="asset-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+            </td>`;
+        
+        visibleColumns.forEach(colName => {
+            const key = headerToKeyMap[colName];
+            const value = asset[key] || '';
+             rowHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${value}</td>`;
+        });
+
+        rowHtml += `
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div class="actions-menu">
+                    <button class="actions-btn p-1 rounded-full hover:bg-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                    </button>
+                    <div class="actions-dropdown">
+                        <a class="edit-btn" data-id="${asset.id}">Edit</a>
+                        <a class="clone-btn" data-id="${asset.id}">Clone</a>
+                        <a class="delete-btn" data-row-index="${asset.rowIndex}">Delete</a>
+                    </div>
+                </div>
+            </td>`;
+        tr.innerHTML = rowHtml;
+        tableBody.appendChild(tr);
+    });
+     updateBulkEditButtonVisibility();
+}
+
+function toggleModal(modal, show) {
+    if (show) {
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.querySelector('.modal-backdrop').classList.remove('opacity-0');
+            modal.querySelector('.modal-content').classList.remove('scale-95');
+        }, 10);
+    } else {
+        modal.querySelector('.modal-backdrop').classList.add('opacity-0');
+        modal.querySelector('.modal-content').classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+}
+
+function openDetailModal(assetId) {
+    const asset = allAssets.find(a => a.id === assetId);
+    if (!asset) return;
+
+    document.getElementById('detail-modal-title').textContent = asset.name || 'Asset Details';
+    
+    const content = document.getElementById('detail-modal-content');
+    content.innerHTML = `
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+            ${Object.entries({
+                "Asset ID": asset.id, "Asset Name": asset.name, "Quantity": asset.quantity, "Site": asset.site, "Location": asset.location,
+                "Container": asset.container, "Intended User": asset.intendedUserType, "Condition": asset.condition,
+                "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial, 
+                "Model Number": asset.modelNumber, "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued, 
+                "Purchase Date": asset.purchaseDate
+            }).map(([key, value]) => `
+                <div>
+                    <dt>${key}:</dt>
+                    <dd>${value || 'N/A'}</dd>
+                </div>
+            `).join('')}
+            <div class="md:col-span-2">
+                <dt>Specs:</dt>
+                <dd class="whitespace-pre-wrap">${asset.specs || 'N/A'}</dd>
+            </div>
+             <div class="md:col-span-2">
+                <dt>Notes:</dt>
+                <dd class="whitespace-pre-wrap">${asset.notes || 'N/A'}</dd>
+            </div>
+        </dl>
+    `;
+
+    const editBtn = document.getElementById('detail-modal-edit-btn');
+    const newEditBtn = editBtn.cloneNode(true); // Clone to remove old listeners
+    editBtn.parentNode.replaceChild(newEditBtn, editBtn);
+    newEditBtn.addEventListener('click', () => {
+        toggleModal(detailModal, false);
+        openEditModal(assetId);
+    });
+
+    toggleModal(detailModal, true);
+}
+
+function populateAssetForm(asset) {
+    document.getElementById('asset-id').value = asset.id || '';
+    document.getElementById('row-index').value = asset.rowIndex || '';
+    document.getElementById('asset-name').value = asset.name || '';
+    document.getElementById('quantity').value = asset.quantity || '1';
+    document.getElementById('intended-user-type').value = asset.intendedUserType || 'Staff';
+    document.getElementById('condition').value = asset.condition || 'Good';
+    document.getElementById('id-code').value = asset.idCode || '';
+    document.getElementById('serial-number').value = asset.serial || '';
+    document.getElementById('model-number').value = asset.modelNumber || '';
+    document.getElementById('date-issued').value = asset.dateIssued || '';
+    document.getElementById('purchase-date').value = asset.purchaseDate || '';
+    document.getElementById('specs').value = asset.specs || '';
+    document.getElementById('login-info').value = asset.loginInfo || '';
+    document.getElementById('notes').value = asset.notes || '';
+
+    const dynamicFields = [
+        { id: 'site', key: 'site' }, { id: 'location', key: 'location' }, 
+        { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' }, 
+        { id: 'assigned-to', key: 'assignedTo' }
+    ];
+    dynamicFields.forEach(field => {
+        const select = document.getElementById(field.id);
+        const newInp = document.getElementById(`${field.id}-new`);
+        const value = asset[field.key];
+        const optionExists = [...select.options].some(opt => opt.value === value);
+        
+        if (value && optionExists) {
+            select.value = value;
+            newInp.classList.add('hidden');
+        } else if (value) {
+            select.value = '--new--';
+            newInp.value = value;
+            newInp.classList.remove('hidden');
+        } else {
+            select.value = '';
+            newInp.classList.add('hidden');
+        }
+    });
+}
+
+function openEditModal(assetId) {
+    const asset = allAssets.find(a => a.id === assetId);
+    if (!asset) return;
+    assetForm.reset();
+    document.getElementById('modal-title').innerText = 'Edit Asset';
+    populateAssetForm(asset);
+    toggleModal(assetModal, true);
+}
+
+function openCloneModal(assetId) {
+    const originalAsset = allAssets.find(a => a.id === assetId);
+    if (!originalAsset) return;
+
+    // Deep copy and clear unique fields
+    const clonedAsset = JSON.parse(JSON.stringify(originalAsset));
+    clonedAsset.id = '';
+    clonedAsset.rowIndex = '';
+    clonedAsset.idCode = '';
+    clonedAsset.serial = '';
+
+    assetForm.reset();
+    document.getElementById('modal-title').innerText = 'Clone Asset';
+    populateAssetForm(clonedAsset);
+    toggleModal(assetModal, true);
+}
+
+function displayEmployeeAssets() {
+    const selectedEmployee = employeeSelect.value;
+    if (!selectedEmployee) {
+        employeeAssetList.innerHTML = '';
+        return;
+    }
+    const assets = allAssets.filter(a => a.assignedTo === selectedEmployee);
+    if (assets.length === 0) {
+        employeeAssetList.innerHTML = `<p class="text-gray-500">No assets assigned to this employee.</p>`;
+        return;
+    }
+    employeeAssetList.innerHTML = `
+        <ul class="divide-y divide-gray-200">
+            ${assets.map(a => `
+                <li class="p-3 employee-asset-item" data-id="${a.id}">
+                    <p class="text-sm font-medium text-gray-900">${a.name}</p>
+                    <p class="text-sm text-gray-500">${a.type || ''} (ID: ${a.idCode || 'N/A'})</p>
+                </li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+function setupEventListeners() {
+    authorizeButton.onclick = handleAuthClick;
+    signoutButton.onclick = handleSignoutClick;
+    refreshBtn.onclick = loadSheetData;
+    addAssetBtn.onclick = () => {
+        assetForm.reset();
+        document.getElementById('modal-title').innerText = 'Add New Asset';
+        document.getElementById('asset-id').value = '';
+        ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
+            document.getElementById(`${id}-new`).classList.add('hidden');
+        });
+        toggleModal(assetModal, true);
+    };
+    cancelBtn.onclick = () => toggleModal(assetModal, false);
+    assetModal.querySelector('.modal-backdrop').onclick = () => toggleModal(assetModal, false);
+    employeeSelect.onchange = displayEmployeeAssets;
+
+    inventoryTab.addEventListener('click', () => switchTab('inventory'));
+    overviewTab.addEventListener('click', () => switchTab('overview'));
+    employeesTab.addEventListener('click', () => switchTab('employees'));
+
+    document.getElementById('site').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('site'), document.getElementById('site-new')));
+    document.getElementById('location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('location'), document.getElementById('location-new')));
+    document.getElementById('container').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('container'), document.getElementById('container-new')));
+    document.getElementById('asset-type').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('asset-type'), document.getElementById('asset-type-new')));
+    document.getElementById('assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('assigned-to'), document.getElementById('assigned-to-new')));
+
+    // Add event listeners for all filter inputs
+    document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
+        el.addEventListener('input', applyFiltersAndSearch); // 'input' for instant search, 'change' for selects
+    });
+
+
+    document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', renderOverviewCharts));
+
+    assetForm.onsubmit = (e) => {
+        e.preventDefault();
+        
+        const getSelectValue = (id) => {
+            const select = document.getElementById(id);
+            const newInp = document.getElementById(`${id}-new`);
+            return select.value === '--new--' ? newInp.value : select.value;
+        };
+
+        const assetData = {
+            id: document.getElementById('asset-id').value,
+            rowIndex: document.getElementById('row-index').value,
+            name: document.getElementById('asset-name').value,
+            quantity: document.getElementById('quantity').value,
+            site: getSelectValue('site'),
+            location: getSelectValue('location'),
+            container: getSelectValue('container'),
+            intendedUserType: document.getElementById('intended-user-type').value,
+            condition: document.getElementById('condition').value,
+            type: getSelectValue('asset-type'),
+            idCode: document.getElementById('id-code').value,
+            serial: document.getElementById('serial-number').value,
+            modelNumber: document.getElementById('model-number').value,
+            assignedTo: getSelectValue('assigned-to'),
+            dateIssued: document.getElementById('date-issued').value,
+            purchaseDate: document.getElementById('purchase-date').value,
+            specs: document.getElementById('specs').value,
+            loginInfo: document.getElementById('login-info').value,
+            notes: document.getElementById('notes').value,
+        };
+        writeToSheet(assetData, !!assetData.id);
+        toggleModal(assetModal, false);
+    };
+
+    document.getElementById('asset-table-body').addEventListener('click', (e) => {
+        const target = e.target;
+        
+        if(target.classList.contains('asset-checkbox')) {
+            updateBulkEditButtonVisibility();
+            return;
+        }
+        const assetId = target.closest('tr')?.dataset.id;
+        
+        if (target.closest('.actions-btn')) {
+            const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
+            // Hide other open dropdowns
+            document.querySelectorAll('.actions-dropdown.show').forEach(d => {
+                if (d !== dropdown) d.classList.remove('show');
+            });
+            dropdown.classList.toggle('show');
+            return; 
+        }
+        
+        if (target.closest('.actions-dropdown')) {
+            if (target.classList.contains('edit-btn')) {
+                openEditModal(target.dataset.id);
+            } else if (target.classList.contains('clone-btn')) {
+                openCloneModal(target.dataset.id);
+            } else if (target.classList.contains('delete-btn')) {
+                deleteAsset(target.dataset.rowIndex);
+            }
+            target.closest('.actions-dropdown').classList.remove('show');
+            return;
+        }
+
+        // If clicked on the row itself (but not on an action)
+        if (assetId) {
+            openDetailModal(assetId);
+        }
+    });
+    
+    employeeAssetList.addEventListener('click', (e) => {
+        const targetItem = e.target.closest('.employee-asset-item');
+        if (targetItem) {
+            openDetailModal(targetItem.dataset.id);
+        }
+    });
+
+    document.getElementById('detail-modal-close-btn').onclick = () => toggleModal(detailModal, false);
+    detailModal.querySelector('.modal-backdrop').onclick = () => toggleModal(detailModal, false);
+
+    // Close actions dropdown if clicked outside
+    window.addEventListener('click', function(e) {
+        if (!e.target.closest('.actions-menu')) {
+            document.querySelectorAll('.actions-dropdown.show').forEach(d => d.classList.remove('show'));
+        }
+    });
+
+    // --- Bulk Edit Listeners ---
+    bulkEditBtn.addEventListener('click', () => {
+        document.getElementById('bulk-edit-form').reset();
+        document.querySelectorAll('#bulk-edit-form [disabled]').forEach(el => el.disabled = true);
+        document.querySelectorAll('#bulk-edit-form input[type="text"].hidden').forEach(el => el.classList.add('hidden'));
+        toggleModal(bulkEditModal, true);
+    });
+
+    document.getElementById('bulk-cancel-btn').onclick = () => toggleModal(bulkEditModal, false);
+    bulkEditModal.querySelector('.modal-backdrop').onclick = () => toggleModal(bulkEditModal, false);
+
+    document.querySelectorAll('[id^="bulk-update-"]').forEach(checkbox => {
+         checkbox.addEventListener('change', (e) => {
+            const fieldName = e.target.id.replace('bulk-update-', '').replace('-check', '');
+            const inputEl = document.getElementById(`bulk-${fieldName}`) || document.getElementById(`bulk-${fieldName}-type`);
+            if(inputEl) inputEl.disabled = !e.target.checked;
+        });
+    });
+
+    document.getElementById('bulk-site').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-site'), document.getElementById('bulk-site-new')));
+    document.getElementById('bulk-location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-location'), document.getElementById('bulk-location-new')));
+    document.getElementById('bulk-container').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-container'), document.getElementById('bulk-container-new')));
+    document.getElementById('bulk-assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-assigned-to'), document.getElementById('bulk-assigned-to-new')));
+    
+    document.getElementById('bulk-edit-form').onsubmit = (e) => {
+        e.preventDefault();
+        handleBulkUpdate();
+    };
+    
+    // --- Column Customization Listeners ---
+    document.getElementById('customize-cols-btn').addEventListener('click', () => {
+        populateColumnSelector();
+        toggleModal(columnModal, true)
+    });
+    document.getElementById('column-cancel-btn').onclick = () => toggleModal(columnModal, false);
+    columnModal.querySelector('.modal-backdrop').onclick = () => toggleModal(columnModal, false);
+    document.getElementById('column-save-btn').addEventListener('click', () => {
+        const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
+        if (selectedCols.length === 0 && !document.querySelector('#column-checkboxes input[value="Asset Name"]:checked')) {
+            selectedCols.push("Asset Name"); // Ensure at least one column is visible
+        }
+        visibleColumns = ["Asset Name", ...selectedCols.filter(c => c !== "Asset Name")];
+        localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
+        applyFiltersAndSearch();
+        renderFilters();
+        toggleModal(columnModal, false);
+    });
+}
+
+function switchTab(tabName) {
+    const tabs = {
+        inventory: { panel: inventoryPanel, button: inventoryTab },
+        overview: { panel: overviewPanel, button: overviewTab },
+        employees: { panel: employeesPanel, button: employeesTab }
+    };
+
+    Object.values(tabs).forEach(tab => {
+        tab.panel.classList.add('hidden');
+        tab.button.classList.remove('active');
+    });
+
+    tabs[tabName].panel.classList.remove('hidden');
+    tabs[tabName].button.classList.add('active');
+
+    if (tabName === 'overview') renderOverviewCharts();
+}
+
+function setLoading(isLoading) {
+    loadingIndicator.classList.toggle('hidden', !isLoading);
+    loadingIndicator.classList.toggle('flex', isLoading);
+}
+
+function showMessage(text, type = 'error') {
+    const box = document.getElementById('message-box');
+    const textEl = document.getElementById('message-text');
+    textEl.innerText = text;
+    box.className = 'fixed top-5 right-5 text-white py-3 px-5 rounded-lg shadow-lg z-50';
+    box.classList.add(type === 'error' ? 'bg-red-500' : 'bg-green-500');
+    box.classList.remove('hidden');
+    setTimeout(() => box.classList.add('hidden'), 5000);
+}
+
+function handleChartClick(event, elements, filterId) {
+    if (elements.length > 0) {
+        const elementIndex = elements[0].index;
+        const chart = elements[0].element.$context.chart;
+        const label = chart.data.labels[elementIndex];
+        
+        if (filterId === 'employee-select') {
+            switchTab('employees');
+            const employeeDropdown = document.getElementById('employee-select');
+            employeeDropdown.value = label;
+            displayEmployeeAssets();
+        } else {
+            // Reset all other filters
+            document.getElementById('filter-search').value = '';
+            ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.value = '';
+            });
+
+            const filterSelect = document.getElementById(filterId);
+            if (filterSelect) {
+                filterSelect.value = label;
+                switchTab('inventory');
+                applyFiltersAndSearch();
+            }
+        }
+    }
+}
+
+function renderFilters() {
+    const filterMap = {
+        "Site": "filter-site-wrapper", "Asset Type": "filter-asset-type-wrapper",
+        "Condition": "filter-condition-wrapper", "Assigned To": "filter-assigned-to-wrapper",
+        "Model Number": "filter-model-number-wrapper", "Location": "filter-location-wrapper",
+        "Intended User Type": "filter-intended-user-type-wrapper", "Quantity": "filter-quantity-wrapper",
+        "Date Issued": "filter-date-issued-wrapper", "Purchase Date": "filter-purchase-date-wrapper"
+    };
+
+    // Hide all filter wrappers first
+    Object.values(filterMap).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+
+    // Show wrappers for visible columns
+    visibleColumns.forEach(colName => {
+        const wrapperId = filterMap[colName];
+        if (wrapperId) {
+            const el = document.getElementById(wrapperId);
+            if (el) el.classList.remove('hidden');
+        }
+    });
+}
+
+
+function renderOverviewCharts() {
+    // Destroy existing charts to prevent memory leaks
+    Object.values(charts).forEach(chart => chart.destroy());
+
+    const processData = (key) => {
+        const counts = allAssets.reduce((acc, asset) => {
+            const value = asset[key] || 'Uncategorized';
+            if (key === 'assignedTo' && value === 'Uncategorized') return acc; // Don't count unassigned for employee chart
+            acc[value] = (acc[value] || 0) + 1;
+            return acc;
+        }, {});
+        return {
+            labels: Object.keys(counts),
+            data: Object.values(counts)
+        };
+    };
+
+    const siteData = processData('site');
+    const conditionData = processData('condition');
+    const typeData = processData('type');
+    const employeeData = processData('assignedTo');
+
+    const siteChartType = document.getElementById('site-chart-type').value;
+    const conditionChartType = document.getElementById('condition-chart-type').value;
+    const typeChartType = document.getElementById('type-chart-type').value;
+    const employeeChartType = document.getElementById('employee-chart-type').value;
+
+    const createChartConfig = (type, data, label, filterId, defaultBgColor) => {
+        const isDoughnut = type === 'doughnut';
+        const bgColors = (isDoughnut || Array.isArray(defaultBgColor)) ? CHART_COLORS : defaultBgColor;
+        
+        const config = {
+            type: type,
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: label,
+                    data: data.data,
+                    backgroundColor: bgColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                onClick: (event, elements) => handleChartClick(event, elements, filterId),
+                scales: {},
+                indexAxis: 'x'
+            }
+        };
+        if (type === 'bar' || type === 'line') {
+            config.options.scales.y = { beginAtZero: true };
+        }
+        if (type === 'bar') {
+           config.options.indexAxis = 'y';
+           config.options.scales = { x: { beginAtZero: true } };
+        }
+        return config;
+    };
+    
+    charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(siteChartType, siteData, 'Assets per Site', 'filter-site', 'rgba(75, 192, 192, 0.6)'));
+    charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS));
+    charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(typeChartType, typeData, 'Assets by Type', 'filter-asset-type', 'rgba(255, 159, 64, 0.6)'));
+    charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(employeeChartType, employeeData, 'Assignments per Employee', 'employee-select', 'rgba(153, 102, 255, 0.6)'));
+}
+
+// --- Bulk Edit Specific Functions ---
+function updateBulkEditButtonVisibility() {
+    const selectedCount = document.querySelectorAll('.asset-checkbox:checked').length;
+    if (selectedCount > 0) {
+        bulkEditBtn.classList.remove('hidden');
+        bulkEditBtn.textContent = `Bulk Edit (${selectedCount}) Selected`;
+    } else {
+        bulkEditBtn.classList.add('hidden');
+    }
+}
+
+function handleBulkUpdate() {
+    const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
+    if (selectedAssetIds.length === 0) {
+        showMessage("No assets selected for bulk edit.");
+        return;
+    }
+    
+    const updates = [];
+    const fields = [
+        { checkId: 'bulk-update-site-check', fieldName: 'Site', getValue: () => getSelectValue('bulk-site') },
+        { checkId: 'bulk-update-location-check', fieldName: 'Location', getValue: () => getSelectValue('bulk-location') },
+        { checkId: 'bulk-update-container-check', fieldName: 'Container', getValue: () => getSelectValue('bulk-container') },
+        { checkId: 'bulk-update-intended-user-check', fieldName: 'Intended User Type', getValue: () => document.getElementById('bulk-intended-user-type').value },
+        { checkId: 'bulk-update-condition-check', fieldName: 'Condition', getValue: () => document.getElementById('bulk-condition').value },
+        { checkId: 'bulk-update-assigned-to-check', fieldName: 'Assigned To', getValue: () => getSelectValue('bulk-assigned-to') }
+    ];
+
+    fields.forEach(field => {
+        if (document.getElementById(field.checkId).checked) {
+            const value = field.getValue();
+            selectedAssetIds.forEach(id => {
+                const asset = allAssets.find(a => a.id === id);
+                if(asset) {
+                    updates.push({ rowIndex: asset.rowIndex, field: field.fieldName, value: value });
+                }
+            });
+        }
+    });
+
+    if (updates.length > 0) {
+        bulkWriteToSheet(updates);
+    } else {
+        showMessage("No fields were selected to update.");
+    }
+    toggleModal(bulkEditModal, false);
+}
+
+ const getSelectValue = (id) => {
+    const select = document.getElementById(id);
+    const newInp = document.getElementById(`${id}-new`);
+    return select.value === '--new--' ? newInp.value : select.value;
+};
+
+function populateColumnSelector() {
+    const container = document.getElementById('column-checkboxes');
+    container.innerHTML = '';
+    // Exclude Asset ID and fields not meant for direct viewing from the main list
+    const selectableColumns = HEADERS.filter(h => !["Asset ID", "Specs", "Login Info", "Notes", "Asset Name"].includes(h));
+
+    selectableColumns.forEach(colName => {
+        const isChecked = visibleColumns.includes(colName);
+        const div = document.createElement('div');
+        div.className = "flex items-center";
+        div.innerHTML = `
+            <input id="col-${colName.replace(/\s+/g, '')}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            <label for="col-${colName.replace(/\s+/g, '')}" class="ml-2 block text-sm text-gray-900">${colName}</label>
+        `;
+        container.appendChild(div);
+    });
+}
