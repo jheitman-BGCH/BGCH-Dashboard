@@ -4,24 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Technology Asset Dashboard</title>
-    <!-- External Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Custom Stylesheet -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="CSS/style.css">
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <!-- Main Container -->
     <div class="container mx-auto p-4 md:p-8">
         <header class="mb-8">
             <h1 class="text-4xl font-bold text-gray-900">Technology Asset Dashboard</h1>
             <p class="text-gray-600 mt-1">Complete Technology Inventory Management System for Boys & Girls Club of Harlem</p>
         </header>
         
-        <!-- Authentication Section -->
         <div id="auth-section" class="text-center my-12">
             <p class="text-lg mb-4">Please connect your Google Account to access the spreadsheet.</p>
             <button id="authorize_button" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
@@ -29,7 +25,6 @@
             </button>
         </div>
 
-        <!-- Dashboard Section -->
         <div id="dashboard-section" class="hidden">
             <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
                 <div class="flex gap-4">
@@ -52,7 +47,6 @@
                 </div>
             </div>
 
-            <!-- Tabs -->
             <div class="border-b border-gray-200 mb-6">
                 <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                     <button id="inventory-tab" class="tab-btn active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Inventory</button>
@@ -61,10 +55,8 @@
                 </nav>
             </div>
 
-            <!-- Inventory Panel -->
             <div id="inventory-panel">
-                <!-- Filter and Search Section -->
-                 <div class="bg-white p-4 rounded-lg shadow-md mb-6">
+                <div class="bg-white p-4 rounded-lg shadow-md mb-6">
                     <div id="filter-section" class="flex flex-wrap items-end gap-4">
                          <div id="filter-search-wrapper">
                             <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
@@ -134,7 +126,6 @@
                     </div>
                 </div>
 
-                <!-- Asset Table -->
                 <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead id="asset-table-head" class="bg-gray-50"></thead>
@@ -147,7 +138,6 @@
                 </div>
             </div>
 
-            <!-- Overview Panel -->
             <div id="overview-panel" class="hidden">
                  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div class="bg-white p-6 rounded-lg shadow-md">
@@ -195,7 +185,6 @@
                  </div>
             </div>
 
-            <!-- Employees Panel -->
             <div id="employees-panel" class="hidden">
                  <div class="bg-white p-6 rounded-lg shadow-md">
                      <h2 class="text-2xl font-bold mb-6">View Assets by Employee</h2>
@@ -206,15 +195,13 @@
                          </select>
                      </div>
                      <div id="employee-asset-list" class="mt-6 border-t pt-4">
-                         <!-- Assets will be listed here -->
-                     </div>
+                         </div>
                  </div>
             </div>
 
         </div>
     </div>
 
-    <!-- Add/Edit Asset Modal -->
     <div id="asset-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-backdrop fixed inset-0"></div>
         <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
@@ -224,7 +211,6 @@
                 <input type="hidden" id="row-index">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <!-- Column 1 -->
                     <div>
                         <label for="asset-name" class="block text-sm font-medium text-gray-700">Item Name</label>
                         <input type="text" id="asset-name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
@@ -273,7 +259,6 @@
                         <input type="text" id="asset-type-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new item type...">
                     </div>
                     
-                    <!-- Column 2 -->
                     <div>
                         <label for="id-code" class="block text-sm font-medium text-gray-700">ID Code</label>
                         <input type="text" id="id-code" placeholder="Internal tracking code" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
@@ -325,7 +310,6 @@
         </div>
     </div>
     
-    <!-- Bulk Edit Modal -->
     <div id="bulk-edit-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-backdrop fixed inset-0"></div>
         <div class="modal-content bg-white w-full max-w-lg mx-auto rounded-lg shadow-xl z-10 transform scale-95">
@@ -333,7 +317,6 @@
                 <h2 class="text-2xl font-bold mb-6">Bulk Edit Assets</h2>
                 <p class="mb-4 text-sm text-gray-600">Check the box next to a field to update it for all selected assets. Unchecked fields will not be changed.</p>
                 <div class="space-y-4">
-                    <!-- Site -->
                     <div class="flex items-center gap-3">
                         <input type="checkbox" id="bulk-update-site-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
                         <div class="flex-grow">
@@ -342,7 +325,6 @@
                             <input type="text" id="bulk-site-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new site...">
                         </div>
                     </div>
-                    <!-- Location -->
                     <div class="flex items-center gap-3">
                         <input type="checkbox" id="bulk-update-location-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
                         <div class="flex-grow">
@@ -351,7 +333,6 @@
                             <input type="text" id="bulk-location-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new location...">
                         </div>
                     </div>
-                    <!-- Container -->
                     <div class="flex items-center gap-3">
                         <input type="checkbox" id="bulk-update-container-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
                         <div class="flex-grow">
@@ -360,7 +341,6 @@
                             <input type="text" id="bulk-container-new" class="mt-2 hidden w-full rounded-md border-gray-300 shadow-sm" placeholder="Enter new container...">
                         </div>
                     </div>
-                    <!-- Intended User -->
                     <div class="flex items-center gap-3">
                         <input type="checkbox" id="bulk-update-intended-user-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
                         <div class="flex-grow">
@@ -373,7 +353,6 @@
                             </select>
                         </div>
                     </div>
-                    <!-- Condition -->
                     <div class="flex items-center gap-3">
                         <input type="checkbox" id="bulk-update-condition-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
                         <div class="flex-grow">
@@ -387,7 +366,6 @@
                             </select>
                         </div>
                     </div>
-                    <!-- Assigned To -->
                     <div class="flex items-center gap-3">
                         <input type="checkbox" id="bulk-update-assigned-to-check" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
                         <div class="flex-grow">
@@ -406,7 +384,6 @@
     </div>
 
 
-    <!-- Asset Detail Modal -->
     <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-backdrop fixed inset-0"></div>
         <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
@@ -421,15 +398,13 @@
         </div>
     </div>
 
-    <!-- Customize Columns Modal -->
     <div id="column-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-backdrop fixed inset-0"></div>
         <div class="modal-content bg-white w-full max-w-md mx-auto rounded-lg shadow-xl z-10 transform scale-95">
             <div class="p-8">
                 <h2 class="text-2xl font-bold mb-6">Customize Inventory Columns</h2>
                 <div id="column-checkboxes" class="grid grid-cols-2 gap-4">
-                    <!-- Checkboxes will be inserted here -->
-                </div>
+                    </div>
                 <div class="flex justify-end gap-4 mt-8">
                     <button type="button" id="column-cancel-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
                     <button type="button" id="column-save-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Save</button>
@@ -438,18 +413,13 @@
         </div>
     </div>
 
-    <!-- Custom Alert/Message Box -->
     <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
         <p id="message-text"></p>
     </div>
 
-    <!-- SCRIPT LOADING ORDER IS CRITICAL -->
-    <!-- First, load our script which defines the callback functions -->
-    <script src="script.js"></script>
-    <!-- Then, load the Google API scripts which will call our functions on load -->
+    <script src="JS/script.js"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
     
 </body>
 </html>
-
