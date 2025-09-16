@@ -82,11 +82,7 @@ function loadVisibleColumns() {
 
 function checkAndInitialize() {
     if (gapiInited && gisInited) {
-        initializeGoogleClients().then(() => {
-            // Check if user is already signed in
-            const token = gapi.client.getToken();
-            updateSigninStatus(token !== null);
-        });
+        initializeGoogleClients();
     }
 }
 
@@ -98,8 +94,17 @@ async function initializeGoogleClients() {
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
-            callback: '',
+            callback: (tokenResponse) => {
+                if (tokenResponse && tokenResponse.access_token) {
+                    updateSigninStatus(true);
+                } else if (tokenResponse.error) {
+                    console.warn("Silent auth failed:", tokenResponse.error);
+                    updateSigninStatus(false);
+                }
+            },
         });
+        // Attempt to get a token silently on page load
+        tokenClient.requestAccessToken({ prompt: 'none' });
     } catch (error) {
         console.error("Error initializing Google clients:", error);
         showMessage("Failed to initialize Google services. Check your Client ID.");
@@ -108,22 +113,8 @@ async function initializeGoogleClients() {
 
 // --- AUTHENTICATION ---
 function handleAuthClick() {
-    tokenClient.callback = async (resp) => {
-        if (resp.error !== undefined) {
-            console.error(resp);
-            showMessage("Authentication failed. Please try again.");
-            return;
-        }
-        updateSigninStatus(true);
-    };
-
-    if (gapi.client.getToken() === null) {
-        // Prompt the user to select a Google Account and ask for consent to share their data
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-    } else {
-        // Skip display of account chooser and consent dialog for an existing session.
-        tokenClient.requestAccessToken({ prompt: '' });
-    }
+    // When the button is clicked, the user needs to provide consent.
+    tokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 function handleSignoutClick() {
