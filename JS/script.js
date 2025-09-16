@@ -1,18 +1,17 @@
 // js/script.js
 // --- CONFIGURATION ---
-const API_KEY = 'AIzaSyBw8-Fw_RHDGkllATR6w8xP9D0SbNo7zjY';
 const CLIENT_ID = '525866256494-i4g16ahgtjvm851k1q5k9qg05vjbv1dt.apps.googleusercontent.com';
 const SPREADSHEET_ID = '1YZ1bACVHyudX08jqSuojSBAxSPO5_bRp9czImJhShhY';
 const SHEET_NAME = 'Asset';
 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 const HEADERS = [
-    "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container", 
+    "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container",
     "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", "Model Number",
     "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
 ];
 const CHART_COLORS = [
-    'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)', 
+    'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)',
     'rgba(75, 192, 192, 0.6)', 'rgba(153, 102, 255, 0.6)', 'rgba(255, 159, 64, 0.6)',
     'rgba(199, 199, 199, 0.6)', 'rgba(83, 102, 255, 0.6)', 'rgba(40, 230, 150, 0.6)'
 ];
@@ -94,24 +93,23 @@ function checkAndInitialize() {
 async function initializeGoogleClients() {
     try {
         await gapi.client.init({
-            apiKey: API_KEY,
             discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
         });
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
-            callback: '', 
+            callback: '',
         });
     } catch (error) {
         console.error("Error initializing Google clients:", error);
-        showMessage("Failed to initialize Google services. Check your API Key and Client ID.");
+        showMessage("Failed to initialize Google services. Check your Client ID.");
     }
 }
 
 // --- AUTHENTICATION ---
 function handleAuthClick() {
     tokenClient.callback = async (resp) => {
-        if (resp.error !== undefined) { 
+        if (resp.error !== undefined) {
             console.error(resp);
             showMessage("Authentication failed. Please try again.");
             return;
@@ -156,7 +154,7 @@ async function loadSheetData() {
         const values = response.result.values;
 
         let sheetHeaders = values ? values[0] : [];
-        
+
         if (!values || values.length < 1) {
             await initializeSheet(false);
             sheetHeaders = [...HEADERS];
@@ -271,8 +269,8 @@ async function writeToSheet(data, isUpdate = false) {
             "Asset ID": data.id || `ASSET-${Date.now()}`, "Asset Name": data.name, "Quantity": data.quantity, "Site": data.site,
             "Location": data.location, "Container": data.container, "Intended User Type": data.intendedUserType,
             "Condition": data.condition, "Asset Type": data.type, "ID Code": data.idCode, "Serial Number": data.serial,
-            "Model Number": data.modelNumber, "Assigned To": data.assignedTo, "Date Issued": data.dateIssued, 
-            "Purchase Date": data.purchaseDate, "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '', 
+            "Model Number": data.modelNumber, "Assigned To": data.assignedTo, "Date Issued": data.dateIssued,
+            "Purchase Date": data.purchaseDate, "Specs": data.specs, "Login Info": data.loginInfo ? btoa(data.loginInfo) : '',
             "Notes": data.notes
         };
 
@@ -308,7 +306,7 @@ async function bulkWriteToSheet(updates) {
         const sheetHeaders = headerResponse.result.values ? headerResponse.result.values[0] : [];
         const headerMap = {};
         sheetHeaders.forEach((header, i) => headerMap[header] = i);
-        
+
         const data = updates.map(update => {
             const range = `${SHEET_NAME}!${String.fromCharCode(65 + headerMap[update.field])}${update.rowIndex}`;
             return {
@@ -344,7 +342,7 @@ async function deleteAsset(rowIndex) {
                 requests: [{
                     deleteDimension: {
                         range: {
-                            sheetId: 0, 
+                            sheetId: 0,
                             dimension: "ROWS",
                             startIndex: rowIndex - 1,
                             endIndex: rowIndex
@@ -390,7 +388,7 @@ function populateModalDropdowns() {
          addNewOption.textContent = 'Add New...';
          select.appendChild(addNewOption);
     }
-    
+
     fields.forEach(populate);
     bulkFields.forEach(populate)
 }
@@ -462,7 +460,7 @@ function applyFiltersAndSearch() {
         const matchesIntendedUser = intendedUserFilter ? asset.intendedUserType === intendedUserFilter : true;
         const matchesAssigned = assignedToFilter ? asset.assignedTo === assignedToFilter : true;
         const matchesModel = modelNumberFilter ? asset.modelNumber === modelNumberFilter : true;
-        
+
         const matchesQuantity = (isNaN(quantityMin) || assetQuantity >= quantityMin) && (isNaN(quantityMax) || assetQuantity <= quantityMax);
         const matchesDateIssued = (!dateIssuedMin || (assetDateIssued && assetDateIssued >= dateIssuedMin)) && (!dateIssuedMax || (assetDateIssued && assetDateIssued <= dateIssuedMax));
         const matchesPurchaseDate = (!purchaseDateMin || (assetPurchaseDate && assetPurchaseDate >= purchaseDateMin)) && (!purchaseDateMax || (assetPurchaseDate && assetPurchaseDate <= purchaseDateMax));
@@ -489,7 +487,7 @@ function renderTable(assetsToRender) {
     const tableBody = document.getElementById('asset-table-body');
     tableHead.innerHTML = '';
     tableBody.innerHTML = '';
-    
+
     // Build Header
     const headerRow = document.createElement('tr');
     let headerHTML = `
@@ -506,7 +504,7 @@ function renderTable(assetsToRender) {
     headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>`;
     headerRow.innerHTML = headerHTML;
     tableHead.appendChild(headerRow);
-    
+
     // Re-attach listeners
     document.getElementById('select-all-assets').addEventListener('change', (e) => {
         document.querySelectorAll('.asset-checkbox').forEach(checkbox => {
@@ -536,7 +534,7 @@ function renderTable(assetsToRender) {
         "Purchase Date": "purchaseDate", "Specs": "specs", "Notes": "notes"
     };
     const sortKey = headerToKeyMap[sortState.column];
-    
+
     const sortedAssets = [...assetsToRender].sort((a, b) => {
         const valA = a[sortKey] || '';
         const valB = b[sortKey] || '';
@@ -552,12 +550,12 @@ function renderTable(assetsToRender) {
     validAssets.forEach(asset => {
         const tr = document.createElement('tr');
         tr.dataset.id = asset.id;
-        
+
         let rowHtml = `
             <td class="relative px-6 py-4 whitespace-nowrap">
                 <input type="checkbox" data-id="${asset.id}" class="asset-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
             </td>`;
-        
+
         visibleColumns.forEach(colName => {
             const key = headerToKeyMap[colName];
             const value = asset[key] || '';
@@ -602,15 +600,15 @@ function openDetailModal(assetId) {
     if (!asset) return;
 
     document.getElementById('detail-modal-title').textContent = asset.name || 'Asset Details';
-    
+
     const content = document.getElementById('detail-modal-content');
     content.innerHTML = `
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
             ${Object.entries({
                 "Asset ID": asset.id, "Asset Name": asset.name, "Quantity": asset.quantity, "Site": asset.site, "Location": asset.location,
                 "Container": asset.container, "Intended User": asset.intendedUserType, "Condition": asset.condition,
-                "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial, 
-                "Model Number": asset.modelNumber, "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued, 
+                "Asset Type": asset.type, "ID Code": asset.idCode, "Serial Number": asset.serial,
+                "Model Number": asset.modelNumber, "Assigned To": asset.assignedTo, "Date Issued": asset.dateIssued,
                 "Purchase Date": asset.purchaseDate
             }).map(([key, value]) => `
                 <div>
@@ -657,8 +655,8 @@ function populateAssetForm(asset) {
     document.getElementById('notes').value = asset.notes || '';
 
     const dynamicFields = [
-        { id: 'site', key: 'site' }, { id: 'location', key: 'location' }, 
-        { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' }, 
+        { id: 'site', key: 'site' }, { id: 'location', key: 'location' },
+        { id: 'container', key: 'container' }, { id: 'asset-type', key: 'type' },
         { id: 'assigned-to', key: 'assignedTo' }
     ];
     dynamicFields.forEach(field => {
@@ -666,7 +664,7 @@ function populateAssetForm(asset) {
         const newInp = document.getElementById(`${field.id}-new`);
         const value = asset[field.key];
         const optionExists = [...select.options].some(opt => opt.value === value);
-        
+
         if (value && optionExists) {
             select.value = value;
             newInp.classList.add('hidden');
@@ -767,7 +765,7 @@ function setupEventListeners() {
 
     assetForm.onsubmit = (e) => {
         e.preventDefault();
-        
+
         const getSelectValue = (id) => {
             const select = document.getElementById(id);
             const newInp = document.getElementById(`${id}-new`);
@@ -801,13 +799,13 @@ function setupEventListeners() {
 
     document.getElementById('asset-table-body').addEventListener('click', (e) => {
         const target = e.target;
-        
+
         if(target.classList.contains('asset-checkbox')) {
             updateBulkEditButtonVisibility();
             return;
         }
         const assetId = target.closest('tr')?.dataset.id;
-        
+
         if (target.closest('.actions-btn')) {
             const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
             // Hide other open dropdowns
@@ -815,9 +813,9 @@ function setupEventListeners() {
                 if (d !== dropdown) d.classList.remove('show');
             });
             dropdown.classList.toggle('show');
-            return; 
+            return;
         }
-        
+
         if (target.closest('.actions-dropdown')) {
             if (target.classList.contains('edit-btn')) {
                 openEditModal(target.dataset.id);
@@ -835,7 +833,7 @@ function setupEventListeners() {
             openDetailModal(assetId);
         }
     });
-    
+
     employeeAssetList.addEventListener('click', (e) => {
         const targetItem = e.target.closest('.employee-asset-item');
         if (targetItem) {
@@ -876,12 +874,12 @@ function setupEventListeners() {
     document.getElementById('bulk-location').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-location'), document.getElementById('bulk-location-new')));
     document.getElementById('bulk-container').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-container'), document.getElementById('bulk-container-new')));
     document.getElementById('bulk-assigned-to').addEventListener('change', () => handleDynamicSelectChange(document.getElementById('bulk-assigned-to'), document.getElementById('bulk-assigned-to-new')));
-    
+
     document.getElementById('bulk-edit-form').onsubmit = (e) => {
         e.preventDefault();
         handleBulkUpdate();
     };
-    
+
     // --- Column Customization Listeners ---
     document.getElementById('customize-cols-btn').addEventListener('click', () => {
         populateColumnSelector();
@@ -940,7 +938,7 @@ function handleChartClick(event, elements, filterId) {
         const elementIndex = elements[0].index;
         const chart = elements[0].element.$context.chart;
         const label = chart.data.labels[elementIndex];
-        
+
         if (filterId === 'employee-select') {
             switchTab('employees');
             const employeeDropdown = document.getElementById('employee-select');
@@ -1020,7 +1018,7 @@ function renderOverviewCharts() {
     const createChartConfig = (type, data, label, filterId, defaultBgColor) => {
         const isDoughnut = type === 'doughnut';
         const bgColors = (isDoughnut || Array.isArray(defaultBgColor)) ? CHART_COLORS : defaultBgColor;
-        
+
         const config = {
             type: type,
             data: {
@@ -1047,7 +1045,7 @@ function renderOverviewCharts() {
         }
         return config;
     };
-    
+
     charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(siteChartType, siteData, 'Assets per Site', 'filter-site', 'rgba(75, 192, 192, 0.6)'));
     charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(conditionChartType, conditionData, 'Assets by Condition', 'filter-condition', CHART_COLORS));
     charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(typeChartType, typeData, 'Assets by Type', 'filter-asset-type', 'rgba(255, 159, 64, 0.6)'));
@@ -1071,7 +1069,7 @@ function handleBulkUpdate() {
         showMessage("No assets selected for bulk edit.");
         return;
     }
-    
+
     const updates = [];
     const fields = [
         { checkId: 'bulk-update-site-check', fieldName: 'Site', getValue: () => getSelectValue('bulk-site') },
@@ -1125,4 +1123,3 @@ function populateColumnSelector() {
         container.appendChild(div);
     });
 }
-
