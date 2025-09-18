@@ -9,204 +9,36 @@ let viState = {
 
 // --- DOM REFERENCES & FLAGS ---
 let vi = {}; 
-let viDomInitialized = false;
-let viListenersInitialized = false; // New flag to ensure listeners are only attached once
+let viListenersInitialized = false; // Flag to ensure listeners are only attached once
 
 // --- INITIALIZATION ---
-function initializeVIDomReferences() {
-    // This function runs only once to find all necessary HTML elements.
-    if (viDomInitialized) return;
+function setupAndBindVisualInventory() {
+    // This entire setup runs only once.
+    if (viListenersInitialized) return true;
 
+    // 1. Find all DOM elements and store them.
     vi.roomSelector = document.getElementById('room-selector');
-    vi.roomGrid = document.getElementById('room-grid');
     vi.gridContainer = document.getElementById('room-grid-container');
     vi.createRoomBtn = document.getElementById('create-room-btn');
     vi.roomModal = document.getElementById('room-modal');
     vi.roomForm = document.getElementById('room-form');
     vi.objectToolbar = document.getElementById('object-toolbar');
     vi.breadcrumbContainer = document.getElementById('breadcrumb-container');
-    
-    viDomInitialized = true;
-    console.log("Visual Inventory DOM references initialized.");
-}
 
-function initVisualInventory() {
-    console.log("Initializing Visual Inventory...");
-    initializeVIDomReferences(); // Find elements now that the tab is active.
-    
-    // Only set up event listeners the first time the module is initialized.
-    if (!viListenersInitialized) {
-        setupVisualInventoryEventListeners();
-    }
-    
-    populateRoomSelector();
-    
-    const lastRoom = localStorage.getItem('lastActiveRoomId');
-    if (lastRoom && allRooms.some(r => r["Room ID"] === lastRoom)) {
-        vi.roomSelector.value = lastRoom;
-        const room = allRooms.find(r => r["Room ID"] === lastRoom);
-        if (room) {
-             navigateTo(room["Room ID"], room["Room Name"]);
-        }
-    } else {
-        renderGrid(); // This will show the "Please select a room" message
-    }
-}
-
-// --- NAVIGATION & RENDERING ---
-function navigateTo(id, name) {
-    if (id.startsWith('ROOM-')) {
-        // Navigating to a top-level room
-        viState.activeRoomId = id;
-        viState.activeParentId = id;
-        viState.breadcrumbs = [{ id, name }];
-    } else {
-        // Navigating into a container/shelf
-        viState.activeParentId = id;
-        const existingIndex = viState.breadcrumbs.findIndex(b => b.id === id);
-        if (existingIndex > -1) {
-            viState.breadcrumbs = viState.breadcrumbs.slice(0, existingIndex + 1);
-        } else {
-            viState.breadcrumbs.push({ id, name });
-        }
-    }
-    localStorage.setItem('lastActiveRoomId', viState.activeRoomId);
-    renderGrid();
-    renderBreadcrumbs();
-}
-
-function renderBreadcrumbs() {
-    if (!vi.breadcrumbContainer) return;
-    vi.breadcrumbContainer.innerHTML = '';
-    viState.breadcrumbs.forEach((crumb, index) => {
-        const crumbEl = document.createElement('span');
-        if (index < viState.breadcrumbs.length - 1) {
-            const anchor = document.createElement('a');
-            anchor.href = '#';
-            anchor.textContent = crumb.name;
-            anchor.className = 'hover:underline text-indigo-600';
-            anchor.onclick = (e) => {
-                e.preventDefault();
-                navigateTo(crumb.id, crumb.name);
-            };
-            crumbEl.appendChild(anchor);
-            const separator = document.createElement('span');
-            separator.textContent = ' / ';
-            separator.className = 'mx-2 text-gray-500';
-            crumbEl.appendChild(separator);
-        } else {
-            crumbEl.textContent = crumb.name;
-            crumbEl.className = 'font-semibold text-gray-700';
-        }
-        vi.breadcrumbContainer.appendChild(crumbEl);
-    });
-}
-
-function renderGrid() {
-    if (!vi.gridContainer) return;
-
-    if (!viState.activeParentId) {
-        vi.gridContainer.innerHTML = '<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select or create a room to begin.</p></div>';
-        vi.roomGrid = document.getElementById('room-grid');
-        return;
-    } 
-    
-    // Ensure the grid container is set up correctly
-    if (!document.getElementById('room-grid')) {
-        vi.gridContainer.innerHTML = '<div id="room-grid"></div>';
-    }
-    vi.roomGrid = document.getElementById('room-grid');
-    vi.roomGrid.innerHTML = ''; 
-
-
-    let parentObject;
-    let gridWidth, gridHeight;
-
-    if (viState.activeParentId.startsWith('ROOM-')) {
-        parentObject = allRooms.find(r => r["Room ID"] === viState.activeParentId);
-        if (!parentObject) return;
-        gridWidth = parentObject["Grid Width"];
-        gridHeight = parentObject["Grid Height"];
-    } else {
-        parentObject = spatialLayoutData.find(o => o["Instance ID"] === viState.activeParentId);
-        if (!parentObject) return;
-        const assetInfo = getAssetByRefId(parentObject["Reference ID"]);
-        if (!assetInfo || assetInfo["Asset Type"] !== 'Shelf') {
-             gridWidth = 10;
-             gridHeight = 10;
-        } else {
-            gridWidth = parentObject.Orientation === 'Vertical' ? parentObject["Shelf Rows"] : parentObject["Shelf Cols"];
-            gridHeight = parentObject.Orientation === 'Vertical' ? parentObject["Shelf Cols"] : parentObject["Shelf Rows"];
-        }
+    // 2. Validate that all critical elements were found.
+    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm];
+    if (criticalElements.some(el => !el)) {
+        console.error("Fatal Error: A critical VI DOM element is missing. Initialization aborted. Check element IDs in index.html.", {
+            gridContainer: !!vi.gridContainer,
+            roomSelector: !!vi.roomSelector,
+            createRoomBtn: !!vi.createRoomBtn,
+            roomModal: !!vi.roomModal,
+            roomForm: !!vi.roomForm
+        });
+        return false; // Indicate failure to prevent crashes.
     }
 
-    vi.roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
-    vi.roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
-
-    const childObjects = spatialLayoutData.filter(obj => obj["Parent ID"] === viState.activeParentId);
-    childObjects.forEach(obj => renderObject(obj, vi.roomGrid));
-}
-
-function renderObject(objectData, parentGrid) {
-    const assetInfo = getAssetByRefId(objectData["Reference ID"]);
-    if (!assetInfo) return;
-
-    const objEl = document.createElement('div');
-    objEl.className = 'visual-object flex items-center justify-center p-1 select-none';
-    objEl.dataset.instanceId = objectData["Instance ID"];
-    objEl.setAttribute('draggable', 'true');
-
-    const typeClass = assetInfo["Asset Type"] === 'Shelf' ? 'shelf' : (assetInfo["Asset Type"] === 'Container' ? 'container' : 'asset-item');
-    objEl.classList.add(typeClass);
-
-    const width = objectData.Orientation === 'Vertical' ? objectData.Height : objectData.Width;
-    const height = objectData.Orientation === 'Vertical' ? objectData.Width : objectData.Height;
-    
-    objEl.style.gridColumn = `${objectData["Pos X"] + 1} / span ${width}`;
-    objEl.style.gridRow = `${objectData["Pos Y"] + 1} / span ${height}`;
-    objEl.innerHTML = `<span class="truncate">${assetInfo["Asset Name"]}</span>`;
-
-    objEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData["Instance ID"] }));
-        e.stopPropagation();
-    });
-
-    objEl.addEventListener('click', (e) => {
-        if (typeClass === 'shelf' || typeClass === 'container') {
-             e.stopPropagation();
-             navigateTo(objectData["Instance ID"], assetInfo["Asset Name"]);
-        }
-    });
-
-    parentGrid.appendChild(objEl);
-}
-
-// --- UI POPULATION & HELPERS ---
-function populateRoomSelector() {
-    if (!vi.roomSelector) return;
-    const currentValue = vi.roomSelector.value;
-    vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
-    allRooms.forEach(room => {
-        const option = document.createElement('option');
-        option.value = room["Room ID"];
-        option.textContent = room["Room Name"];
-        vi.roomSelector.appendChild(option);
-    });
-    vi.roomSelector.value = currentValue;
-}
-
-function getAssetByRefId(refId) {
-    return allAssets.find(a => a["Asset ID"] === refId);
-}
-
-// --- EVENT LISTENERS ---
-function setupVisualInventoryEventListeners() {
-    // Safety check to ensure DOM elements are loaded before attaching listeners.
-    if (!viDomInitialized || !vi.createRoomBtn || !vi.roomModal || !vi.gridContainer || !vi.roomSelector) {
-        console.error("Visual Inventory DOM not fully initialized. Aborting event listener setup.");
-        return;
-    }
-
+    // 3. If validation passes, attach all event listeners.
     vi.createRoomBtn.addEventListener('click', () => {
         vi.roomForm.reset();
         document.getElementById('room-id-hidden').value = '';
@@ -288,10 +120,179 @@ function setupVisualInventoryEventListeners() {
         }
     });
 
-    viListenersInitialized = true; // Set flag so this function doesn't run again.
-    console.log("Visual Inventory event listeners initialized.");
+    // 4. Mark as initialized so this function doesn't run again.
+    viListenersInitialized = true;
+    console.log("Visual Inventory event listeners initialized successfully.");
+    return true; // Indicate success
 }
 
+
+function initVisualInventory() {
+    console.log("Attempting to initialize Visual Inventory...");
+    
+    // setupAndBind will now return false if it fails, preventing the rest of this logic from running.
+    if (!setupAndBindVisualInventory()) {
+        return;
+    }
+    
+    populateRoomSelector();
+    
+    const lastRoom = localStorage.getItem('lastActiveRoomId');
+    if (lastRoom && allRooms.some(r => r["Room ID"] === lastRoom)) {
+        vi.roomSelector.value = lastRoom;
+        const room = allRooms.find(r => r["Room ID"] === lastRoom);
+        if (room) {
+             navigateTo(room["Room ID"], room["Room Name"]);
+        }
+    } else {
+        renderGrid(); // This will show the "Please select a room" message
+    }
+}
+
+// --- NAVIGATION & RENDERING ---
+function navigateTo(id, name) {
+    if (id.startsWith('ROOM-')) {
+        viState.activeRoomId = id;
+        viState.activeParentId = id;
+        viState.breadcrumbs = [{ id, name }];
+    } else {
+        viState.activeParentId = id;
+        const existingIndex = viState.breadcrumbs.findIndex(b => b.id === id);
+        if (existingIndex > -1) {
+            viState.breadcrumbs = viState.breadcrumbs.slice(0, existingIndex + 1);
+        } else {
+            viState.breadcrumbs.push({ id, name });
+        }
+    }
+    localStorage.setItem('lastActiveRoomId', viState.activeRoomId);
+    renderGrid();
+    renderBreadcrumbs();
+}
+
+function renderBreadcrumbs() {
+    if (!vi.breadcrumbContainer) return;
+    vi.breadcrumbContainer.innerHTML = '';
+    viState.breadcrumbs.forEach((crumb, index) => {
+        const crumbEl = document.createElement('span');
+        if (index < viState.breadcrumbs.length - 1) {
+            const anchor = document.createElement('a');
+            anchor.href = '#';
+            anchor.textContent = crumb.name;
+            anchor.className = 'hover:underline text-indigo-600';
+            anchor.onclick = (e) => {
+                e.preventDefault();
+                navigateTo(crumb.id, crumb.name);
+            };
+            crumbEl.appendChild(anchor);
+            const separator = document.createElement('span');
+            separator.textContent = ' / ';
+            separator.className = 'mx-2 text-gray-500';
+            crumbEl.appendChild(separator);
+        } else {
+            crumbEl.textContent = crumb.name;
+            crumbEl.className = 'font-semibold text-gray-700';
+        }
+        vi.breadcrumbContainer.appendChild(crumbEl);
+    });
+}
+
+function renderGrid() {
+    if (!vi.gridContainer) return;
+
+    if (!viState.activeParentId) {
+        vi.gridContainer.innerHTML = '<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select or create a room to begin.</p></div>';
+        vi.roomGrid = document.getElementById('room-grid');
+        return;
+    } 
+    
+    if (!document.getElementById('room-grid')) {
+        vi.gridContainer.innerHTML = '<div id="room-grid"></div>';
+    }
+    vi.roomGrid = document.getElementById('room-grid');
+    vi.roomGrid.innerHTML = ''; 
+
+
+    let parentObject;
+    let gridWidth, gridHeight;
+
+    if (viState.activeParentId.startsWith('ROOM-')) {
+        parentObject = allRooms.find(r => r["Room ID"] === viState.activeParentId);
+        if (!parentObject) return;
+        gridWidth = parentObject["Grid Width"];
+        gridHeight = parentObject["Grid Height"];
+    } else {
+        parentObject = spatialLayoutData.find(o => o["Instance ID"] === viState.activeParentId);
+        if (!parentObject) return;
+        const assetInfo = getAssetByRefId(parentObject["Reference ID"]);
+        if (!assetInfo || !['Shelf', 'Container'].includes(assetInfo["Asset Type"])) {
+             gridWidth = 10;
+             gridHeight = 10;
+        } else {
+            gridWidth = parentObject["Orientation"] === 'Vertical' ? parentObject["Shelf Rows"] : parentObject["Shelf Cols"];
+            gridHeight = parentObject["Orientation"] === 'Vertical' ? parentObject["Shelf Cols"] : parentObject["Shelf Rows"];
+        }
+    }
+
+    vi.roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
+    vi.roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
+
+    const childObjects = spatialLayoutData.filter(obj => obj["Parent ID"] === viState.activeParentId);
+    childObjects.forEach(obj => renderObject(obj, vi.roomGrid));
+}
+
+function renderObject(objectData, parentGrid) {
+    const assetInfo = getAssetByRefId(objectData["Reference ID"]);
+    if (!assetInfo) return;
+
+    const objEl = document.createElement('div');
+    objEl.className = 'visual-object flex items-center justify-center p-1 select-none';
+    objEl.dataset.instanceId = objectData["Instance ID"];
+    objEl.setAttribute('draggable', 'true');
+
+    const typeClass = assetInfo["Asset Type"] === 'Shelf' ? 'shelf' : (assetInfo["Asset Type"] === 'Container' ? 'container' : 'asset-item');
+    objEl.classList.add(typeClass);
+
+    const width = objectData["Orientation"] === 'Vertical' ? objectData["Height"] : objectData["Width"];
+    const height = objectData["Orientation"] === 'Vertical' ? objectData["Width"] : objectData["Height"];
+    
+    objEl.style.gridColumn = `${parseInt(objectData["Pos X"]) + 1} / span ${width}`;
+    objEl.style.gridRow = `${parseInt(objectData["Pos Y"]) + 1} / span ${height}`;
+    objEl.innerHTML = `<span class="truncate">${assetInfo["Asset Name"]}</span>`;
+
+    objEl.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData["Instance ID"] }));
+        e.stopPropagation();
+    });
+
+    objEl.addEventListener('click', (e) => {
+        if (typeClass === 'shelf' || typeClass === 'container') {
+             e.stopPropagation();
+             navigateTo(objectData["Instance ID"], assetInfo["Asset Name"]);
+        }
+    });
+
+    parentGrid.appendChild(objEl);
+}
+
+// --- UI POPULATION & HELPERS ---
+function populateRoomSelector() {
+    if (!vi.roomSelector) return;
+    const currentValue = vi.roomSelector.value;
+    vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
+    allRooms.forEach(room => {
+        const option = document.createElement('option');
+        option.value = room["Room ID"];
+        option.textContent = room["Room Name"];
+        vi.roomSelector.appendChild(option);
+    });
+    vi.roomSelector.value = currentValue;
+}
+
+function getAssetByRefId(refId) {
+    return allAssets.find(a => a["Asset ID"] === refId);
+}
+
+// --- EVENT HANDLERS ---
 async function handleNewObjectDrop(data, gridX, gridY) {
     if (!viState.activeParentId) {
         showMessage("Cannot add an object without a selected room or container.");
