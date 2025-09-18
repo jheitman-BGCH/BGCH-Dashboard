@@ -3,21 +3,19 @@
 // --- STATE ---
 let viState = {
     activeRoomId: null,
-    activeParentId: null, // Can be a Room ID or an Instance ID
+    activeParentId: null,
     breadcrumbs: [],
     selectedInstanceId: null,
 };
 
 // --- DOM REFERENCES & FLAGS ---
 let vi = {};
-let viListenersInitialized = false; // Flag to ensure listeners are only attached once
+let viListenersInitialized = false;
 
 // --- INITIALIZATION ---
 function setupAndBindVisualInventory() {
-    // This entire setup runs only once.
     if (viListenersInitialized) return true;
 
-    // 1. Find all DOM elements and store them.
     vi.roomSelector = document.getElementById('room-selector');
     vi.gridContainer = document.getElementById('room-grid-container');
     vi.createRoomBtn = document.getElementById('create-room-btn');
@@ -25,15 +23,14 @@ function setupAndBindVisualInventory() {
     vi.roomForm = document.getElementById('room-form');
     vi.objectToolbar = document.getElementById('object-toolbar');
     vi.breadcrumbContainer = document.getElementById('breadcrumb-container');
+    vi.contentsModal = document.getElementById('contents-modal');
 
-    // 2. Validate that all critical elements were found.
-    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm];
+    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal];
     if (criticalElements.some(el => !el)) {
-        console.error("Fatal Error: A critical VI DOM element is missing. Initialization aborted.");
-        return false; // Indicate failure to prevent crashes.
+        console.error("Fatal Error: A critical VI DOM element is missing.", { /* ... */ });
+        return false;
     }
 
-    // 3. If validation passes, attach all event listeners.
     vi.createRoomBtn.addEventListener('click', () => {
         vi.roomForm.reset();
         document.getElementById('room-id-hidden').value = '';
@@ -42,29 +39,33 @@ function setupAndBindVisualInventory() {
 
     vi.roomModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.roomModal, false));
     vi.roomModal.querySelector('#cancel-room-btn').addEventListener('click', () => toggleModal(vi.roomModal, false));
+    vi.contentsModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.contentsModal, false));
+    vi.contentsModal.querySelector('.modal-close-btn').addEventListener('click', () => toggleModal(vi.contentsModal, false));
 
     vi.roomForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const roomData = {
-            "Room ID": `ROOM-${Date.now()}`,
-            "Room Name": document.getElementById('room-name').value,
-            "Grid Width": document.getElementById('grid-width').value,
-            "Grid Height": document.getElementById('grid-height').value,
-            "Notes": document.getElementById('room-notes').value,
+            RoomID: `ROOM-${Date.now()}`,
+            RoomName: document.getElementById('room-name').value,
+            GridWidth: document.getElementById('grid-width').value,
+            GridHeight: document.getElementById('grid-height').value,
         };
-
-        await appendRowToSheet(ROOMS_SHEET, ROOMS_HEADERS, roomData);
+        const newRowIndex = await appendRowToSheet(ROOMS_SHEET, ROOMS_HEADERS, roomData);
+        if (newRowIndex) {
+            roomData.rowIndex = newRowIndex;
+            allRooms.push(roomData);
+            populateRoomSelector();
+            vi.roomSelector.value = roomData.RoomID;
+            navigateTo(roomData.RoomID, roomData.RoomName);
+        }
         toggleModal(vi.roomModal, false);
-        await loadAllSheetData(); // Refresh all data after adding
-        vi.roomSelector.value = roomData["Room ID"];
-        navigateTo(roomData["Room ID"], roomData["Room Name"]);
     });
 
     vi.roomSelector.addEventListener('change', (e) => {
         if (e.target.value) {
-            const room = allRooms.find(r => r["Room ID"] === e.target.value);
+            const room = allRooms.find(r => r.RoomID === e.target.value);
             if (room) {
-                navigateTo(room["Room ID"], room["Room Name"]);
+                navigateTo(room.RoomID, room.RoomName);
             }
         } else {
             viState.activeParentId = null;
@@ -75,7 +76,7 @@ function setupAndBindVisualInventory() {
     document.querySelectorAll('.toolbar-item').forEach(item => {
         item.addEventListener('dragstart', (e) => {
             const data = {
-                type: 'new',
+                type: 'new-object',
                 assetType: item.dataset.assetType,
                 name: item.dataset.name,
                 width: parseInt(item.dataset.width),
@@ -86,89 +87,45 @@ function setupAndBindVisualInventory() {
             e.dataTransfer.setData('application/json', JSON.stringify(data));
         });
     });
-
-    vi.gridContainer.addEventListener('dragover', (e) => {
-        e.preventDefault(); // Necessary to allow dropping
-    });
     
-    // Deselect object when clicking on the grid background
+    vi.gridContainer.addEventListener('dragover', (e) => e.preventDefault());
+    vi.gridContainer.addEventListener('drop', handleGridDrop);
+    
+    // Add a single click listener to the container to handle deselection
     vi.gridContainer.addEventListener('click', (e) => {
+        // If the click is on the grid itself and not a child object, deselect.
         if (e.target === vi.gridContainer || e.target === vi.roomGrid) {
-            selectObject(null); // Pass null to deselect everything
-        }
-    });
-
-
-    vi.gridContainer.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        if (!e.dataTransfer.getData('application/json') || !vi.roomGrid) return;
-
-        const data = JSON.parse(e.dataTransfer.getData('application/json'));
-        const rect = vi.roomGrid.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        const gridStyle = getComputedStyle(vi.roomGrid);
-        const colCount = gridStyle.gridTemplateColumns.split(' ').length;
-        const rowCount = gridStyle.gridTemplateRows.split(' ').length;
-
-        const cellWidth = rect.width / colCount;
-        const cellHeight = rect.height / rowCount;
-
-        const gridX = Math.min(colCount - 1, Math.max(0, Math.floor(x / cellWidth)));
-        const gridY = Math.min(rowCount - 1, Math.max(0, Math.floor(y / cellHeight)));
-
-        if (data.type === 'new') {
-            await handleNewObjectDrop(data, gridX, gridY);
-        } else if (data.type === 'move') {
-            const instance = spatialLayoutData.find(d => d["Instance ID"] === data.instanceId);
-            if (instance) {
-                const updates = { "Pos X": gridX, "Pos Y": gridY };
-                await handleObjectUpdate(data.instanceId, updates);
-            }
+            selectObject(null);
         }
     });
 
     viListenersInitialized = true;
-    console.log("Visual Inventory event listeners initialized successfully.");
     return true;
 }
 
 
 function initVisualInventory() {
-    console.log("Attempting to initialize Visual Inventory...");
-    console.log('[DEBUG] Data available at VI init:', {
-        allRooms: JSON.parse(JSON.stringify(allRooms)),
-        spatialLayoutData: JSON.parse(JSON.stringify(spatialLayoutData))
-    });
-    
-    // setupAndBind will now return false if it fails, preventing the rest of this logic from running.
-    if (!setupAndBindVisualInventory()) {
-        return;
-    }
+    if (!setupAndBindVisualInventory()) return;
 
     populateRoomSelector();
-
     const lastRoom = localStorage.getItem('lastActiveRoomId');
-    if (lastRoom && allRooms.some(r => r["Room ID"] === lastRoom)) {
+    if (lastRoom && allRooms.some(r => r.RoomID === lastRoom)) {
         vi.roomSelector.value = lastRoom;
-        const room = allRooms.find(r => r["Room ID"] === lastRoom);
+        const room = allRooms.find(r => r.RoomID === lastRoom);
         if (room) {
-            navigateTo(room["Room ID"], room["Room Name"]);
+            navigateTo(room.RoomID, room.RoomName);
         }
     } else if (allRooms.length > 0) {
-        // Default to the first room if no last room is set
-        vi.roomSelector.value = allRooms[0]["Room ID"];
-        navigateTo(allRooms[0]["Room ID"], allRooms[0]["Room Name"]);
-    }
-    else {
-        renderGrid(); // Shows "Please select a room"
+        // Default to the first room if none was saved
+        vi.roomSelector.value = allRooms[0].RoomID;
+        navigateTo(allRooms[0].RoomID, allRooms[0].RoomName);
+    } else {
+        renderGrid();
     }
 }
 
 // --- NAVIGATION & RENDERING ---
 function navigateTo(id, name) {
-    selectObject(null); // Deselect any selected object when navigating
     if (id.startsWith('ROOM-')) {
         viState.activeRoomId = id;
         viState.activeParentId = id;
@@ -183,9 +140,7 @@ function navigateTo(id, name) {
         }
     }
     localStorage.setItem('lastActiveRoomId', viState.activeRoomId);
-    if (vi.roomSelector.value !== viState.activeRoomId) {
-         vi.roomSelector.value = viState.activeRoomId;
-    }
+    selectObject(null); // Deselect any object when navigating
     renderGrid();
     renderBreadcrumbs();
 }
@@ -219,6 +174,7 @@ function renderBreadcrumbs() {
 
 function renderGrid() {
     if (!vi.gridContainer) return;
+    selectObject(null);
 
     if (!viState.activeParentId) {
         vi.gridContainer.innerHTML = '<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select or create a room to begin.</p></div>';
@@ -232,70 +188,66 @@ function renderGrid() {
     let gridWidth, gridHeight;
 
     if (viState.activeParentId.startsWith('ROOM-')) {
-        parentObject = allRooms.find(r => r["Room ID"] === viState.activeParentId);
+        parentObject = allRooms.find(r => r.RoomID === viState.activeParentId);
         if (!parentObject) return;
-        gridWidth = parentObject["Grid Width"] || 10;
-        gridHeight = parentObject["Grid Height"] || 10;
+        gridWidth = parentObject.GridWidth;
+        gridHeight = parentObject.GridHeight;
     } else {
-        parentObject = spatialLayoutData.find(o => o["Instance ID"] === viState.activeParentId);
+        parentObject = spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
         if (!parentObject) return;
-        gridWidth = parentObject["Orientation"] === 'Vertical' ? parentObject["Shelf Cols"] : parentObject["Shelf Rows"];
-        gridHeight = parentObject["Orientation"] === 'Vertical' ? parentObject["Shelf Rows"] : parentObject["Shelf Cols"];
+        const assetInfo = getAssetByRefId(parentObject.ReferenceID);
+        if (!assetInfo || !['Shelf', 'Container'].includes(assetInfo.AssetType)) {
+            gridWidth = 10;
+            gridHeight = 10;
+        } else {
+            gridWidth = parentObject.Orientation === 'Vertical' ? parentObject.ShelfRows : parentObject.ShelfCols;
+            gridHeight = parentObject.Orientation === 'Vertical' ? parentObject.ShelfCols : parentObject.ShelfRows;
+        }
     }
-    
-    // --- FIX 1: Correctly size the grid and its visual background ---
-    vi.roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, 1fr)`;
-    vi.roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, 1fr)`;
-    vi.roomGrid.style.backgroundSize = `calc(100% / ${gridWidth}) calc(100% / ${gridHeight})`;
-    // --- END FIX 1 ---
 
-    const childObjects = spatialLayoutData.filter(obj => obj["Parent ID"] === viState.activeParentId);
+    vi.roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
+    vi.roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
+
+    const childObjects = spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
     childObjects.forEach(obj => renderObject(obj, vi.roomGrid));
 }
 
 function renderObject(objectData, parentGrid) {
-    const assetInfo = getAssetByRefId(objectData["Reference ID"]);
+    const assetInfo = getAssetByRefId(objectData.ReferenceID);
     if (!assetInfo) return;
 
     const objEl = document.createElement('div');
     objEl.className = 'visual-object flex items-center justify-center p-1 select-none';
-    objEl.dataset.instanceId = objectData["Instance ID"];
+    objEl.dataset.instanceId = objectData.InstanceID;
     objEl.setAttribute('draggable', 'true');
 
-    if (viState.selectedInstanceId === objectData["Instance ID"]) {
-        objEl.classList.add('selected');
-        addControlsToObject(objEl, objectData);
-    }
-
-    const typeClass = assetInfo["Asset Type"] === 'Shelf' ? 'shelf' : (assetInfo["Asset Type"] === 'Container' ? 'container' : 'asset-item');
+    const typeClass = assetInfo.AssetType === 'Shelf' ? 'shelf' : (assetInfo.AssetType === 'Container' ? 'container' : 'asset-item');
     objEl.classList.add(typeClass);
 
-    const isVertical = objectData["Orientation"] === 'Vertical';
-    const width = isVertical ? objectData["Height"] : objectData["Width"];
-    const height = isVertical ? objectData["Width"] : objectData["Height"];
+    const width = objectData.Orientation === 'Vertical' ? objectData.Height : objectData.Width;
+    const height = objectData.Orientation === 'Vertical' ? objectData.Width : objectData.Height;
 
-    objEl.style.gridColumn = `${parseInt(objectData["Pos X"]) + 1} / span ${width}`;
-    objEl.style.gridRow = `${parseInt(objectData["Pos Y"]) + 1} / span ${height}`;
-    objEl.innerHTML = `<span class="truncate pointer-events-none">${assetInfo["Asset Name"]}</span>`;
+    objEl.style.gridColumn = `${parseInt(objectData.PosX) + 1} / span ${width}`;
+    objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
+    objEl.innerHTML = `<span class="truncate object-name">${assetInfo.AssetName}</span>`;
 
+    // --- Event Listeners for the object ---
     objEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData["Instance ID"] }));
+        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData.InstanceID }));
         e.stopPropagation();
-    });
-    
-    // --- FEATURE 3: SELECTION & NAVIGATION ---
-    objEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectObject(objEl, objectData);
     });
 
-    if (typeClass === 'shelf' || typeClass === 'container') {
-        objEl.addEventListener('dblclick', (e) => {
+    objEl.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent grid click listener from firing
+        selectObject(objectData.InstanceID);
+    });
+
+    objEl.addEventListener('dblclick', (e) => {
+        if (typeClass === 'shelf' || typeClass === 'container') {
             e.stopPropagation();
-            navigateTo(objectData["Instance ID"], assetInfo["Asset Name"]);
-        });
-    }
-    // --- END FEATURE 3 ---
+            navigateTo(objectData.InstanceID, assetInfo.AssetName);
+        }
+    });
 
     parentGrid.appendChild(objEl);
 }
@@ -305,166 +257,214 @@ function populateRoomSelector() {
     if (!vi.roomSelector) return;
     const currentValue = vi.roomSelector.value;
     vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
-    allRooms.sort((a,b) => a["Room Name"].localeCompare(b["Room Name"])).forEach(room => {
+    allRooms.forEach(room => {
         const option = document.createElement('option');
-        option.value = room["Room ID"];
-        option.textContent = room["Room Name"];
+        option.value = room.RoomID;
+        option.textContent = room.RoomName;
         vi.roomSelector.appendChild(option);
     });
-    vi.roomSelector.value = currentValue;
+    // Restore previous selection if it still exists
+    if ([...vi.roomSelector.options].some(opt => opt.value === currentValue)) {
+        vi.roomSelector.value = currentValue;
+    }
 }
 
 function getAssetByRefId(refId) {
-    return allAssets.find(a => a["Asset ID"] === refId);
+    return allAssets.find(a => a.AssetID === refId);
 }
 
-// --- EVENT HANDLERS & ACTIONS ---
-async function handleNewObjectDrop(data, gridX, gridY) {
+// --- OBJECT MANIPULATION ---
+
+async function handleGridDrop(e) {
+    e.preventDefault();
+    if (!e.dataTransfer.getData('application/json') || !vi.roomGrid) return;
+    
+    const data = JSON.parse(e.dataTransfer.getData('application/json'));
+    const rect = vi.roomGrid.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const gridTemplateCols = getComputedStyle(vi.roomGrid).gridTemplateColumns.split(' ');
+    const gridTemplateRows = getComputedStyle(vi.roomGrid).gridTemplateRows.split(' ');
+    const cellWidth = rect.width / gridTemplateCols.length;
+    const cellHeight = rect.height / gridTemplateRows.length;
+    const gridX = Math.min(gridTemplateCols.length, Math.max(0, Math.floor(x / cellWidth)));
+    const gridY = Math.min(gridTemplateRows.length, Math.max(0, Math.floor(y / cellHeight)));
+    
+    if (data.type === 'new-object') {
+        await handleToolbarDrop(data, gridX, gridY);
+    } else if (data.type === 'move') {
+        const instance = spatialLayoutData.find(i => i.InstanceID === data.instanceId);
+        if (instance) {
+            instance.PosX = gridX;
+            instance.PosY = gridY;
+            await updateObjectInStateAndSheet(instance);
+            renderGrid();
+        }
+    }
+}
+
+
+async function handleToolbarDrop(data, gridX, gridY) {
     if (!viState.activeParentId) {
         showMessage("Cannot add an object without a selected room or container.");
         return;
     }
 
+    // 1. Create a new "Asset" record for the shelf/container itself
     const newAsset = {
-        "Asset ID": `ASSET-${Date.now()}`,
-        "Asset Name": data.name,
-        "Asset Type": data.assetType,
-        "Condition": "New",
+        AssetID: `ASSET-${Date.now()}`,
+        AssetName: data.name,
+        AssetType: data.assetType,
+        Condition: "New",
     };
     await appendRowToSheet(ASSET_SHEET, ASSET_HEADERS, newAsset);
+    allAssets.push(newAsset); // Add to local state immediately
 
+    // 2. Create the "Spatial Layout" instance for the new asset
     const newInstance = {
-        "Instance ID": `INST-${Date.now()}`,
-        "Reference ID": newAsset["Asset ID"],
-        "Parent ID": viState.activeParentId,
-        "Pos X": gridX,
-        "Pos Y": gridY,
-        "Width": data.width,
-        "Height": data.height,
-        "Orientation": "Horizontal",
-        "Shelf Rows": data.shelfRows,
-        "Shelf Cols": data.shelfCols,
+        InstanceID: `INST-${Date.now()}`,
+        ReferenceID: newAsset.AssetID,
+        ParentID: viState.activeParentId,
+        PosX: gridX,
+        PosY: gridY,
+        Width: data.width,
+        Height: data.height,
+        Orientation: "Horizontal",
+        ShelfRows: data.shelfRows,
+        ShelfCols: data.shelfCols,
     };
     const newRowIndex = await appendRowToSheet(SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS, newInstance);
-
-    if (newRowIndex) {
+    if(newRowIndex) {
         newInstance.rowIndex = newRowIndex;
+        spatialLayoutData.push(newInstance); // Add to local state
+        renderGrid(); // Re-render to show the new object
     } else {
-        console.error("Could not determine new row index from API. A full refresh may be needed to move this item again.");
-        // Fallback to estimating the row index to prevent immediate errors, though it might be inaccurate.
-        newInstance.rowIndex = spatialLayoutData.length > 0 
-            ? Math.max(...spatialLayoutData.map(d => d.rowIndex)) + 1
-            : 2;
-    }
-
-
-    // --- FIX 2: Update local cache for immediate feedback ---
-    allAssets.push(newAsset);
-    spatialLayoutData.push(newInstance);
-    renderGrid();
-    // --- END FIX 2 ---
-}
-
-function selectObject(element, data) {
-    const previouslySelected = document.querySelector('.visual-object.selected');
-    if (previouslySelected) {
-        previouslySelected.classList.remove('selected');
-        const oldControls = previouslySelected.querySelector('.object-controls');
-        if (oldControls) oldControls.remove();
-    }
-
-    if (element && data) {
-        viState.selectedInstanceId = data["Instance ID"];
-        element.classList.add('selected');
-        addControlsToObject(element, data);
-    } else {
-        viState.selectedInstanceId = null;
+        // If we fail to get a row index, force a full refresh to be safe
+        await loadAllSheetData();
     }
 }
 
-// --- FEATURE 3: OBJECT CONTROLS ---
-function addControlsToObject(element, data) {
-    const controls = document.createElement('div');
-    controls.className = 'object-controls';
-    
-    // Rotate Button
-    const rotateBtn = document.createElement('button');
-    rotateBtn.className = 'control-btn rotate-btn';
-    rotateBtn.innerHTML = '&#x21bb;'; // Rotate icon
-    rotateBtn.title = "Rotate";
-    rotateBtn.onclick = async (e) => {
-        e.stopPropagation();
-        const newOrientation = data["Orientation"] === 'Horizontal' ? 'Vertical' : 'Horizontal';
-        await handleObjectUpdate(data["Instance ID"], { "Orientation": newOrientation });
-    };
 
-    // Delete Button
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'control-btn delete-btn';
-    deleteBtn.innerHTML = '&times;'; // 'X' icon
-    deleteBtn.title = "Delete";
-    deleteBtn.onclick = async (e) => {
+function selectObject(instanceId) {
+    // Remove existing controls
+    document.querySelectorAll('.resize-handle, .rotate-handle, .delete-handle').forEach(el => el.remove());
+    document.querySelectorAll('.visual-object.selected').forEach(el => el.classList.remove('selected'));
+
+    viState.selectedInstanceId = instanceId;
+
+    if (!instanceId) return;
+
+    const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
+    if (objEl) {
+        objEl.classList.add('selected');
+        createObjectControls(objEl, instanceId);
+    }
+}
+
+function createObjectControls(objEl, instanceId) {
+    // Delete Handle
+    const deleteHandle = document.createElement('div');
+    deleteHandle.className = 'delete-handle';
+    deleteHandle.innerHTML = '&times;';
+    deleteHandle.onclick = async (e) => {
         e.stopPropagation();
-        if (confirm("Are you sure you want to delete this item? This cannot be undone.")) {
-            await handleObjectDelete(data["Instance ID"]);
+        if (confirm('Are you sure you want to delete this item?')) {
+            const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+            if(instance) {
+                // Find and remove from local array
+                spatialLayoutData = spatialLayoutData.filter(i => i.InstanceID !== instanceId);
+                // Remove from sheet
+                await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
+                renderGrid();
+            }
         }
     };
+    objEl.appendChild(deleteHandle);
     
-    // Resizing buttons
-    const createResizeBtn = (text, title, dimension, delta) => {
-        const btn = document.createElement('button');
-        btn.className = `control-btn resize-btn ${title.toLowerCase().replace(' ','-')}`;
-        btn.innerHTML = text;
-        btn.title = title;
-        btn.onclick = async (e) => {
-            e.stopPropagation();
-            const newValue = Math.max(1, parseInt(data[dimension]) + delta);
-            await handleObjectUpdate(data["Instance ID"], { [dimension]: newValue });
-        };
-        return btn;
+    // Rotate Handle
+    const rotateHandle = document.createElement('div');
+    rotateHandle.className = 'rotate-handle';
+    rotateHandle.innerHTML = '&#8635;'; // Rotate symbol
+    rotateHandle.onclick = async (e) => {
+        e.stopPropagation();
+        const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+        if (instance) {
+            instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
+            await updateObjectInStateAndSheet(instance);
+            renderGrid();
+            // Re-select after render to show controls on rotated object
+            setTimeout(() => selectObject(instanceId), 50);
+        }
+    };
+    objEl.appendChild(rotateHandle);
+
+
+    // Resize Handles
+    const handles = ['n', 's', 'e', 'w'];
+    handles.forEach(dir => {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle ${dir}`;
+        objEl.appendChild(handle);
+
+        handle.addEventListener('mousedown', (e) => initResize(e, instanceId, dir));
+    });
+}
+
+function initResize(e, instanceId, direction) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    if (!instance) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = parseInt(instance.Width);
+    const startHeight = parseInt(instance.Height);
+    
+    const rect = vi.roomGrid.getBoundingClientRect();
+    const cellWidth = rect.width / vi.roomGrid.style.gridTemplateColumns.split(' ').length;
+    const cellHeight = rect.height / vi.roomGrid.style.gridTemplateRows.split(' ').length;
+
+    function doDrag(e) {
+        const dx = (e.clientX - startX) / cellWidth;
+        const dy = (e.clientY - startY) / cellHeight;
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+
+        if (direction === 'e') newWidth = Math.max(1, Math.round(startWidth + dx));
+        if (direction === 'w') newWidth = Math.max(1, Math.round(startWidth - dx)); // Not implemented: requires changing PosX
+        if (direction === 's') newHeight = Math.max(1, Math.round(startHeight + dy));
+        if (direction === 'n') newHeight = Math.max(1, Math.round(startHeight - dy)); // Not implemented: requires changing PosY
+
+        if (newWidth !== instance.Width || newHeight !== instance.Height) {
+            instance.Width = newWidth;
+            instance.Height = newHeight;
+            // Live update the grid appearance without writing to sheet yet
+            const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
+            if(objEl) {
+                objEl.style.gridColumnEnd = `span ${newWidth}`;
+                objEl.style.gridRowEnd = `span ${newHeight}`;
+            }
+        }
     }
 
-    controls.appendChild(rotateBtn);
-    controls.appendChild(deleteBtn);
-    controls.appendChild(createResizeBtn('-', 'Width Minus', 'Width', -1));
-    controls.appendChild(createResizeBtn('+', 'Width Plus', 'Width', 1));
-    controls.appendChild(createResizeBtn('-', 'Height Minus', 'Height', -1));
-    controls.appendChild(createResizeBtn('+', 'Height Plus', 'Height', 1));
+    function stopDrag() {
+        document.removeEventListener('mousemove', doDrag);
+        document.removeEventListener('mouseup', stopDrag);
+        // Now, write the final state to the sheet
+        updateObjectInStateAndSheet(instance);
+    }
 
-    element.appendChild(controls);
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('mouseup', stopDrag);
 }
 
-async function handleObjectUpdate(instanceId, updates) {
-    const instanceIndex = spatialLayoutData.findIndex(d => d["Instance ID"] === instanceId);
-    if (instanceIndex === -1) return;
 
-    // Update local data for immediate UI response
-    const updatedInstance = { ...spatialLayoutData[instanceIndex], ...updates };
-    spatialLayoutData[instanceIndex] = updatedInstance;
-    
-    // Update the sheet in the background
-    await updateRowInSheet(SPATIAL_LAYOUT_SHEET, updatedInstance.rowIndex, SPATIAL_LAYOUT_HEADERS, updatedInstance);
-    
-    // Re-render the grid from local data
-    renderGrid();
+async function updateObjectInStateAndSheet(updatedInstance) {
+    const index = spatialLayoutData.findIndex(i => i.InstanceID === updatedInstance.InstanceID);
+    if (index > -1) {
+        spatialLayoutData[index] = updatedInstance;
+        await updateRowInSheet(SPATIAL_LAYOUT_SHEET, updatedInstance.rowIndex, SPATIAL_LAYOUT_HEADERS, updatedInstance);
+    }
 }
-
-async function handleObjectDelete(instanceId) {
-    const instanceIndex = spatialLayoutData.findIndex(d => d["Instance ID"] === instanceId);
-    if (instanceIndex === -1) return;
-    
-    const instanceToDelete = spatialLayoutData[instanceIndex];
-
-    // Remove from local data
-    spatialLayoutData.splice(instanceIndex, 1);
-    viState.selectedInstanceId = null;
-
-    // Delete from sheet
-    await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instanceToDelete.rowIndex);
-    
-    // Re-render
-    renderGrid();
-}
-// --- END FEATURE 3 ---
-
-
