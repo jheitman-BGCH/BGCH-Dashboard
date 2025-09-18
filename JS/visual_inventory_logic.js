@@ -24,16 +24,19 @@ function setupAndBindVisualInventory() {
     vi.roomForm = document.getElementById('room-form');
     vi.objectToolbar = document.getElementById('object-toolbar');
     vi.breadcrumbContainer = document.getElementById('breadcrumb-container');
+    vi.contentsModal = document.getElementById('contents-modal');
+
 
     // 2. Validate that all critical elements were found.
-    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm];
+    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal];
     if (criticalElements.some(el => !el)) {
         console.error("Fatal Error: A critical VI DOM element is missing. Initialization aborted. Check element IDs in index.html.", {
             gridContainer: !!vi.gridContainer,
             roomSelector: !!vi.roomSelector,
             createRoomBtn: !!vi.createRoomBtn,
             roomModal: !!vi.roomModal,
-            roomForm: !!vi.roomForm
+            roomForm: !!vi.roomForm,
+            contentsModal: !!vi.contentsModal
         });
         return false; // Indicate failure to prevent crashes.
     }
@@ -47,6 +50,11 @@ function setupAndBindVisualInventory() {
 
     vi.roomModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.roomModal, false));
     vi.roomModal.querySelector('#cancel-room-btn').addEventListener('click', () => toggleModal(vi.roomModal, false));
+    
+    // Listener for the contents modal close buttons
+    vi.contentsModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.contentsModal, false));
+    vi.contentsModal.querySelector('.modal-close-btn').addEventListener('click', () => toggleModal(vi.contentsModal, false));
+
 
     vi.roomForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -324,4 +332,3 @@ async function handleNewObjectDrop(data, gridX, gridY) {
     await loadAllSheetData();
     renderGrid();
 }
-

@@ -225,15 +225,13 @@
                             </div>
                             <h3 class="font-bold mb-4 mt-6">Assets</h3>
                             <div id="unplaced-assets-list" class="space-y-2 max-h-96 overflow-y-auto">
-                                <!-- Unplaced assets will be populated here by JS -->
                                 <p class="text-xs text-gray-500">Drag assets from here to the grid.</p>
                             </div>
                         </div>
 
                         <div id="room-grid-container" class="lg:col-span-3 bg-gray-100 border rounded-lg p-2">
                              <div id="room-grid">
-                                <!-- Grid will be generated here by JS -->
-                             </div>
+                                </div>
                         </div>
                     </div>
                 </div>
@@ -453,40 +451,6 @@
         </div>
     </div>
 
-    <!-- Visual Inventory Modals -->
-    <div id="room-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
-        <div class="modal-backdrop fixed inset-0"></div>
-        <div class="modal-content bg-white w-full max-w-md mx-auto rounded-lg shadow-xl z-10 transform scale-95 p-8">
-            <h2 class="text-2xl font-bold mb-6">Create New Room</h2>
-            <form id="room-form">
-                <div class="space-y-4">
-                    <div>
-                        <label for="room-name" class="block text-sm font-medium text-gray-700">Room Name</label>
-                        <input type="text" id="room-name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="grid-width" class="block text-sm font-medium text-gray-700">Grid Width</label>
-                            <input type="number" id="grid-width" value="20" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        </div>
-                        <div>
-                            <label for="grid-height" class="block text-sm font-medium text-gray-700">Grid Height</label>
-                            <input type="number" id="grid-height" value="15" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        </div>
-                    </div>
-                     <div>
-                        <label for="room-notes" class="block text-sm font-medium text-gray-700">Notes</label>
-                        <textarea id="room-notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></textarea>
-                    </div>
-                </div>
-                <div class="flex justify-end gap-4 mt-8">
-                    <button type="button" class="modal-cancel-btn bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
-                    <button type="submit" class="modal-save-btn bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Create Room</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
     <div id="contents-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-backdrop fixed inset-0"></div>
         <div class="modal-content bg-white w-full max-w-3xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto p-8">
@@ -496,8 +460,7 @@
             </div>
            
             <div id="contents-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
-                <!-- Items will be populated here -->
-            </div>
+                </div>
              <div class="mt-6 pt-4 border-t">
                  <h3 class="font-semibold mb-2">Add New Item</h3>
                  <form id="add-item-form" class="flex items-end gap-3">
@@ -514,13 +477,10 @@
              </div>
         </div>
     </div>
-    <!-- End Visual Inventory Modals -->
-
     <div id="message-box" class="hidden fixed top-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-lg z-50">
         <p id="message-text"></p>
     </div>
 
-    <!-- Visual Inventory Modals -->
     <div id="room-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div class="modal-backdrop fixed inset-0 bg-gray-500 bg-opacity-75"></div>
         <div class="modal-content bg-white w-full max-w-lg mx-auto rounded-lg shadow-xl z-10">
@@ -563,4 +523,3 @@
     
 </body>
 </html>
-
