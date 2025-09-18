@@ -225,20 +225,36 @@ function processAssetData(values) {
 }
 
 function processRoomData(values) {
-    const headers = values.length > 0 ? values[0] : ROOMS_HEADERS;
+    if (!values || values.length === 0) {
+        allRooms = [];
+        return;
+    }
+    const headers = values[0].map(h => h.trim()); // Trim headers
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
 
-    allRooms = dataRows.map((row, index) => ({
-        rowIndex: index + 2,
-        "Room ID": row[headerMap["Room ID"]],
-        "Room Name": row[headerMap["Room Name"]],
-        "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 0,
-        "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 0,
-        "Notes": row[headerMap["Notes"]],
-    }));
+    const roomIdIndex = headerMap["Room ID"];
+    const roomNameIndex = headerMap["Room Name"];
+
+    if (roomIdIndex === undefined) {
+        console.error("The 'Rooms' sheet is missing the 'Room ID' header.");
+        allRooms = [];
+        return;
+    }
+    
+    allRooms = dataRows
+        .filter(row => row && row.length > roomIdIndex && row[roomIdIndex]) // Filter out empty or malformed rows
+        .map((row, index) => ({
+            rowIndex: index + 2, // Note: this rowIndex might not be accurate if rows are filtered out.
+            "Room ID": row[roomIdIndex],
+            "Room Name": row[roomNameIndex] || '', // Default to empty string if name is missing
+            "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 0,
+            "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 0,
+            "Notes": row[headerMap["Notes"]],
+        }));
 }
+
 
 function processSpatialLayoutData(values) {
     const headers = values.length > 0 ? values[0] : SPATIAL_LAYOUT_HEADERS;
@@ -974,4 +990,3 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         setLoading(false);
     }
 }
-
