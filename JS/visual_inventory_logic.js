@@ -340,7 +340,18 @@ async function handleNewObjectDrop(data, gridX, gridY) {
         "Shelf Rows": data.shelfRows,
         "Shelf Cols": data.shelfCols,
     };
-    await appendRowToSheet(SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS, newInstance);
+    const newRowIndex = await appendRowToSheet(SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS, newInstance);
+
+    if (newRowIndex) {
+        newInstance.rowIndex = newRowIndex;
+    } else {
+        console.error("Could not determine new row index from API. A full refresh may be needed to move this item again.");
+        // Fallback to estimating the row index to prevent immediate errors, though it might be inaccurate.
+        newInstance.rowIndex = spatialLayoutData.length > 0 
+            ? Math.max(...spatialLayoutData.map(d => d.rowIndex)) + 1
+            : 2;
+    }
+
 
     // --- FIX 2: Update local cache for immediate feedback ---
     allAssets.push(newAsset);
@@ -450,3 +461,4 @@ async function handleObjectDelete(instanceId) {
     renderGrid();
 }
 // --- END FEATURE 3 ---
+
