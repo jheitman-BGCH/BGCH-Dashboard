@@ -7,10 +7,10 @@ let viState = {
     breadcrumbs: [],
 };
 
-// --- DOM REFERENCES ---
-// These are initialized later to prevent timing issues on page load.
+// --- DOM REFERENCES & FLAGS ---
 let vi = {}; 
 let viDomInitialized = false;
+let viListenersInitialized = false; // New flag to ensure listeners are only attached once
 
 // --- INITIALIZATION ---
 function initializeVIDomReferences() {
@@ -33,8 +33,13 @@ function initializeVIDomReferences() {
 function initVisualInventory() {
     console.log("Initializing Visual Inventory...");
     initializeVIDomReferences(); // Find elements now that the tab is active.
+    
+    // Only set up event listeners the first time the module is initialized.
+    if (!viListenersInitialized) {
+        setupVisualInventoryEventListeners();
+    }
+    
     populateRoomSelector();
-    setupVisualInventoryEventListeners();
     
     const lastRoom = localStorage.getItem('lastActiveRoomId');
     if (lastRoom && allRooms.some(r => r["Room ID"] === lastRoom)) {
@@ -98,17 +103,20 @@ function renderBreadcrumbs() {
 }
 
 function renderGrid() {
-    if (!vi.roomGrid || !vi.gridContainer) return;
-    vi.roomGrid.innerHTML = ''; 
+    if (!vi.gridContainer) return;
 
     if (!viState.activeParentId) {
         vi.gridContainer.innerHTML = '<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select or create a room to begin.</p></div>';
+        vi.roomGrid = document.getElementById('room-grid');
         return;
-    } else if (document.querySelector('#room-grid-container > .flex')) {
-         // If the placeholder message is there, replace it with the grid.
+    } 
+    
+    // Ensure the grid container is set up correctly
+    if (!document.getElementById('room-grid')) {
         vi.gridContainer.innerHTML = '<div id="room-grid"></div>';
-        vi.roomGrid = document.getElementById('room-grid'); // Re-assign grid reference
     }
+    vi.roomGrid = document.getElementById('room-grid');
+    vi.roomGrid.innerHTML = ''; 
 
 
     let parentObject;
@@ -193,8 +201,9 @@ function getAssetByRefId(refId) {
 
 // --- EVENT LISTENERS ---
 function setupVisualInventoryEventListeners() {
-    if (!viDomInitialized) {
-        console.error("VI DOM not ready for event listeners.");
+    // Safety check to ensure DOM elements are loaded before attaching listeners.
+    if (!viDomInitialized || !vi.createRoomBtn || !vi.roomModal || !vi.gridContainer || !vi.roomSelector) {
+        console.error("Visual Inventory DOM not fully initialized. Aborting event listener setup.");
         return;
     }
 
@@ -257,7 +266,7 @@ function setupVisualInventoryEventListeners() {
 
     vi.gridContainer.addEventListener('drop', async (e) => {
         e.preventDefault();
-        if (!e.dataTransfer.getData('application/json')) return;
+        if (!e.dataTransfer.getData('application/json') || !vi.roomGrid) return;
 
         const data = JSON.parse(e.dataTransfer.getData('application/json'));
         
@@ -278,6 +287,9 @@ function setupVisualInventoryEventListeners() {
             // TODO: Implement move logic by updating the Pos X and Pos Y in the Spatial Layout sheet
         }
     });
+
+    viListenersInitialized = true; // Set flag so this function doesn't run again.
+    console.log("Visual Inventory event listeners initialized.");
 }
 
 async function handleNewObjectDrop(data, gridX, gridY) {
