@@ -31,6 +31,7 @@ let spatialLayoutData = []; // Cache for Spatial Layout sheet
 let charts = {}; // To hold chart instances
 let visibleColumns = [];
 let sortState = { column: 'Asset Name', direction: 'asc' };
+let sheetIds = {}; // To store sheetId for operations like delete
 
 // --- DOM ELEMENT REFERENCES ---
 const authSection = document.getElementById('auth-section');
@@ -147,6 +148,15 @@ function updateSigninStatus(isSignedIn) {
 async function loadAllSheetData() {
     setLoading(true);
     try {
+        // First, get sheet metadata to find sheet IDs
+        const metaResponse = await gapi.client.sheets.spreadsheets.get({
+            spreadsheetId: SPREADSHEET_ID
+        });
+        metaResponse.result.sheets.forEach(sheet => {
+            sheetIds[sheet.properties.title] = sheet.properties.sheetId;
+        });
+
+        // Now, get all the values
         const ranges = [ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET];
         const response = await gapi.client.sheets.spreadsheets.values.batchGet({
             spreadsheetId: SPREADSHEET_ID,
@@ -172,7 +182,7 @@ async function loadAllSheetData() {
 
         // Initialize Visual Inventory if its logic file is loaded
         if (typeof initVisualInventory === 'function') {
-             if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
+            if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
                 initVisualInventory();
             }
         }
@@ -197,28 +207,22 @@ function processAssetData(values) {
     const dataRows = values.slice(1);
 
     allAssets = dataRows.map((row, index) => {
-        let loginInfoDecoded = '';
-        const loginInfoRaw = row[headerMap["Login Info"]];
-        if (loginInfoRaw) {
-            try {
-                if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(loginInfoRaw)) {
-                    loginInfoDecoded = atob(loginInfoRaw);
-                } else {
-                    loginInfoDecoded = loginInfoRaw;
-                }
-            } catch (e) {
-                console.warn("Could not decode login info, treating as plain text:", loginInfoRaw);
-                loginInfoDecoded = loginInfoRaw;
-            }
-        }
-        const asset = { 
-            rowIndex: index + 2,
-            "Login Info": loginInfoDecoded
+        const asset = {
+            rowIndex: index + 2
         };
         ASSET_HEADERS.forEach(header => {
-            if (header !== "Login Info") {
-                 asset[header] = row[headerMap[header]];
+            let value = row[headerMap[header]];
+            if (header === "Login Info" && value) {
+                try {
+                    // Check if it's likely base64 before decoding
+                    if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
+                        value = atob(value);
+                    }
+                } catch (e) {
+                    console.warn("Could not decode login info, treating as plain text:", value);
+                }
             }
+            asset[header] = value;
         });
         return asset;
     });
@@ -229,32 +233,22 @@ function processRoomData(values) {
         allRooms = [];
         return;
     }
-    const headers = values[0].map(h => h.trim()); // Trim headers
+    const headers = values[0].map(h => h.trim());
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
 
-    const roomIdIndex = headerMap["Room ID"];
-    const roomNameIndex = headerMap["Room Name"];
-
-    if (roomIdIndex === undefined) {
-        console.error("The 'Rooms' sheet is missing the 'Room ID' header.");
-        allRooms = [];
-        return;
-    }
-    
     allRooms = dataRows
-        .filter(row => row && row.length > roomIdIndex && row[roomIdIndex]) // Filter out empty or malformed rows
+        .filter(row => row && row[headerMap["Room ID"]])
         .map((row, index) => ({
-            rowIndex: index + 2, // Note: this rowIndex might not be accurate if rows are filtered out.
-            "Room ID": row[roomIdIndex],
-            "Room Name": row[roomNameIndex] || '', // Default to empty string if name is missing
-            "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 0,
-            "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 0,
+            rowIndex: index + 2,
+            "Room ID": row[headerMap["Room ID"]],
+            "Room Name": row[headerMap["Room Name"]] || '',
+            "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 10,
+            "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 10,
             "Notes": row[headerMap["Notes"]],
         }));
 }
-
 
 function processSpatialLayoutData(values) {
     const headers = values.length > 0 ? values[0] : SPATIAL_LAYOUT_HEADERS;
@@ -271,7 +265,7 @@ function processSpatialLayoutData(values) {
         "Pos Y": parseInt(row[headerMap["Pos Y"]], 10) || 0,
         "Width": parseInt(row[headerMap["Width"]], 10) || 1,
         "Height": parseInt(row[headerMap["Height"]], 10) || 1,
-        "Orientation": row[headerMap["Orientation"]],
+        "Orientation": row[headerMap["Orientation"]] || 'Horizontal',
         "Shelf Rows": row[headerMap["Shelf Rows"]] ? parseInt(row[headerMap["Shelf Rows"]], 10) : null,
         "Shelf Cols": row[headerMap["Shelf Cols"]] ? parseInt(row[headerMap["Shelf Cols"]], 10) : null,
     }));
@@ -281,7 +275,7 @@ async function writeToSheet(data, isUpdate = false) {
     setLoading(true);
     try {
         const dataMap = { ...data };
-        if(dataMap["Login Info"]) {
+        if (dataMap["Login Info"]) {
             dataMap["Login Info"] = btoa(dataMap["Login Info"]);
         }
 
@@ -302,7 +296,7 @@ async function writeToSheet(data, isUpdate = false) {
                 resource: { values: [rowData] }
             });
         }
-        await loadAllSheetData();
+        await loadAllSheetData(); // Full refresh after edit/add
     } catch (err) {
         console.error(err);
         showMessage(`Error saving asset: ${err.result.error.message}`);
@@ -312,7 +306,7 @@ async function writeToSheet(data, isUpdate = false) {
 }
 
 async function bulkWriteToSheet(updates) {
-     setLoading(true);
+    setLoading(true);
     try {
         const data = updates.map(update => ({
             range: `${ASSET_SHEET}!${update.columnLetter}${update.rowIndex}`,
@@ -328,14 +322,18 @@ async function bulkWriteToSheet(updates) {
         });
         await loadAllSheetData();
     } catch (err) {
-         console.error(err);
+        console.error(err);
         showMessage(`Error with bulk update: ${err.result.error.message}`);
     } finally {
-         setLoading(false);
+        setLoading(false);
     }
 }
 
-async function deleteAsset(rowIndex) {
+async function deleteRowFromSheet(sheetName, rowIndex) {
+    if (!sheetIds[sheetName]) {
+        showMessage(`Error: Could not find sheet ID for ${sheetName}`);
+        return;
+    }
     setLoading(true);
     try {
         await gapi.client.sheets.spreadsheets.batchUpdate({
@@ -344,7 +342,7 @@ async function deleteAsset(rowIndex) {
                 requests: [{
                     deleteDimension: {
                         range: {
-                            sheetId: 0, // Assuming 'Asset' is the first sheet
+                            sheetId: sheetIds[sheetName],
                             dimension: "ROWS",
                             startIndex: rowIndex - 1,
                             endIndex: rowIndex
@@ -353,10 +351,34 @@ async function deleteAsset(rowIndex) {
                 }]
             }
         });
-        await loadAllSheetData();
+        // We don't reload all data here; it's handled locally in VI logic
+        // For asset deletion, a full reload is appropriate.
+        if (sheetName === ASSET_SHEET) {
+             await loadAllSheetData();
+        }
     } catch (err) {
         console.error(err);
-        showMessage(`Error deleting asset: ${err.result.error.message}`);
+        showMessage(`Error deleting from ${sheetName}: ${err.result.error.message}`);
+    } finally {
+        setLoading(false);
+    }
+}
+
+async function updateRowInSheet(sheetName, rowIndex, headers, dataObject) {
+    setLoading(true);
+    try {
+        const rowData = headers.map(header => dataObject[header] || '');
+        await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${sheetName}!A${rowIndex}`,
+            valueInputOption: 'USER_ENTERED',
+            resource: { values: [rowData] }
+        });
+        // Do not show success message for frequent VI updates to avoid spam
+        // showMessage(`Successfully updated ${sheetName}`, 'success');
+    } catch (err) {
+        console.error(err);
+        showMessage(`Error updating ${sheetName}: ${err.result.error.message}`);
     } finally {
         setLoading(false);
     }
@@ -408,6 +430,7 @@ function populateFilterDropdowns() {
         const select = document.getElementById(filter.id);
         if (!select) return;
         const uniqueValues = [...new Set(allAssets.map(asset => asset[filter.key]).filter(Boolean))].sort();
+        const currentValue = select.value;
         select.innerHTML = `<option value="">All</option>`;
         uniqueValues.forEach(value => {
             const option = document.createElement('option');
@@ -415,6 +438,9 @@ function populateFilterDropdowns() {
             option.textContent = value;
             select.appendChild(option);
         });
+        if ([...select.options].some(opt => opt.value === currentValue)) {
+            select.value = currentValue;
+        }
     });
     renderFilters();
 }
@@ -467,7 +493,6 @@ function renderTable(assetsToRender) {
     tableHead.innerHTML = '';
     tableBody.innerHTML = '';
 
-    // Build Header
     const headerRow = document.createElement('tr');
     let headerHTML = `<th scope="col" class="relative px-6 py-3"><input type="checkbox" id="select-all-assets" class="h-4 w-4 rounded"></th>`;
     visibleColumns.forEach(colName => {
@@ -481,7 +506,6 @@ function renderTable(assetsToRender) {
     headerRow.innerHTML = headerHTML;
     tableHead.appendChild(headerRow);
 
-    // Re-attach listeners for header
     tableHead.querySelector('#select-all-assets').addEventListener('change', (e) => {
         tableBody.querySelectorAll('.asset-checkbox').forEach(checkbox => {
             checkbox.checked = e.target.checked;
@@ -501,7 +525,6 @@ function renderTable(assetsToRender) {
         });
     });
 
-    // Sort data
     const sortedAssets = [...assetsToRender].sort((a, b) => {
         const valA = a[sortState.column] || '';
         const valB = b[sortState.column] || '';
@@ -579,6 +602,7 @@ function openDetailModal(assetId) {
 }
 
 function populateAssetForm(asset) {
+    assetForm.reset();
     document.getElementById('asset-id').value = asset["Asset ID"] || '';
     document.getElementById('row-index').value = asset.rowIndex || '';
     document.getElementById('asset-name').value = asset["Asset Name"] || '';
@@ -615,6 +639,7 @@ function populateAssetForm(asset) {
         } else {
             select.value = '';
             newInp.classList.add('hidden');
+            newInp.value = '';
         }
     });
 }
@@ -622,7 +647,6 @@ function populateAssetForm(asset) {
 function openEditModal(assetId) {
     const asset = allAssets.find(a => a["Asset ID"] === assetId);
     if (!asset) return;
-    assetForm.reset();
     document.getElementById('modal-title').innerText = 'Edit Asset';
     populateAssetForm(asset);
     toggleModal(assetModal, true);
@@ -636,7 +660,6 @@ function openCloneModal(assetId) {
     clonedAsset.rowIndex = '';
     clonedAsset["ID Code"] = '';
     clonedAsset["Serial Number"] = '';
-    assetForm.reset();
     document.getElementById('modal-title').innerText = 'Clone Asset';
     populateAssetForm(clonedAsset);
     toggleModal(assetModal, true);
@@ -675,8 +698,11 @@ function setupEventListeners() {
         assetForm.reset();
         document.getElementById('modal-title').innerText = 'Add New Asset';
         document.getElementById('asset-id').value = '';
+        document.getElementById('row-index').value = '';
         ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
             document.getElementById(`${id}-new`).classList.add('hidden');
+            document.getElementById(`${id}-new`).value = '';
+            document.getElementById(id).value = '';
         });
         toggleModal(assetModal, true);
     };
@@ -731,7 +757,11 @@ function setupEventListeners() {
             "Login Info": document.getElementById('login-info').value,
             Notes: document.getElementById('notes').value,
         };
-        writeToSheet(assetData, !!assetData["Asset ID"]);
+        const isUpdate = !!assetData.rowIndex;
+        if (!assetData["Asset ID"]) {
+             assetData["Asset ID"] = `ASSET-${Date.now()}`;
+        }
+        writeToSheet(assetData, isUpdate);
         toggleModal(assetModal, false);
     };
 
@@ -751,7 +781,11 @@ function setupEventListeners() {
         if (target.closest('.actions-dropdown')) {
             if (target.classList.contains('edit-btn')) openEditModal(target.dataset.id);
             else if (target.classList.contains('clone-btn')) openCloneModal(target.dataset.id);
-            else if (target.classList.contains('delete-btn')) deleteAsset(target.dataset.rowIndex);
+            else if (target.classList.contains('delete-btn')) {
+                if(confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
+                    deleteRowFromSheet(ASSET_SHEET, target.dataset.rowIndex);
+                }
+            }
             target.closest('.actions-dropdown').classList.remove('show');
             return;
         }
@@ -771,7 +805,6 @@ function setupEventListeners() {
         }
     });
 
-    // Bulk Edit & Column Listeners
     setupBulkEditListeners();
     setupColumnSelectorListeners();
 }
@@ -978,6 +1011,7 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
             spreadsheetId: SPREADSHEET_ID,
             range: sheetName,
             valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
             resource: {
                 values: [rowData]
             }
