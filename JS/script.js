@@ -1005,9 +1005,10 @@ function populateColumnSelector() {
 
 async function appendRowToSheet(sheetName, headers, dataObject) {
     setLoading(true);
+    let newRowIndex = null;
     try {
         const rowData = headers.map(header => dataObject[header] || '');
-        await gapi.client.sheets.spreadsheets.values.append({
+        const response = await gapi.client.sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: sheetName,
             valueInputOption: 'USER_ENTERED',
@@ -1016,11 +1017,22 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
                 values: [rowData]
             }
         });
+
+        const updatedRange = response.result.updates.updatedRange;
+        // Example updatedRange: 'Spatial Layout'!A15:J15
+        const match = updatedRange.match(/!A(\d+)/);
+        if (match && match[1]) {
+            newRowIndex = parseInt(match[1], 10);
+        }
+
         showMessage(`Successfully added to ${sheetName}`, 'success');
     } catch (err) {
         console.error(err);
         showMessage(`Error saving to ${sheetName}: ${err.result.error.message}`);
     } finally {
         setLoading(false);
+        return newRowIndex;
     }
 }
+
+
