@@ -8,12 +8,12 @@ const SPATIAL_LAYOUT_SHEET = 'Spatial Layout';
 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 const ASSET_HEADERS = [
-    "Asset ID", "Asset Name", "Quantity", "Site", "Location", "Container",
-    "Intended User Type", "Condition", "Asset Type", "ID Code", "Serial Number", "Model Number",
-    "Assigned To", "Date Issued", "Purchase Date", "Specs", "Login Info", "Notes"
+    "AssetID", "AssetName", "Quantity", "Site", "Location", "Container",
+    "IntendedUserType", "Condition", "AssetType", "IDCode", "SerialNumber", "ModelNumber",
+    "AssignedTo", "DateIssued", "PurchaseDate", "Specs", "LoginInfo", "Notes"
 ];
-const ROOMS_HEADERS = ["Room ID", "Room Name", "Grid Width", "Grid Height", "Notes"];
-const SPATIAL_LAYOUT_HEADERS = ["Instance ID", "Reference ID", "Parent ID", "Pos X", "Pos Y", "Width", "Height", "Orientation", "Shelf Rows", "Shelf Cols"];
+const ROOMS_HEADERS = ["RoomID", "RoomName", "GridWidth", "GridHeight", "Notes"];
+const SPATIAL_LAYOUT_HEADERS = ["InstanceID", "ReferenceID", "ParentID", "PosX", "PosY", "Width", "Height", "Orientation", "ShelfRows", "ShelfCols"];
 
 const CHART_COLORS = [
     'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)',
@@ -215,7 +215,7 @@ function processAssetData(values) {
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
-    const assetIdIndex = headerMap["Asset ID"];
+    const assetIdIndex = headerMap["AssetID"];
 
     allAssets = dataRows
         .map((row, index) => ({ data: row, originalIndex: index }))
@@ -249,7 +249,7 @@ function processRoomData(values) {
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
-    const roomIdIndex = headerMap["Room ID"];
+    const roomIdIndex = headerMap["RoomID"];
 
     allRooms = dataRows
         .map((row, index) => ({ data: row, originalIndex: index }))
@@ -258,10 +258,10 @@ function processRoomData(values) {
             const row = item.data;
             return {
                 rowIndex: item.originalIndex + 2,
-                "Room ID": row[headerMap["Room ID"]],
-                "Room Name": row[headerMap["Room Name"]] || '',
-                "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 10,
-                "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 10,
+                "Room ID": row[headerMap["RoomID"]],
+                "Room Name": row[headerMap["RoomName"]] || '',
+                "Grid Width": parseInt(row[headerMap["GridWidth"]], 10) || 10,
+                "Grid Height": parseInt(row[headerMap["GridHeight"]], 10) || 10,
                 "Notes": row[headerMap["Notes"]],
             };
         });
@@ -274,31 +274,52 @@ function processSpatialLayoutData(values) {
     }
     const headers = values[0];
     const headerMap = {};
-    headers.forEach((header, index) => headerMap[header] = index);
+    headers.forEach((header, index) => headerMap[header.trim()] = index); // Trim headers from sheet
     const dataRows = values.slice(1);
-    const instanceIdIndex = headerMap["Instance ID"];
+    const instanceIdIndex = headerMap["InstanceID"];
 
     console.log('[DEBUG] Raw spatialLayout values from sheet:', JSON.parse(JSON.stringify(values)));
+    console.log('[DEBUG] Header Map:', headerMap, 'Instance ID column index:', instanceIdIndex);
 
-    spatialLayoutData = dataRows
-        .map((row, index) => ({ data: row, originalIndex: index }))
-        .filter(item => item.data && item.data.length > instanceIdIndex && item.data[instanceIdIndex])
-        .map(item => {
-            const row = item.data;
-            return {
-                rowIndex: item.originalIndex + 2,
-                "Instance ID": row[headerMap["Instance ID"]],
-                "Reference ID": row[headerMap["Reference ID"]],
-                "Parent ID": row[headerMap["Parent ID"]],
-                "Pos X": parseInt(row[headerMap["Pos X"]], 10) || 0,
-                "Pos Y": parseInt(row[headerMap["Pos Y"]], 10) || 0,
-                "Width": parseInt(row[headerMap["Width"]], 10) || 1,
-                "Height": parseInt(row[headerMap["Height"]], 10) || 1,
-                "Orientation": row[headerMap["Orientation"]] || 'Horizontal',
-                "Shelf Rows": row[headerMap["Shelf Rows"]] ? parseInt(row[headerMap["Shelf Rows"]], 10) : null,
-                "Shelf Cols": row[headerMap["Shelf Cols"]] ? parseInt(row[headerMap["Shelf Cols"]], 10) : null,
-            };
+    if (instanceIdIndex === undefined) {
+        console.error('[DEBUG] CRITICAL: "InstanceID" header not found in Spatial Layout sheet. Check for typos. Headers found:', headers);
+        spatialLayoutData = [];
+        return;
+    }
+
+    const processedData = [];
+    dataRows.forEach((row, index) => {
+        const originalSheetRow = index + 2; // for user-friendly logging
+
+        // Silently skip rows that are completely empty
+        if (!row || row.join('').trim() === '') {
+            return;
+        }
+
+        // Check for the critical Instance ID
+        const instanceId = row[instanceIdIndex];
+        if (!instanceId) {
+            console.warn(`[DEBUG] Skipping row ${originalSheetRow} in 'Spatial Layout' sheet because its "InstanceID" is missing. Row data:`, row);
+            return; // Skip this row because it's unusable without an ID
+        }
+
+        // If checks pass, process the row
+        processedData.push({
+            rowIndex: originalSheetRow,
+            "Instance ID": instanceId,
+            "Reference ID": row[headerMap["ReferenceID"]],
+            "Parent ID": row[headerMap["ParentID"]],
+            "Pos X": parseInt(row[headerMap["PosX"]], 10) || 0,
+            "Pos Y": parseInt(row[headerMap["PosY"]], 10) || 0,
+            "Width": parseInt(row[headerMap["Width"]], 10) || 1,
+            "Height": parseInt(row[headerMap["Height"]], 10) || 1,
+            "Orientation": row[headerMap["Orientation"]] || 'Horizontal',
+            "Shelf Rows": row[headerMap["ShelfRows"]] ? parseInt(row[headerMap["ShelfRows"]], 10) : null,
+            "Shelf Cols": row[headerMap["ShelfCols"]] ? parseInt(row[headerMap["ShelfCols"]], 10) : null,
         });
+    });
+    
+    spatialLayoutData = processedData;
 }
 
 
@@ -1065,4 +1086,6 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         return newRowIndex;
     }
 }
+
+
 
