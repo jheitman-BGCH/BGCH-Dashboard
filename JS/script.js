@@ -172,6 +172,8 @@ async function loadAllSheetData() {
         const roomValues = results[1].values || [];
         const layoutValues = results[2].values || [];
 
+        console.log('[DEBUG] Raw data received from sheets:', { assetValues, roomValues, layoutValues });
+
         processAssetData(assetValues);
         processRoomData(roomValues);
         processSpatialLayoutData(layoutValues);
@@ -275,6 +277,8 @@ function processSpatialLayoutData(values) {
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
     const instanceIdIndex = headerMap["Instance ID"];
+
+    console.log('[DEBUG] Raw spatialLayout values from sheet:', JSON.parse(JSON.stringify(values)));
 
     spatialLayoutData = dataRows
         .map((row, index) => ({ data: row, originalIndex: index }))
@@ -1061,3 +1065,4 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         return newRowIndex;
     }
 }
+

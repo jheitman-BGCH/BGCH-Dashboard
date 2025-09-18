@@ -137,7 +137,12 @@ function setupAndBindVisualInventory() {
 
 function initVisualInventory() {
     console.log("Attempting to initialize Visual Inventory...");
-
+    console.log('[DEBUG] Data available at VI init:', {
+        allRooms: JSON.parse(JSON.stringify(allRooms)),
+        spatialLayoutData: JSON.parse(JSON.stringify(spatialLayoutData))
+    });
+    
+    // setupAndBind will now return false if it fails, preventing the rest of this logic from running.
     if (!setupAndBindVisualInventory()) {
         return;
     }
@@ -461,4 +466,5 @@ async function handleObjectDelete(instanceId) {
     renderGrid();
 }
 // --- END FEATURE 3 ---
+
 
