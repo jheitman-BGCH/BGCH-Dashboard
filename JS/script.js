@@ -156,8 +156,12 @@ async function loadAllSheetData() {
             sheetIds[sheet.properties.title] = sheet.properties.sheetId;
         });
 
-        // Now, get all the values
-        const ranges = [ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET];
+        // Now, get all the values using open-ended ranges to ensure all data is read
+        const ranges = [
+            `${ASSET_SHEET}!A:Z`,
+            `${ROOMS_SHEET}!A:Z`,
+            `${SPATIAL_LAYOUT_SHEET}!A:Z`
+        ];
         const response = await gapi.client.sheets.spreadsheets.values.batchGet({
             spreadsheetId: SPREADSHEET_ID,
             ranges: ranges,
@@ -201,35 +205,41 @@ async function loadAllSheetData() {
 }
 
 function processAssetData(values) {
-    const headers = values.length > 0 ? values[0] : ASSET_HEADERS;
+    if (!values || values.length < 1) {
+        allAssets = [];
+        return;
+    }
+    const headers = values[0];
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
+    const assetIdIndex = headerMap["Asset ID"];
 
-    allAssets = dataRows.map((row, index) => {
-        const asset = {
-            rowIndex: index + 2
-        };
-        ASSET_HEADERS.forEach(header => {
-            let value = row[headerMap[header]];
-            if (header === "Login Info" && value) {
-                try {
-                    // Check if it's likely base64 before decoding
-                    if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
-                        value = atob(value);
+    allAssets = dataRows
+        .map((row, index) => ({ data: row, originalIndex: index }))
+        .filter(item => item.data && item.data.length > assetIdIndex && item.data[assetIdIndex])
+        .map(item => {
+            const row = item.data;
+            const asset = { rowIndex: item.originalIndex + 2 };
+            ASSET_HEADERS.forEach(header => {
+                let value = row[headerMap[header]];
+                if (header === "Login Info" && value) {
+                    try {
+                        if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
+                            value = atob(value);
+                        }
+                    } catch (e) {
+                        console.warn("Could not decode login info, treating as plain text:", value);
                     }
-                } catch (e) {
-                    console.warn("Could not decode login info, treating as plain text:", value);
                 }
-            }
-            asset[header] = value;
+                asset[header] = value;
+            });
+            return asset;
         });
-        return asset;
-    });
 }
 
 function processRoomData(values) {
-    if (!values || values.length === 0) {
+    if (!values || values.length < 1) {
         allRooms = [];
         return;
     }
@@ -237,39 +247,56 @@ function processRoomData(values) {
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
+    const roomIdIndex = headerMap["Room ID"];
 
     allRooms = dataRows
-        .filter(row => row && row[headerMap["Room ID"]])
-        .map((row, index) => ({
-            rowIndex: index + 2,
-            "Room ID": row[headerMap["Room ID"]],
-            "Room Name": row[headerMap["Room Name"]] || '',
-            "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 10,
-            "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 10,
-            "Notes": row[headerMap["Notes"]],
-        }));
+        .map((row, index) => ({ data: row, originalIndex: index }))
+        .filter(item => item.data && item.data.length > roomIdIndex && item.data[roomIdIndex])
+        .map(item => {
+            const row = item.data;
+            return {
+                rowIndex: item.originalIndex + 2,
+                "Room ID": row[headerMap["Room ID"]],
+                "Room Name": row[headerMap["Room Name"]] || '',
+                "Grid Width": parseInt(row[headerMap["Grid Width"]], 10) || 10,
+                "Grid Height": parseInt(row[headerMap["Grid Height"]], 10) || 10,
+                "Notes": row[headerMap["Notes"]],
+            };
+        });
 }
 
 function processSpatialLayoutData(values) {
-    const headers = values.length > 0 ? values[0] : SPATIAL_LAYOUT_HEADERS;
+    if (!values || values.length < 1) {
+        spatialLayoutData = [];
+        return;
+    }
+    const headers = values[0];
     const headerMap = {};
     headers.forEach((header, index) => headerMap[header] = index);
     const dataRows = values.slice(1);
+    const instanceIdIndex = headerMap["Instance ID"];
 
-    spatialLayoutData = dataRows.map((row, index) => ({
-        rowIndex: index + 2,
-        "Instance ID": row[headerMap["Instance ID"]],
-        "Reference ID": row[headerMap["Reference ID"]],
-        "Parent ID": row[headerMap["Parent ID"]],
-        "Pos X": parseInt(row[headerMap["Pos X"]], 10) || 0,
-        "Pos Y": parseInt(row[headerMap["Pos Y"]], 10) || 0,
-        "Width": parseInt(row[headerMap["Width"]], 10) || 1,
-        "Height": parseInt(row[headerMap["Height"]], 10) || 1,
-        "Orientation": row[headerMap["Orientation"]] || 'Horizontal',
-        "Shelf Rows": row[headerMap["Shelf Rows"]] ? parseInt(row[headerMap["Shelf Rows"]], 10) : null,
-        "Shelf Cols": row[headerMap["Shelf Cols"]] ? parseInt(row[headerMap["Shelf Cols"]], 10) : null,
-    }));
+    spatialLayoutData = dataRows
+        .map((row, index) => ({ data: row, originalIndex: index }))
+        .filter(item => item.data && item.data.length > instanceIdIndex && item.data[instanceIdIndex])
+        .map(item => {
+            const row = item.data;
+            return {
+                rowIndex: item.originalIndex + 2,
+                "Instance ID": row[headerMap["Instance ID"]],
+                "Reference ID": row[headerMap["Reference ID"]],
+                "Parent ID": row[headerMap["Parent ID"]],
+                "Pos X": parseInt(row[headerMap["Pos X"]], 10) || 0,
+                "Pos Y": parseInt(row[headerMap["Pos Y"]], 10) || 0,
+                "Width": parseInt(row[headerMap["Width"]], 10) || 1,
+                "Height": parseInt(row[headerMap["Height"]], 10) || 1,
+                "Orientation": row[headerMap["Orientation"]] || 'Horizontal',
+                "Shelf Rows": row[headerMap["Shelf Rows"]] ? parseInt(row[headerMap["Shelf Rows"]], 10) : null,
+                "Shelf Cols": row[headerMap["Shelf Cols"]] ? parseInt(row[headerMap["Shelf Cols"]], 10) : null,
+            };
+        });
 }
+
 
 async function writeToSheet(data, isUpdate = false) {
     setLoading(true);
@@ -293,6 +320,7 @@ async function writeToSheet(data, isUpdate = false) {
                 spreadsheetId: SPREADSHEET_ID,
                 range: ASSET_SHEET,
                 valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
                 resource: { values: [rowData] }
             });
         }
@@ -354,7 +382,7 @@ async function deleteRowFromSheet(sheetName, rowIndex) {
         // We don't reload all data here; it's handled locally in VI logic
         // For asset deletion, a full reload is appropriate.
         if (sheetName === ASSET_SHEET) {
-             await loadAllSheetData();
+            await loadAllSheetData();
         }
     } catch (err) {
         console.error(err);
@@ -375,7 +403,6 @@ async function updateRowInSheet(sheetName, rowIndex, headers, dataObject) {
             resource: { values: [rowData] }
         });
         // Do not show success message for frequent VI updates to avoid spam
-        // showMessage(`Successfully updated ${sheetName}`, 'success');
     } catch (err) {
         console.error(err);
         showMessage(`Error updating ${sheetName}: ${err.result.error.message}`);
@@ -759,7 +786,7 @@ function setupEventListeners() {
         };
         const isUpdate = !!assetData.rowIndex;
         if (!assetData["Asset ID"]) {
-             assetData["Asset ID"] = `ASSET-${Date.now()}`;
+            assetData["Asset ID"] = `ASSET-${Date.now()}`;
         }
         writeToSheet(assetData, isUpdate);
         toggleModal(assetModal, false);
@@ -782,7 +809,7 @@ function setupEventListeners() {
             if (target.classList.contains('edit-btn')) openEditModal(target.dataset.id);
             else if (target.classList.contains('clone-btn')) openCloneModal(target.dataset.id);
             else if (target.classList.contains('delete-btn')) {
-                if(confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
+                if (confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
                     deleteRowFromSheet(ASSET_SHEET, target.dataset.rowIndex);
                 }
             }
@@ -1010,7 +1037,7 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         const rowData = headers.map(header => dataObject[header] || '');
         const response = await gapi.client.sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: sheetName,
+            range: sheetName, // Appending to the sheet name will find the first empty row after the table
             valueInputOption: 'USER_ENTERED',
             insertDataOption: 'INSERT_ROWS',
             resource: {
@@ -1034,5 +1061,3 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         return newRowIndex;
     }
 }
-
-
