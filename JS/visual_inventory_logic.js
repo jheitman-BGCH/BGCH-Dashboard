@@ -8,27 +8,41 @@ let viState = {
 };
 
 // --- DOM REFERENCES ---
-const vi = {
-    roomSelector: document.getElementById('room-selector'),
-    roomGrid: document.getElementById('room-grid'),
-    gridContainer: document.getElementById('room-grid-container'),
-    createRoomBtn: document.getElementById('create-room-btn'),
-    roomModal: document.getElementById('room-modal'),
-    roomForm: document.getElementById('room-form'),
-    objectToolbar: document.getElementById('object-toolbar'),
-    breadcrumbContainer: document.getElementById('breadcrumb-container'),
-};
+// These are initialized later to prevent timing issues on page load.
+let vi = {}; 
+let viDomInitialized = false;
 
 // --- INITIALIZATION ---
+function initializeVIDomReferences() {
+    // This function runs only once to find all necessary HTML elements.
+    if (viDomInitialized) return;
+
+    vi.roomSelector = document.getElementById('room-selector');
+    vi.roomGrid = document.getElementById('room-grid');
+    vi.gridContainer = document.getElementById('room-grid-container');
+    vi.createRoomBtn = document.getElementById('create-room-btn');
+    vi.roomModal = document.getElementById('room-modal');
+    vi.roomForm = document.getElementById('room-form');
+    vi.objectToolbar = document.getElementById('object-toolbar');
+    vi.breadcrumbContainer = document.getElementById('breadcrumb-container');
+    
+    viDomInitialized = true;
+    console.log("Visual Inventory DOM references initialized.");
+}
+
 function initVisualInventory() {
     console.log("Initializing Visual Inventory...");
+    initializeVIDomReferences(); // Find elements now that the tab is active.
     populateRoomSelector();
     setupVisualInventoryEventListeners();
-    // Render the last selected room if it exists, otherwise prompt to select one.
+    
     const lastRoom = localStorage.getItem('lastActiveRoomId');
     if (lastRoom && allRooms.some(r => r["Room ID"] === lastRoom)) {
         vi.roomSelector.value = lastRoom;
-        navigateTo(lastRoom, allRooms.find(r => r["Room ID"] === lastRoom)["Room Name"]);
+        const room = allRooms.find(r => r["Room ID"] === lastRoom);
+        if (room) {
+             navigateTo(room["Room ID"], room["Room Name"]);
+        }
     } else {
         renderGrid(); // This will show the "Please select a room" message
     }
@@ -44,7 +58,6 @@ function navigateTo(id, name) {
     } else {
         // Navigating into a container/shelf
         viState.activeParentId = id;
-        // Find the index of this item in breadcrumbs to handle going "back"
         const existingIndex = viState.breadcrumbs.findIndex(b => b.id === id);
         if (existingIndex > -1) {
             viState.breadcrumbs = viState.breadcrumbs.slice(0, existingIndex + 1);
@@ -58,6 +71,7 @@ function navigateTo(id, name) {
 }
 
 function renderBreadcrumbs() {
+    if (!vi.breadcrumbContainer) return;
     vi.breadcrumbContainer.innerHTML = '';
     viState.breadcrumbs.forEach((crumb, index) => {
         const crumbEl = document.createElement('span');
@@ -84,12 +98,18 @@ function renderBreadcrumbs() {
 }
 
 function renderGrid() {
-    vi.roomGrid.innerHTML = ''; // Clear previous state
+    if (!vi.roomGrid || !vi.gridContainer) return;
+    vi.roomGrid.innerHTML = ''; 
 
     if (!viState.activeParentId) {
-        vi.gridContainer.innerHTML = '<div class="flex items-center justify-center h-full"><p class="text-gray-500">Please select or create a room to begin.</p></div>';
+        vi.gridContainer.innerHTML = '<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select or create a room to begin.</p></div>';
         return;
+    } else if (document.querySelector('#room-grid-container > .flex')) {
+         // If the placeholder message is there, replace it with the grid.
+        vi.gridContainer.innerHTML = '<div id="room-grid"></div>';
+        vi.roomGrid = document.getElementById('room-grid'); // Re-assign grid reference
     }
+
 
     let parentObject;
     let gridWidth, gridHeight;
@@ -100,17 +120,13 @@ function renderGrid() {
         gridWidth = parentObject["Grid Width"];
         gridHeight = parentObject["Grid Height"];
     } else {
-        // It's a container or shelf
         parentObject = spatialLayoutData.find(o => o["Instance ID"] === viState.activeParentId);
         if (!parentObject) return;
         const assetInfo = getAssetByRefId(parentObject["Reference ID"]);
         if (!assetInfo || assetInfo["Asset Type"] !== 'Shelf') {
-             // For containers, we can imagine a simple 10x10 grid or just list items.
-             // For now, let's make it a default grid.
              gridWidth = 10;
              gridHeight = 10;
         } else {
-            // It's a shelf
             gridWidth = parentObject.Orientation === 'Vertical' ? parentObject["Shelf Rows"] : parentObject["Shelf Cols"];
             gridHeight = parentObject.Orientation === 'Vertical' ? parentObject["Shelf Cols"] : parentObject["Shelf Rows"];
         }
@@ -119,7 +135,6 @@ function renderGrid() {
     vi.roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
     vi.roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
 
-    // Render child objects
     const childObjects = spatialLayoutData.filter(obj => obj["Parent ID"] === viState.activeParentId);
     childObjects.forEach(obj => renderObject(obj, vi.roomGrid));
 }
@@ -133,7 +148,6 @@ function renderObject(objectData, parentGrid) {
     objEl.dataset.instanceId = objectData["Instance ID"];
     objEl.setAttribute('draggable', 'true');
 
-    // Add class based on type
     const typeClass = assetInfo["Asset Type"] === 'Shelf' ? 'shelf' : (assetInfo["Asset Type"] === 'Container' ? 'container' : 'asset-item');
     objEl.classList.add(typeClass);
 
@@ -144,9 +158,8 @@ function renderObject(objectData, parentGrid) {
     objEl.style.gridRow = `${objectData["Pos Y"] + 1} / span ${height}`;
     objEl.innerHTML = `<span class="truncate">${assetInfo["Asset Name"]}</span>`;
 
-    // Event Listeners for the object
     objEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'move', instanceId: objectData["Instance ID"] }));
+        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData["Instance ID"] }));
         e.stopPropagation();
     });
 
@@ -162,6 +175,7 @@ function renderObject(objectData, parentGrid) {
 
 // --- UI POPULATION & HELPERS ---
 function populateRoomSelector() {
+    if (!vi.roomSelector) return;
     const currentValue = vi.roomSelector.value;
     vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
     allRooms.forEach(room => {
@@ -179,14 +193,19 @@ function getAssetByRefId(refId) {
 
 // --- EVENT LISTENERS ---
 function setupVisualInventoryEventListeners() {
+    if (!viDomInitialized) {
+        console.error("VI DOM not ready for event listeners.");
+        return;
+    }
+
     vi.createRoomBtn.addEventListener('click', () => {
         vi.roomForm.reset();
         document.getElementById('room-id-hidden').value = '';
         toggleModal(vi.roomModal, true);
     });
 
-    vi.roomModal.querySelector('.modal-backdrop').onclick = () => toggleModal(vi.roomModal, false);
-    vi.roomModal.querySelector('#cancel-room-btn').onclick = () => toggleModal(vi.roomModal, false);
+    vi.roomModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.roomModal, false));
+    vi.roomModal.querySelector('#cancel-room-btn').addEventListener('click', () => toggleModal(vi.roomModal, false));
 
     vi.roomForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -208,14 +227,15 @@ function setupVisualInventoryEventListeners() {
     vi.roomSelector.addEventListener('change', (e) => {
         if (e.target.value) {
             const room = allRooms.find(r => r["Room ID"] === e.target.value);
-            navigateTo(room["Room ID"], room["Room Name"]);
+            if (room) {
+                 navigateTo(room["Room ID"], room["Room Name"]);
+            }
         } else {
             viState.activeParentId = null;
             renderGrid();
         }
     });
 
-    // Toolbar Drag Handlers
     document.querySelectorAll('.toolbar-item').forEach(item => {
         item.addEventListener('dragstart', (e) => {
             const data = {
@@ -231,13 +251,14 @@ function setupVisualInventoryEventListeners() {
         });
     });
 
-    // Grid Drop Handlers
     vi.gridContainer.addEventListener('dragover', (e) => {
-        e.preventDefault(); // Necessary to allow dropping
+        e.preventDefault();
     });
 
     vi.gridContainer.addEventListener('drop', async (e) => {
         e.preventDefault();
+        if (!e.dataTransfer.getData('application/json')) return;
+
         const data = JSON.parse(e.dataTransfer.getData('application/json'));
         
         const rect = vi.roomGrid.getBoundingClientRect();
@@ -253,8 +274,8 @@ function setupVisualInventoryEventListeners() {
         if (data.type === 'new') {
             await handleNewObjectDrop(data, gridX, gridY);
         } else if (data.type === 'move') {
-            // TODO: Implement move logic
             console.log(`Move item ${data.instanceId} to ${gridX},${gridY}`);
+            // TODO: Implement move logic by updating the Pos X and Pos Y in the Spatial Layout sheet
         }
     });
 }
@@ -265,16 +286,14 @@ async function handleNewObjectDrop(data, gridX, gridY) {
         return;
     }
 
-    // 1. Create a new Asset record for the shelf/container itself
     const newAsset = {
         "Asset ID": `ASSET-${Date.now()}`,
         "Asset Name": data.name,
         "Asset Type": data.assetType,
-        "Condition": "New", // Default value
+        "Condition": "New", 
     };
     await appendRowToSheet(ASSET_SHEET, ASSET_HEADERS, newAsset);
     
-    // 2. Create the Spatial Layout instance for the new asset
     const newInstance = {
         "Instance ID": `INST-${Date.now()}`,
         "Reference ID": newAsset["Asset ID"],
@@ -289,7 +308,7 @@ async function handleNewObjectDrop(data, gridX, gridY) {
     };
     await appendRowToSheet(SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS, newInstance);
     
-    // 3. Refresh data and re-render
     await loadAllSheetData();
     renderGrid();
 }
+
