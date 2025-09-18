@@ -126,6 +126,12 @@ function initVisualInventory() {
 
 // --- NAVIGATION & RENDERING ---
 function navigateTo(id, name) {
+    // FIX: Add a guard clause to prevent crash if id is undefined
+    if (!id) {
+        console.error("navigateTo was called with an undefined ID. Aborting navigation.");
+        return;
+    }
+    
     if (id.startsWith('ROOM-')) {
         viState.activeRoomId = id;
         viState.activeParentId = id;
@@ -468,3 +474,4 @@ async function updateObjectInStateAndSheet(updatedInstance) {
         await updateRowInSheet(SPATIAL_LAYOUT_SHEET, updatedInstance.rowIndex, SPATIAL_LAYOUT_HEADERS, updatedInstance);
     }
 }
+

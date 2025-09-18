@@ -8,12 +8,13 @@ const SPATIAL_LAYOUT_SHEET = 'Spatial Layout';
 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 const ASSET_HEADERS = [
-    "AssetID", "AssetName", "Quantity", "Site", "Location", "Container",
-    "IntendedUserType", "Condition", "AssetType", "IDCode", "SerialNumber", "ModelNumber",
-    "AssignedTo", "DateIssued", "PurchaseDate", "Specs", "LoginInfo", "Notes"
+    "AssetID", "AssetName", "AssetType", "Quantity", "Site", "Location", "Container",
+    "IntendedUserType", "Condition", "IDCode", "ModelNumber", "SerialNumber", "AssignedTo",
+    "DateIssued", "PurchaseDate", "Specs", "LoginInfo", "Notes", "ParentObjectID"
 ];
-const ROOMS_HEADERS = ["RoomID", "RoomName", "GridWidth", "GridHeight", "Notes"];
+const ROOMS_HEADERS = ["RoomID", "RoomName", "GridWidth", "GridHeight"];
 const SPATIAL_LAYOUT_HEADERS = ["InstanceID", "ReferenceID", "ParentID", "PosX", "PosY", "Width", "Height", "Orientation", "ShelfRows", "ShelfCols"];
+
 
 const CHART_COLORS = [
     'rgba(54, 162, 235, 0.6)', 'rgba(255, 206, 86, 0.6)', 'rgba(255, 99, 132, 0.6)',
@@ -30,7 +31,7 @@ let allRooms = []; // Cache for Rooms sheet
 let spatialLayoutData = []; // Cache for Spatial Layout sheet
 let charts = {}; // To hold chart instances
 let visibleColumns = [];
-let sortState = { column: 'Asset Name', direction: 'asc' };
+let sortState = { column: 'AssetName', direction: 'asc' };
 let sheetIds = {}; // To store sheetId for operations like delete
 
 // --- DOM ELEMENT REFERENCES ---
@@ -86,8 +87,8 @@ function loadVisibleColumns() {
     if (savedCols) {
         visibleColumns = JSON.parse(savedCols);
     } else {
-        // Default columns
-        visibleColumns = ["Asset Name", "Asset Type", "ID Code", "Assigned To", "Condition"];
+        // Default columns, using correct headers without spaces
+        visibleColumns = ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
     }
 }
 
@@ -172,8 +173,6 @@ async function loadAllSheetData() {
         const roomValues = results[1].values || [];
         const layoutValues = results[2].values || [];
 
-        console.log('[DEBUG] Raw data received from sheets:', { assetValues, roomValues, layoutValues });
-
         processAssetData(assetValues);
         processRoomData(roomValues);
         processSpatialLayoutData(layoutValues);
@@ -225,8 +224,9 @@ function processAssetData(values) {
             const asset = { rowIndex: item.originalIndex + 2 };
             ASSET_HEADERS.forEach(header => {
                 let value = row[headerMap[header]];
-                if (header === "Login Info" && value) {
+                if (header === "LoginInfo" && value) {
                     try {
+                        // Basic check if it looks like base64
                         if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
                             value = atob(value);
                         }
@@ -258,11 +258,10 @@ function processRoomData(values) {
             const row = item.data;
             return {
                 rowIndex: item.originalIndex + 2,
-                "Room ID": row[headerMap["RoomID"]],
-                "Room Name": row[headerMap["RoomName"]] || '',
-                "Grid Width": parseInt(row[headerMap["GridWidth"]], 10) || 10,
-                "Grid Height": parseInt(row[headerMap["GridHeight"]], 10) || 10,
-                "Notes": row[headerMap["Notes"]],
+                RoomID: row[headerMap["RoomID"]],
+                RoomName: row[headerMap["RoomName"]] || '',
+                GridWidth: parseInt(row[headerMap["GridWidth"]], 10) || 10,
+                GridHeight: parseInt(row[headerMap["GridHeight"]], 10) || 10,
             };
         });
 }
@@ -274,48 +273,40 @@ function processSpatialLayoutData(values) {
     }
     const headers = values[0];
     const headerMap = {};
-    headers.forEach((header, index) => headerMap[header.trim()] = index); // Trim headers from sheet
+    headers.forEach((header, index) => headerMap[header.trim()] = index);
     const dataRows = values.slice(1);
     const instanceIdIndex = headerMap["InstanceID"];
 
-    console.log('[DEBUG] Raw spatialLayout values from sheet:', JSON.parse(JSON.stringify(values)));
-    console.log('[DEBUG] Header Map:', headerMap, 'Instance ID column index:', instanceIdIndex);
-
     if (instanceIdIndex === undefined) {
-        console.error('[DEBUG] CRITICAL: "InstanceID" header not found in Spatial Layout sheet. Check for typos. Headers found:', headers);
+        console.error('CRITICAL: "InstanceID" header not found in Spatial Layout sheet. Headers found:', headers);
         spatialLayoutData = [];
         return;
     }
 
     const processedData = [];
     dataRows.forEach((row, index) => {
-        const originalSheetRow = index + 2; // for user-friendly logging
+        const originalSheetRow = index + 2;
 
-        // Silently skip rows that are completely empty
-        if (!row || row.join('').trim() === '') {
+        if (!row || row.join('').trim() === '') return;
+
+        const instanceId = row[instanceIdIndex];
+        if (!instanceId) {
+            console.warn(`Skipping row ${originalSheetRow} in 'Spatial Layout' because "InstanceID" is missing. Data:`, row);
             return;
         }
 
-        // Check for the critical Instance ID
-        const instanceId = row[instanceIdIndex];
-        if (!instanceId) {
-            console.warn(`[DEBUG] Skipping row ${originalSheetRow} in 'Spatial Layout' sheet because its "InstanceID" is missing. Row data:`, row);
-            return; // Skip this row because it's unusable without an ID
-        }
-
-        // If checks pass, process the row
         processedData.push({
             rowIndex: originalSheetRow,
-            "Instance ID": instanceId,
-            "Reference ID": row[headerMap["ReferenceID"]],
-            "Parent ID": row[headerMap["ParentID"]],
-            "Pos X": parseInt(row[headerMap["PosX"]], 10) || 0,
-            "Pos Y": parseInt(row[headerMap["PosY"]], 10) || 0,
-            "Width": parseInt(row[headerMap["Width"]], 10) || 1,
-            "Height": parseInt(row[headerMap["Height"]], 10) || 1,
-            "Orientation": row[headerMap["Orientation"]] || 'Horizontal',
-            "Shelf Rows": row[headerMap["ShelfRows"]] ? parseInt(row[headerMap["ShelfRows"]], 10) : null,
-            "Shelf Cols": row[headerMap["ShelfCols"]] ? parseInt(row[headerMap["ShelfCols"]], 10) : null,
+            InstanceID: instanceId,
+            ReferenceID: row[headerMap["ReferenceID"]],
+            ParentID: row[headerMap["ParentID"]],
+            PosX: parseInt(row[headerMap["PosX"]], 10) || 0,
+            PosY: parseInt(row[headerMap["PosY"]], 10) || 0,
+            Width: parseInt(row[headerMap["Width"]], 10) || 1,
+            Height: parseInt(row[headerMap["Height"]], 10) || 1,
+            Orientation: row[headerMap["Orientation"]] || 'Horizontal',
+            ShelfRows: row[headerMap["ShelfRows"]] ? parseInt(row[headerMap["ShelfRows"]], 10) : null,
+            ShelfCols: row[headerMap["ShelfCols"]] ? parseInt(row[headerMap["ShelfCols"]], 10) : null,
         });
     });
     
@@ -327,8 +318,8 @@ async function writeToSheet(data, isUpdate = false) {
     setLoading(true);
     try {
         const dataMap = { ...data };
-        if (dataMap["Login Info"]) {
-            dataMap["Login Info"] = btoa(dataMap["Login Info"]);
+        if (dataMap.LoginInfo) {
+            dataMap.LoginInfo = btoa(dataMap.LoginInfo);
         }
 
         const rowData = ASSET_HEADERS.map(header => dataMap[header] || '');
@@ -404,8 +395,6 @@ async function deleteRowFromSheet(sheetName, rowIndex) {
                 }]
             }
         });
-        // We don't reload all data here; it's handled locally in VI logic
-        // For asset deletion, a full reload is appropriate.
         if (sheetName === ASSET_SHEET) {
             await loadAllSheetData();
         }
@@ -427,7 +416,6 @@ async function updateRowInSheet(sheetName, rowIndex, headers, dataObject) {
             valueInputOption: 'USER_ENTERED',
             resource: { values: [rowData] }
         });
-        // Do not show success message for frequent VI updates to avoid spam
     } catch (err) {
         console.error(err);
         showMessage(`Error updating ${sheetName}: ${err.result.error.message}`);
@@ -439,20 +427,13 @@ async function updateRowInSheet(sheetName, rowIndex, headers, dataObject) {
 // --- UI & DOM MANIPULATION (MAIN DASHBOARD) ---
 
 function populateModalDropdowns() {
-    const fields = [
-        { id: 'site', key: 'Site' }, { id: 'location', key: 'Location' },
-        { id: 'container', key: 'Container' }, { id: 'asset-type', key: 'Asset Type' },
-        { id: 'assigned-to', key: 'Assigned To' }
-    ];
-    const bulkFields = [
-        { id: 'bulk-site', key: 'Site' }, { id: 'bulk-location', key: 'Location' },
-        { id: 'bulk-container', key: 'Container' }, { id: 'bulk-assigned-to', key: 'Assigned To' }
-    ];
+    const fields = ['Site', 'Location', 'Container', 'AssetType', 'AssignedTo'];
+    const bulkFields = ['Site', 'Location', 'Container', 'AssignedTo'];
 
-    const populate = (field) => {
-        const select = document.getElementById(field.id);
+    const populate = (key, prefix = '') => {
+        const select = document.getElementById(`${prefix}${key.toLowerCase()}`);
         if (!select) return;
-        const uniqueValues = [...new Set(allAssets.map(asset => asset[field.key]).filter(Boolean))].sort();
+        const uniqueValues = [...new Set(allAssets.map(asset => asset[key]).filter(Boolean))].sort();
         select.innerHTML = '<option value="">-- Select --</option>';
         uniqueValues.forEach(value => {
             const option = document.createElement('option');
@@ -466,22 +447,17 @@ function populateModalDropdowns() {
         select.appendChild(addNewOption);
     }
 
-    fields.forEach(populate);
-    bulkFields.forEach(populate);
+    fields.forEach(key => populate(key, ''));
+    bulkFields.forEach(key => populate(key, 'bulk-'));
 }
 
 function populateFilterDropdowns() {
-    const filters = [
-        { id: 'filter-site', key: 'Site' }, { id: 'filter-asset-type', key: 'Asset Type' },
-        { id: 'filter-condition', key: 'Condition' }, { id: 'filter-assigned-to', key: 'Assigned To' },
-        { id: 'filter-model-number', key: 'Model Number' }, { id: 'filter-location', key: 'Location' },
-        { id: 'filter-intended-user-type', key: 'Intended User Type' }
-    ];
+    const filters = ['Site', 'AssetType', 'Condition', 'AssignedTo', 'ModelNumber', 'Location', 'IntendedUserType'];
 
-    filters.forEach(filter => {
-        const select = document.getElementById(filter.id);
+    filters.forEach(key => {
+        const select = document.getElementById(`filter-${key.toLowerCase()}`);
         if (!select) return;
-        const uniqueValues = [...new Set(allAssets.map(asset => asset[filter.key]).filter(Boolean))].sort();
+        const uniqueValues = [...new Set(allAssets.map(asset => asset[key]).filter(Boolean))].sort();
         const currentValue = select.value;
         select.innerHTML = `<option value="">All</option>`;
         uniqueValues.forEach(value => {
@@ -498,7 +474,7 @@ function populateFilterDropdowns() {
 }
 
 function populateEmployeeDropdown() {
-    const employees = [...new Set(allAssets.map(a => a["Assigned To"]).filter(Boolean))].sort();
+    const employees = [...new Set(allAssets.map(a => a.AssignedTo).filter(Boolean))].sort();
     employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
     employees.forEach(e => {
         const option = document.createElement('option');
@@ -513,11 +489,11 @@ function applyFiltersAndSearch() {
     const filters = {
         Site: document.getElementById('filter-site').value,
         Location: document.getElementById('filter-location').value,
-        "Asset Type": document.getElementById('filter-asset-type').value,
+        AssetType: document.getElementById('filter-asset-type').value,
         Condition: document.getElementById('filter-condition').value,
-        "Intended User Type": document.getElementById('filter-intended-user-type').value,
-        "Assigned To": document.getElementById('filter-assigned-to').value,
-        "Model Number": document.getElementById('filter-model-number').value,
+        IntendedUserType: document.getElementById('filter-intended-user-type').value,
+        AssignedTo: document.getElementById('filter-assigned-to').value,
+        ModelNumber: document.getElementById('filter-model-number').value,
     };
 
     let filteredAssets = allAssets.filter(asset => {
@@ -589,8 +565,8 @@ function renderTable(assetsToRender) {
 
     sortedAssets.forEach(asset => {
         const tr = document.createElement('tr');
-        tr.dataset.id = asset["Asset ID"];
-        let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset["Asset ID"]}" class="asset-checkbox h-4 w-4 rounded"></td>`;
+        tr.dataset.id = asset.AssetID;
+        let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>`;
         visibleColumns.forEach(colName => {
             const value = asset[colName] || '';
             rowHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm">${value}</td>`;
@@ -602,8 +578,8 @@ function renderTable(assetsToRender) {
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
                     </button>
                     <div class="actions-dropdown">
-                        <a class="edit-btn" data-id="${asset["Asset ID"]}">Edit</a>
-                        <a class="clone-btn" data-id="${asset["Asset ID"]}">Clone</a>
+                        <a class="edit-btn" data-id="${asset.AssetID}">Edit</a>
+                        <a class="clone-btn" data-id="${asset.AssetID}">Clone</a>
                         <a class="delete-btn" data-row-index="${asset.rowIndex}">Delete</a>
                     </div>
                 </div>
@@ -629,13 +605,13 @@ function toggleModal(modal, show) {
 }
 
 function openDetailModal(assetId) {
-    const asset = allAssets.find(a => a["Asset ID"] === assetId);
+    const asset = allAssets.find(a => a.AssetID === assetId);
     if (!asset) return;
-    document.getElementById('detail-modal-title').textContent = asset["Asset Name"] || 'Asset Details';
+    document.getElementById('detail-modal-title').textContent = asset.AssetName || 'Asset Details';
     const content = document.getElementById('detail-modal-content');
     content.innerHTML = `
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
-            ${ASSET_HEADERS.filter(h => h !== "Login Info").map(key => `
+            ${ASSET_HEADERS.filter(h => h !== "LoginInfo").map(key => `
                 <div>
                     <dt>${key}:</dt>
                     <dd>${asset[key] || 'N/A'}</dd>
@@ -644,7 +620,7 @@ function openDetailModal(assetId) {
         </dl>
     `;
     const editBtn = document.getElementById('detail-modal-edit-btn');
-    const newEditBtn = editBtn.cloneNode(true); // Clone to remove old listeners
+    const newEditBtn = editBtn.cloneNode(true);
     editBtn.parentNode.replaceChild(newEditBtn, editBtn);
     newEditBtn.addEventListener('click', () => {
         toggleModal(detailModal, false);
@@ -655,25 +631,25 @@ function openDetailModal(assetId) {
 
 function populateAssetForm(asset) {
     assetForm.reset();
-    document.getElementById('asset-id').value = asset["Asset ID"] || '';
+    document.getElementById('asset-id').value = asset.AssetID || '';
     document.getElementById('row-index').value = asset.rowIndex || '';
-    document.getElementById('asset-name').value = asset["Asset Name"] || '';
-    document.getElementById('quantity').value = asset["Quantity"] || '1';
-    document.getElementById('intended-user-type').value = asset["Intended User Type"] || 'Staff';
-    document.getElementById('condition').value = asset["Condition"] || 'Good';
-    document.getElementById('id-code').value = asset["ID Code"] || '';
-    document.getElementById('serial-number').value = asset["Serial Number"] || '';
-    document.getElementById('model-number').value = asset["Model Number"] || '';
-    document.getElementById('date-issued').value = asset["Date Issued"] || '';
-    document.getElementById('purchase-date').value = asset["Purchase Date"] || '';
-    document.getElementById('specs').value = asset["Specs"] || '';
-    document.getElementById('login-info').value = asset["Login Info"] || '';
-    document.getElementById('notes').value = asset["Notes"] || '';
+    document.getElementById('asset-name').value = asset.AssetName || '';
+    document.getElementById('quantity').value = asset.Quantity || '1';
+    document.getElementById('intended-user-type').value = asset.IntendedUserType || 'Staff';
+    document.getElementById('condition').value = asset.Condition || 'Good';
+    document.getElementById('id-code').value = asset.IDCode || '';
+    document.getElementById('serial-number').value = asset.SerialNumber || '';
+    document.getElementById('model-number').value = asset.ModelNumber || '';
+    document.getElementById('date-issued').value = asset.DateIssued || '';
+    document.getElementById('purchase-date').value = asset.PurchaseDate || '';
+    document.getElementById('specs').value = asset.Specs || '';
+    document.getElementById('login-info').value = asset.LoginInfo || '';
+    document.getElementById('notes').value = asset.Notes || '';
 
     const dynamicFields = [
         { id: 'site', key: 'Site' }, { id: 'location', key: 'Location' },
-        { id: 'container', key: 'Container' }, { id: 'asset-type', key: 'Asset Type' },
-        { id: 'assigned-to', key: 'Assigned To' }
+        { id: 'container', key: 'Container' }, { id: 'asset-type', key: 'AssetType' },
+        { id: 'assigned-to', key: 'AssignedTo' }
     ];
     dynamicFields.forEach(field => {
         const select = document.getElementById(field.id);
@@ -697,7 +673,7 @@ function populateAssetForm(asset) {
 }
 
 function openEditModal(assetId) {
-    const asset = allAssets.find(a => a["Asset ID"] === assetId);
+    const asset = allAssets.find(a => a.AssetID === assetId);
     if (!asset) return;
     document.getElementById('modal-title').innerText = 'Edit Asset';
     populateAssetForm(asset);
@@ -705,13 +681,13 @@ function openEditModal(assetId) {
 }
 
 function openCloneModal(assetId) {
-    const originalAsset = allAssets.find(a => a["Asset ID"] === assetId);
+    const originalAsset = allAssets.find(a => a.AssetID === assetId);
     if (!originalAsset) return;
     const clonedAsset = JSON.parse(JSON.stringify(originalAsset));
-    clonedAsset["Asset ID"] = '';
+    clonedAsset.AssetID = '';
     clonedAsset.rowIndex = '';
-    clonedAsset["ID Code"] = '';
-    clonedAsset["Serial Number"] = '';
+    clonedAsset.IDCode = '';
+    clonedAsset.SerialNumber = '';
     document.getElementById('modal-title').innerText = 'Clone Asset';
     populateAssetForm(clonedAsset);
     toggleModal(assetModal, true);
@@ -723,7 +699,7 @@ function displayEmployeeAssets() {
         employeeAssetList.innerHTML = '';
         return;
     }
-    const assets = allAssets.filter(a => a["Assigned To"] === selectedEmployee);
+    const assets = allAssets.filter(a => a.AssignedTo === selectedEmployee);
     if (assets.length === 0) {
         employeeAssetList.innerHTML = `<p class="text-gray-500">No assets assigned to this employee.</p>`;
         return;
@@ -731,9 +707,9 @@ function displayEmployeeAssets() {
     employeeAssetList.innerHTML = `
         <ul class="divide-y divide-gray-200">
             ${assets.map(a => `
-                <li class="p-3 employee-asset-item" data-id="${a["Asset ID"]}">
-                    <p class="text-sm font-medium">${a["Asset Name"]}</p>
-                    <p class="text-sm text-gray-500">${a["Asset Type"] || ''} (ID: ${a["ID Code"] || 'N/A'})</p>
+                <li class="p-3 employee-asset-item" data-id="${a.AssetID}">
+                    <p class="text-sm font-medium">${a.AssetName}</p>
+                    <p class="text-sm text-gray-500">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
                 </li>
             `).join('')}
         </ul>
@@ -789,29 +765,29 @@ function setupEventListeners() {
         };
 
         const assetData = {
-            "Asset ID": document.getElementById('asset-id').value,
+            AssetID: document.getElementById('asset-id').value,
             rowIndex: document.getElementById('row-index').value,
-            "Asset Name": document.getElementById('asset-name').value,
-            "Quantity": document.getElementById('quantity').value,
+            AssetName: document.getElementById('asset-name').value,
+            Quantity: document.getElementById('quantity').value,
             Site: getSelectValue('site'),
             Location: getSelectValue('location'),
             Container: getSelectValue('container'),
-            "Intended User Type": document.getElementById('intended-user-type').value,
+            IntendedUserType: document.getElementById('intended-user-type').value,
             Condition: document.getElementById('condition').value,
-            "Asset Type": getSelectValue('asset-type'),
-            "ID Code": document.getElementById('id-code').value,
-            "Serial Number": document.getElementById('serial-number').value,
-            "Model Number": document.getElementById('model-number').value,
-            "Assigned To": getSelectValue('assigned-to'),
-            "Date Issued": document.getElementById('date-issued').value,
-            "Purchase Date": document.getElementById('purchase-date').value,
+            AssetType: getSelectValue('asset-type'),
+            IDCode: document.getElementById('id-code').value,
+            SerialNumber: document.getElementById('serial-number').value,
+            ModelNumber: document.getElementById('model-number').value,
+            AssignedTo: getSelectValue('assigned-to'),
+            DateIssued: document.getElementById('date-issued').value,
+            PurchaseDate: document.getElementById('purchase-date').value,
             Specs: document.getElementById('specs').value,
-            "Login Info": document.getElementById('login-info').value,
+            LoginInfo: document.getElementById('login-info').value,
             Notes: document.getElementById('notes').value,
         };
         const isUpdate = !!assetData.rowIndex;
-        if (!assetData["Asset ID"]) {
-            assetData["Asset ID"] = `ASSET-${Date.now()}`;
+        if (!assetData.AssetID) {
+            assetData.AssetID = `ASSET-${Date.now()}`;
         }
         writeToSheet(assetData, isUpdate);
         toggleModal(assetModal, false);
@@ -895,10 +871,9 @@ function setupColumnSelectorListeners() {
     columnModal.querySelector('.modal-backdrop').onclick = () => toggleModal(columnModal, false);
     document.getElementById('column-save-btn').addEventListener('click', () => {
         const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
-        if (selectedCols.length === 0 && !document.querySelector('#column-checkboxes input[value="Asset Name"]:checked')) {
-            selectedCols.push("Asset Name");
-        }
-        visibleColumns = ["Asset Name", ...selectedCols.filter(c => c !== "Asset Name")];
+        // Use a Set to ensure "AssetName" is always present and first, without duplicates.
+        const newVisibleColumns = new Set(["AssetName", ...selectedCols]);
+        visibleColumns = Array.from(newVisibleColumns);
         localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
         applyFiltersAndSearch();
         renderFilters();
@@ -964,10 +939,10 @@ function handleChartClick(event, elements, filterId) {
 
 function renderFilters() {
     const filterMap = {
-        "Site": "filter-site-wrapper", "Asset Type": "filter-asset-type-wrapper",
-        "Condition": "filter-condition-wrapper", "Assigned To": "filter-assigned-to-wrapper",
-        "Model Number": "filter-model-number-wrapper", "Location": "filter-location-wrapper",
-        "Intended User Type": "filter-intended-user-type-wrapper"
+        "Site": "filter-site-wrapper", "AssetType": "filter-asset-type-wrapper",
+        "Condition": "filter-condition-wrapper", "AssignedTo": "filter-assigned-to-wrapper",
+        "ModelNumber": "filter-model-number-wrapper", "Location": "filter-location-wrapper",
+        "IntendedUserType": "filter-intended-user-type-wrapper"
     };
     Object.values(filterMap).forEach(id => document.getElementById(id)?.classList.add('hidden'));
     visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
@@ -978,7 +953,7 @@ function renderOverviewCharts() {
     const processData = (key) => {
         const counts = allAssets.reduce((acc, asset) => {
             const value = asset[key] || 'Uncategorized';
-            if (key === 'Assigned To' && value === 'Uncategorized') return acc;
+            if (key === 'AssignedTo' && value === 'Uncategorized') return acc;
             acc[value] = (acc[value] || 0) + 1;
             return acc;
         }, {});
@@ -991,8 +966,8 @@ function renderOverviewCharts() {
     });
     charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(document.getElementById('site-chart-type').value, processData('Site'), 'Assets per Site', 'filter-site'));
     charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(document.getElementById('condition-chart-type').value, processData('Condition'), 'Assets by Condition', 'filter-condition'));
-    charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('Asset Type'), 'Assets by Type', 'filter-asset-type'));
-    charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('Assigned To'), 'Assignments per Employee', 'employee-select'));
+    charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
+    charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'employee-select'));
 }
 
 function updateBulkEditButtonVisibility() {
@@ -1020,9 +995,9 @@ async function handleBulkUpdate() {
         { checkId: 'bulk-update-site-check', fieldName: 'Site', getValue: () => getSelectValue('bulk-site') },
         { checkId: 'bulk-update-location-check', fieldName: 'Location', getValue: () => getSelectValue('bulk-location') },
         { checkId: 'bulk-update-container-check', fieldName: 'Container', getValue: () => getSelectValue('bulk-container') },
-        { checkId: 'bulk-update-intended-user-check', fieldName: 'Intended User Type', getValue: () => document.getElementById('bulk-intended-user-type').value },
+        { checkId: 'bulk-update-intended-user-check', fieldName: 'IntendedUserType', getValue: () => document.getElementById('bulk-intended-user-type').value },
         { checkId: 'bulk-update-condition-check', fieldName: 'Condition', getValue: () => document.getElementById('bulk-condition').value },
-        { checkId: 'bulk-update-assigned-to-check', fieldName: 'Assigned To', getValue: () => getSelectValue('bulk-assigned-to') }
+        { checkId: 'bulk-update-assigned-to-check', fieldName: 'AssignedTo', getValue: () => getSelectValue('bulk-assigned-to') }
     ];
 
     const updates = [];
@@ -1030,7 +1005,7 @@ async function handleBulkUpdate() {
         if (document.getElementById(field.checkId).checked) {
             const value = field.getValue();
             selectedAssetIds.forEach(id => {
-                const asset = allAssets.find(a => a["Asset ID"] === id);
+                const asset = allAssets.find(a => a.AssetID === id);
                 if (asset) updates.push({ rowIndex: asset.rowIndex, columnLetter: headerMap[field.fieldName], value: value });
             });
         }
@@ -1042,7 +1017,7 @@ async function handleBulkUpdate() {
 function populateColumnSelector() {
     const container = document.getElementById('column-checkboxes');
     container.innerHTML = '';
-    const selectableColumns = ASSET_HEADERS.filter(h => !["Asset ID", "Specs", "Login Info", "Notes", "Asset Name"].includes(h));
+    const selectableColumns = ASSET_HEADERS.filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName"].includes(h));
     selectableColumns.forEach(colName => {
         const isChecked = visibleColumns.includes(colName);
         const div = document.createElement('div');
@@ -1062,7 +1037,7 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         const rowData = headers.map(header => dataObject[header] || '');
         const response = await gapi.client.sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: sheetName, // Appending to the sheet name will find the first empty row after the table
+            range: sheetName,
             valueInputOption: 'USER_ENTERED',
             insertDataOption: 'INSERT_ROWS',
             resource: {
@@ -1071,7 +1046,6 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         });
 
         const updatedRange = response.result.updates.updatedRange;
-        // Example updatedRange: 'Spatial Layout'!A15:J15
         const match = updatedRange.match(/!A(\d+)/);
         if (match && match[1]) {
             newRowIndex = parseInt(match[1], 10);
@@ -1086,6 +1060,4 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         return newRowIndex;
     }
 }
-
-
 
