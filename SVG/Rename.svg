@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #282828;
+      }
+
+      .cls-2 {
+        font-family: MyriadPro-Regular, 'Myriad Pro';
+        font-size: 60.74px;
+      }
+
+      .cls-3 {
+        fill: #cecccc;
+      }
+
+      .cls-4 {
+        opacity: .5;
+      }
+    </style>
+  </defs>
+  <g class="cls-4">
+    <path class="cls-3" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/>
+    <path class="cls-1" d="M334.84,338.76l69.32,69.32c-41.48,40.45-96.18,62.72-154.16,62.72s-112.68-22.26-154.16-62.72l69.32-69.32c22.95,21.95,53.04,34.03,84.84,34.03s61.89-12.08,84.84-34.03M334.85,337.36c-21.93,21.31-51.86,34.43-84.85,34.43s-62.92-13.12-84.85-34.43l-70.73,70.73c40.04,39.4,94.97,63.71,155.58,63.71s115.54-24.31,155.58-63.71l-70.73-70.73h0Z"/>
+  </g>
+  <text class="cls-2" transform="translate(144.7 411.28) rotate(27.73) scale(.92 1)"><tspan x="0" y="0">R</tspan></text>
+  <text class="cls-2" transform="translate(175.87 427.11) rotate(17.84) scale(.92 1)"><tspan x="0" y="0">e</tspan></text>
+  <text class="cls-2" transform="translate(207.21 436.9) rotate(7.64) scale(.92 1)"><tspan x="0" y="0">n</tspan></text>
+  <text class="cls-2" transform="translate(242.65 441.07) rotate(-2.27) scale(.92 1)"><tspan x="0" y="0">a</tspan></text>
+  <text class="cls-2" transform="translate(275.69 440.19) rotate(-14.96) scale(.92 1)"><tspan x="0" y="0">m</tspan></text>
+  <text class="cls-2" transform="translate(325.96 425.02) rotate(-27.53) scale(.92 1)"><tspan x="0" y="0">e</tspan></text>
+</svg>

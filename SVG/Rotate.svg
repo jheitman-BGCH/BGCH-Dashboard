@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <defs>
+    <style>
+      .cls-1 {
+        font-family: MyriadPro-Regular, 'Myriad Pro';
+        font-size: 70.4px;
+      }
+
+      .cls-2 {
+        fill: #282828;
+      }
+
+      .cls-3 {
+        fill: #cecccc;
+      }
+
+      .cls-4 {
+        opacity: .5;
+      }
+    </style>
+  </defs>
+  <g class="cls-4">
+    <path class="cls-3" d="M338.06,334.84c22.08-22.9,34.23-53.01,34.23-84.84s-12.15-61.94-34.23-84.84l70.03-70.03c40.77,41.61,63.21,96.59,63.21,154.87s-22.45,113.26-63.21,154.87l-70.03-70.03Z"/>
+    <path class="cls-2" d="M408.08,95.84c40.45,41.48,62.72,96.18,62.72,154.16s-22.26,112.68-62.72,154.16l-69.32-69.32c21.95-22.95,34.03-53.04,34.03-84.84s-12.08-61.89-34.03-84.84l69.32-69.32M408.09,94.42l-70.73,70.73c21.31,21.93,34.43,51.86,34.43,84.85s-13.12,62.92-34.43,84.85l70.73,70.73c39.4-40.04,63.71-94.97,63.71-155.58s-24.31-115.54-63.71-155.58h0Z"/>
+  </g>
+  <text class="cls-1" transform="translate(367.28 170.61) rotate(59.79)"><tspan x="0" y="0">R</tspan></text>
+  <text class="cls-1" transform="translate(385.42 201.05) rotate(74.15)"><tspan x="0" y="0">o</tspan></text>
+  <text class="cls-1" transform="translate(394.81 236.17) rotate(85.6)"><tspan x="0" y="0">t</tspan></text>
+  <text class="cls-1" transform="translate(397.13 257.31) rotate(96.12)"><tspan x="0" y="0">a</tspan></text>
+  <text class="cls-1" transform="translate(393.5 288.64) rotate(106.68)"><tspan x="0" y="0">t</tspan></text>
+  <text class="cls-1" transform="translate(388.26 308.85) rotate(117.43)"><tspan x="0" y="0">e</tspan></text>
+</svg>
