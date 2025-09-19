@@ -13,6 +13,19 @@
 </head>
 <body class="bg-gray-100 text-gray-800">
 
+    <!-- The radial menu SVG container, which uses the sprite file -->
+    <div id="radial-menu" class="radial-menu hidden">
+        <svg viewBox="0 0 500 500" class="radial-svg-container">
+            <!-- The order here determines the stacking order (last one on top) -->
+            <use href="SVG/radial-menu-sprite.svg#icon-circle-background" />
+            <use href="SVG/radial-menu-sprite.svg#icon-rename" class="radial-button" id="radial-rename-use"/>
+            <use href="SVG/radial-menu-sprite.svg#icon-rotate" class="radial-button" id="radial-rotate-use"/>
+            <use href="SVG/radial-menu-sprite.svg#icon-resize" class="radial-button" id="radial-resize-use"/>
+            <use href="SVG/radial-menu-sprite.svg#icon-open" class="radial-button" id="radial-open-use"/>
+            <use href="SVG/radial-menu-sprite.svg#icon-delete" class="radial-button" id="radial-delete-use"/>
+        </svg>
+    </div>
+
     <div class="container mx-auto p-4 md:p-8">
         <header class="mb-8">
             <h1 class="text-4xl font-bold text-gray-900">Technology Asset Dashboard</h1>
@@ -514,16 +527,6 @@
             </form>
         </div>
     </div>
-
-    <div id="radial-menu" class="radial-menu hidden">
-        <img src="https://raw.githubusercontent.com/jheitman-bgch/bgch-dashboard/main/SVG/Circle-Background.SVG" class="radial-bg" alt="Menu Background">
-        <img src="https://raw.githubusercontent.com/jheitman-bgch/bgch-dashboard/main/SVG/Rename.SVG" class="radial-button" id="radial-rename" alt="Rename">
-        <img src="https://raw.githubusercontent.com/jheitman-bgch/bgch-dashboard/main/SVG/Rotate.SVG" class="radial-button" id="radial-rotate" alt="Rotate">
-        <img src="https://raw.githubusercontent.com/jheitman-bgch/bgch-dashboard/main/SVG/Resize.SVG" class="radial-button" id="radial-resize" alt="Resize">
-        <img src="https://raw.githubusercontent.com/jheitman-bgch/bgch-dashboard/main/SVG/Open.SVG" class="radial-button" id="radial-open" alt="Open">
-        <img src="https://raw.githubusercontent.com/jheitman-bgch/bgch-dashboard/main/SVG/Delete-Button.SVG" class="radial-button" id="radial-delete" alt="Delete">
-    </div>
-
 
     <script src="JS/script.js"></script>
     <script src="JS/visual_inventory_logic.js"></script>
