@@ -86,76 +86,25 @@
     z-index: 20;
 }
 
-.object-controls {
+.resize-handle {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none; /* Pass clicks through to object unless on a button */
-}
-
-.control-btn {
-    position: absolute;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 10px;
+    height: 10px;
     background-color: white;
     border: 1px solid #4f46e5;
-    color: #4f46e5;
     border-radius: 50%;
-    font-weight: bold;
-    cursor: pointer;
-    z-index: 25;
-    pointer-events: all; /* Make buttons clickable */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    transition: all 0.1s ease-in-out;
-}
-.control-btn:hover {
-    background-color: #4f46e5;
-    color: white;
+    z-index: 30;
 }
 
-.rotate-btn {
-    width: 24px;
-    height: 24px;
-    font-size: 16px;
-    top: -14px;
-    left: calc(50% - 12px);
-}
+.resize-handle.n { top: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+.resize-handle.s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+.resize-handle.e { top: calc(50% - 5px); right: -5px; cursor: ew-resize; }
+.resize-handle.w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+.resize-handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.resize-handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.resize-handle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.resize-handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 
-.delete-btn {
-    width: 20px;
-    height: 20px;
-    font-size: 14px;
-    top: -10px;
-    right: -10px;
-    background-color: #ef4444; /* red-500 */
-    border-color: #ef4444;
-    color: white;
-}
-.delete-btn:hover {
-    background-color: #dc2626; /* red-600 */
-}
-
-.resize-btn {
-    width: 18px;
-    height: 18px;
-    font-size: 14px;
-    line-height: 14px;
-}
-.width-minus {
-    top: calc(50% - 9px); left: -22px;
-}
-.width-plus {
-    top: calc(50% - 9px); right: -22px;
-}
-.height-minus {
-    top: -22px; left: calc(50% - 9px);
-}
-.height-plus {
-    bottom: -22px; left: calc(50% - 9px);
-}
 
 /* --- Radial Menu --- */
 .radial-menu {

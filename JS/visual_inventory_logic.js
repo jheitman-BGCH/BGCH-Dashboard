@@ -92,16 +92,13 @@ function setupAndBindVisualInventory() {
     vi.gridContainer.addEventListener('dragover', (e) => e.preventDefault());
     vi.gridContainer.addEventListener('drop', handleGridDrop);
     
-    // Add a single click listener to the container to handle deselection and hide the radial menu
     vi.gridContainer.addEventListener('click', (e) => {
-        // If the click is on the grid itself and not a child object, deselect.
         if (e.target === vi.gridContainer || e.target === vi.roomGrid) {
             selectObject(null);
         }
         hideRadialMenu();
     });
 
-    // Hide radial menu on any click outside of it or a visual object
     document.addEventListener('click', (e) => {
         if (vi.radialMenu && !vi.radialMenu.contains(e.target) && !e.target.closest('.visual-object')) {
             hideRadialMenu();
@@ -125,7 +122,6 @@ function initVisualInventory() {
             navigateTo(room.RoomID, room.RoomName);
         }
     } else if (allRooms.length > 0) {
-        // Default to the first room if none was saved
         vi.roomSelector.value = allRooms[0].RoomID;
         navigateTo(allRooms[0].RoomID, allRooms[0].RoomName);
     } else {
@@ -133,7 +129,6 @@ function initVisualInventory() {
     }
 }
 
-// --- NAVIGATION & RENDERING ---
 function navigateTo(id, name) {
     if (!id) {
         console.error("navigateTo was called with an undefined ID. Aborting navigation.");
@@ -154,7 +149,7 @@ function navigateTo(id, name) {
         }
     }
     localStorage.setItem('lastActiveRoomId', viState.activeRoomId);
-    selectObject(null); // Deselect any object when navigating
+    selectObject(null);
     renderGrid();
     renderBreadcrumbs();
 }
@@ -210,13 +205,8 @@ function renderGrid() {
         parentObject = spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
         if (!parentObject) return;
         const assetInfo = getAssetByRefId(parentObject.ReferenceID);
-        if (!assetInfo || !['Shelf', 'Container'].includes(assetInfo.AssetType)) {
-            gridWidth = 10;
-            gridHeight = 10;
-        } else {
-            gridWidth = parentObject.Orientation === 'Vertical' ? parentObject.ShelfRows : parentObject.ShelfCols;
-            gridHeight = parentObject.Orientation === 'Vertical' ? parentObject.ShelfCols : parentObject.ShelfRows;
-        }
+        gridWidth = parentObject.Orientation === 'Vertical' ? parentObject.ShelfRows : parentObject.ShelfCols;
+        gridHeight = parentObject.Orientation === 'Vertical' ? parentObject.ShelfCols : parentObject.ShelfRows;
     }
 
     vi.roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
@@ -245,14 +235,13 @@ function renderObject(objectData, parentGrid) {
     objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
     objEl.innerHTML = `<span class="truncate object-name">${assetInfo.AssetName}</span>`;
 
-    // --- Event Listeners for the object ---
     objEl.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData.InstanceID }));
         e.stopPropagation();
     });
 
     objEl.addEventListener('click', (e) => {
-        e.stopPropagation(); // Prevent grid click listener from firing
+        e.stopPropagation();
         selectObject(objectData.InstanceID);
     });
 
@@ -266,15 +255,12 @@ function renderObject(objectData, parentGrid) {
     objEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (typeClass === 'shelf' || typeClass === 'container') {
-            showRadialMenu(e.clientX, e.clientY, objectData.InstanceID);
-        }
+        showRadialMenu(e.clientX, e.clientY, objectData.InstanceID);
     });
 
     parentGrid.appendChild(objEl);
 }
 
-// --- UI POPULATION & HELPERS ---
 function populateRoomSelector() {
     if (!vi.roomSelector) return;
     const currentValue = vi.roomSelector.value;
@@ -293,8 +279,6 @@ function populateRoomSelector() {
 function getAssetByRefId(refId) {
     return allAssets.find(a => a.AssetID === refId);
 }
-
-// --- OBJECT MANIPULATION ---
 
 async function handleGridDrop(e) {
     e.preventDefault();
@@ -323,7 +307,6 @@ async function handleGridDrop(e) {
         }
     }
 }
-
 
 async function handleToolbarDrop(data, gridX, gridY) {
     if (!viState.activeParentId) {
@@ -362,9 +345,8 @@ async function handleToolbarDrop(data, gridX, gridY) {
     }
 }
 
-
 function selectObject(instanceId) {
-    document.querySelectorAll('.resize-handle, .rotate-handle, .delete-handle').forEach(el => el.remove());
+    document.querySelectorAll('.resize-handle').forEach(el => el.remove());
     document.querySelectorAll('.visual-object.selected').forEach(el => el.classList.remove('selected'));
 
     viState.selectedInstanceId = instanceId;
@@ -374,7 +356,6 @@ function selectObject(instanceId) {
     const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
     if (objEl) {
         objEl.classList.add('selected');
-        // createObjectControls(objEl, instanceId); // Controls are now in the radial menu
     }
 }
 
@@ -384,6 +365,73 @@ async function updateObjectInStateAndSheet(updatedInstance) {
         spatialLayoutData[index] = updatedInstance;
         await updateRowInSheet(SPATIAL_LAYOUT_SHEET, updatedInstance.rowIndex, SPATIAL_LAYOUT_HEADERS, updatedInstance);
     }
+}
+
+function createResizeHandles(objEl, instanceId) {
+    const handles = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+    handles.forEach(dir => {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle ${dir}`;
+        objEl.appendChild(handle);
+        handle.addEventListener('mousedown', (e) => initResize(e, instanceId, dir));
+    });
+}
+
+function initResize(e, instanceId, direction) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    if (!instance) return;
+
+    const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = parseInt(instance.Width);
+    const startHeight = parseInt(instance.Height);
+    const startPosX = parseInt(instance.PosX);
+    const startPosY = parseInt(instance.PosY);
+    
+    const rect = vi.roomGrid.getBoundingClientRect();
+    const cellWidth = rect.width / vi.roomGrid.style.gridTemplateColumns.split(' ').length;
+    const cellHeight = rect.height / vi.roomGrid.style.gridTemplateRows.split(' ').length;
+
+    function doDrag(e) {
+        const dx = Math.round((e.clientX - startX) / cellWidth);
+        const dy = Math.round((e.clientY - startY) / cellHeight);
+
+        let newWidth = startWidth, newHeight = startHeight, newPosX = startPosX, newPosY = startPosY;
+
+        if (direction.includes('e')) newWidth = Math.max(1, startWidth + dx);
+        if (direction.includes('w')) {
+            newWidth = Math.max(1, startWidth - dx);
+            newPosX = startPosX + dx;
+        }
+        if (direction.includes('s')) newHeight = Math.max(1, startHeight + dy);
+        if (direction.includes('n')) {
+            newHeight = Math.max(1, startHeight - dy);
+            newPosY = startPosY + dy;
+        }
+        
+        if (newWidth !== instance.Width || newHeight !== instance.Height || newPosX !== instance.PosX || newPosY !== instance.PosY) {
+            instance.Width = newWidth;
+            instance.Height = newHeight;
+            instance.PosX = newPosX;
+            instance.PosY = newPosY;
+            
+            objEl.style.gridColumn = `${newPosX + 1} / span ${newWidth}`;
+            objEl.style.gridRow = `${newPosY + 1} / span ${newHeight}`;
+        }
+    }
+
+    function stopDrag() {
+        document.removeEventListener('mousemove', doDrag);
+        document.removeEventListener('mouseup', stopDrag);
+        updateObjectInStateAndSheet(instance);
+    }
+
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('mouseup', stopDrag);
 }
 
 // --- RADIAL MENU ---
@@ -433,7 +481,6 @@ async function handleRename(instanceId) {
     }
 }
 
-
 async function handleRotate(instanceId) {
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
@@ -455,7 +502,11 @@ function handleOpen(instanceId) {
 
 function handleResize(instanceId) {
     selectObject(instanceId);
-    showMessage("Resizing is not yet implemented. This is a placeholder.", "info");
+    const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
+    if (objEl) {
+        createResizeHandles(objEl, instanceId);
+    }
+    showMessage("Use the handles to resize the object.", "info");
 }
 
 async function handleDelete(instanceId) {
@@ -465,7 +516,6 @@ async function handleDelete(instanceId) {
             spatialLayoutData = spatialLayoutData.filter(i => i.InstanceID !== instanceId);
             await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
             
-            // Also delete the associated asset if it's a container/shelf
             const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
             if(asset && (asset.AssetType === 'Shelf' || asset.AssetType === 'Container')) {
                  await deleteRowFromSheet(ASSET_SHEET, asset.rowIndex);
