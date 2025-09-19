@@ -24,10 +24,11 @@ function setupAndBindVisualInventory() {
     vi.objectToolbar = document.getElementById('object-toolbar');
     vi.breadcrumbContainer = document.getElementById('breadcrumb-container');
     vi.contentsModal = document.getElementById('contents-modal');
+    vi.radialMenu = document.getElementById('radial-menu');
 
-    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal];
+    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal, vi.radialMenu];
     if (criticalElements.some(el => !el)) {
-        console.error("Fatal Error: A critical VI DOM element is missing.", { /* ... */ });
+        console.error("Fatal Error: A critical VI DOM element is missing.");
         return false;
     }
 
@@ -91,11 +92,19 @@ function setupAndBindVisualInventory() {
     vi.gridContainer.addEventListener('dragover', (e) => e.preventDefault());
     vi.gridContainer.addEventListener('drop', handleGridDrop);
     
-    // Add a single click listener to the container to handle deselection
+    // Add a single click listener to the container to handle deselection and hide the radial menu
     vi.gridContainer.addEventListener('click', (e) => {
         // If the click is on the grid itself and not a child object, deselect.
         if (e.target === vi.gridContainer || e.target === vi.roomGrid) {
             selectObject(null);
+        }
+        hideRadialMenu();
+    });
+
+    // Hide radial menu on any click outside of it or a visual object
+    document.addEventListener('click', (e) => {
+        if (vi.radialMenu && !vi.radialMenu.contains(e.target) && !e.target.closest('.visual-object')) {
+            hideRadialMenu();
         }
     });
 
@@ -255,6 +264,14 @@ function renderObject(objectData, parentGrid) {
         }
     });
 
+    objEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeClass === 'shelf' || typeClass === 'container') {
+            showRadialMenu(e.clientX, e.clientY, objectData.InstanceID);
+        }
+    });
+
     parentGrid.appendChild(objEl);
 }
 
@@ -293,8 +310,8 @@ async function handleGridDrop(e) {
     const gridTemplateRows = getComputedStyle(vi.roomGrid).gridTemplateRows.split(' ');
     const cellWidth = rect.width / gridTemplateCols.length;
     const cellHeight = rect.height / gridTemplateRows.length;
-    const gridX = Math.min(gridTemplateCols.length, Math.max(0, Math.floor(x / cellWidth)));
-    const gridY = Math.min(gridTemplateRows.length, Math.max(0, Math.floor(y / cellHeight)));
+    const gridX = Math.min(gridTemplateCols.length - 1, Math.max(0, Math.floor(x / cellWidth)));
+    const gridY = Math.min(gridTemplateRows.length - 1, Math.max(0, Math.floor(y / cellHeight)));
     
     if (data.type === 'new-object') {
         await handleToolbarDrop(data, gridX, gridY);
@@ -429,8 +446,10 @@ function initResize(e, instanceId, direction) {
     const startHeight = parseInt(instance.Height);
     
     const rect = vi.roomGrid.getBoundingClientRect();
-    const cellWidth = rect.width / vi.roomGrid.style.gridTemplateColumns.split(' ').length;
-    const cellHeight = rect.height / vi.roomGrid.style.gridTemplateRows.split(' ').length;
+    const gridTemplateCols = getComputedStyle(vi.roomGrid).gridTemplateColumns.split(' ');
+    const gridTemplateRows = getComputedStyle(vi.roomGrid).gridTemplateRows.split(' ');
+    const cellWidth = rect.width / gridTemplateCols.length;
+    const cellHeight = rect.height / gridTemplateRows.length;
 
     function doDrag(e) {
         const dx = (e.clientX - startX) / cellWidth;
@@ -475,3 +494,93 @@ async function updateObjectInStateAndSheet(updatedInstance) {
     }
 }
 
+// --- RADIAL MENU ---
+let activeRadialInstanceId = null;
+
+function showRadialMenu(x, y, instanceId) {
+    activeRadialInstanceId = instanceId;
+    vi.radialMenu.classList.remove('hidden');
+    vi.radialMenu.style.left = `${x}px`;
+    vi.radialMenu.style.top = `${y}px`;
+
+    const items = vi.radialMenu.querySelectorAll('.menu-item');
+    const angle = 360 / items.length;
+    const radius = 60; // Increase radius for more space
+
+    items.forEach((item, index) => {
+        const theta = (angle * index - 90) * (Math.PI / 180); // -90 to start from the top
+        const itemX = radius * Math.cos(theta);
+        const itemY = radius * Math.sin(theta);
+        // Center the item on its calculated position
+        item.style.transform = `translate(-50%, -50%) translate(${itemX}px, ${itemY}px)`;
+    });
+
+    // Remove old listeners and add new ones to prevent multiple bindings
+    const renameBtn = document.getElementById('radial-rename').cloneNode(true);
+    document.getElementById('radial-rename').replaceWith(renameBtn);
+
+    const rotateBtn = document.getElementById('radial-rotate').cloneNode(true);
+    document.getElementById('radial-rotate').replaceWith(rotateBtn);
+
+    const openBtn = document.getElementById('radial-open').cloneNode(true);
+    document.getElementById('radial-open').replaceWith(openBtn);
+
+    const resizeBtn = document.getElementById('radial-resize').cloneNode(true);
+    document.getElementById('radial-resize').replaceWith(resizeBtn);
+
+    renameBtn.onclick = () => { handleRename(activeRadialInstanceId); hideRadialMenu(); };
+    rotateBtn.onclick = () => { handleRotate(activeRadialInstanceId); hideRadialMenu(); };
+    openBtn.onclick = () => { handleOpen(activeRadialInstanceId); hideRadialMenu(); };
+    resizeBtn.onclick = () => { handleResize(activeRadialInstanceId); hideRadialMenu(); };
+}
+
+function hideRadialMenu() {
+    if (vi.radialMenu) {
+        vi.radialMenu.classList.add('hidden');
+    }
+    activeRadialInstanceId = null;
+}
+
+async function handleRename(instanceId) {
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    if (!instance) return;
+
+    const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
+    if (!asset) return;
+
+    const newName = prompt("Enter new name for the object:", asset.AssetName);
+    if (newName && newName.trim() !== '' && newName.trim() !== asset.AssetName) {
+        asset.AssetName = newName.trim();
+        await updateRowInSheet(ASSET_SHEET, asset.rowIndex, ASSET_HEADERS, asset);
+        await loadAllSheetData(); // Refresh to reflect changes everywhere
+    }
+}
+
+
+async function handleRotate(instanceId) {
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    if (instance) {
+        instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
+        await updateObjectInStateAndSheet(instance);
+        renderGrid();
+        // Re-select after render to show controls on rotated object
+        setTimeout(() => selectObject(instanceId), 50);
+    }
+}
+
+function handleOpen(instanceId) {
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    if (instance) {
+        const assetInfo = getAssetByRefId(instance.ReferenceID);
+        if (assetInfo) {
+            navigateTo(instance.InstanceID, assetInfo.AssetName);
+        }
+    }
+}
+
+function handleResize(instanceId) {
+    selectObject(instanceId);
+    if (typeof showMessage === 'function') {
+        showMessage("Use the corner handles to resize the object.", "info");
+    }
+}

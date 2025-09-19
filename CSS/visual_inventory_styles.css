@@ -156,3 +156,45 @@
 .height-plus {
     bottom: -22px; left: calc(50% - 9px);
 }
+
+/* --- Radial Menu --- */
+.radial-menu {
+    position: fixed;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 20px rgba(0,0,0,0.25);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    transform: translate(-50%, -50%); /* Center on cursor */
+}
+
+.radial-menu.hidden {
+    display: none;
+}
+
+.radial-menu .menu-item {
+    position: absolute;
+    color: #333;
+    background-color: #fff;
+    padding: 6px 12px;
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+    transition: all 0.2s ease-in-out;
+    pointer-events: all;
+    border: 1px solid #ddd;
+}
+
+.radial-menu .menu-item:hover {
+    background-color: #4f46e5;
+    color: white;
+    transform: scale(1.1);
+}
