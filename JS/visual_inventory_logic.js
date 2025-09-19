@@ -14,6 +14,9 @@ let vi = {};
 let viListenersInitialized = false;
 let hideMenuTimeout; // Variable to manage the hide timer
 
+// --- DRAG STATE ---
+let dragGhost = null;
+
 // --- INITIALIZATION ---
 function setupAndBindVisualInventory() {
     if (viListenersInitialized) return true;
@@ -57,7 +60,7 @@ function setupAndBindVisualInventory() {
         item.addEventListener('dragstart', handleToolbarDragStart);
     });
     
-    vi.gridContainer.addEventListener('dragover', (e) => e.preventDefault());
+    vi.gridContainer.addEventListener('dragover', handleGridDragOver); // Modified
     vi.gridContainer.addEventListener('drop', handleGridDrop);
     
     vi.gridContainer.addEventListener('click', (e) => {
@@ -114,6 +117,66 @@ function initVisualInventory() {
     }
 }
 
+// --- DRAG AND DROP HANDLERS ---
+function handleObjectDragStart(e, objectData) {
+    e.stopPropagation();
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData.InstanceID }));
+    e.dataTransfer.effectAllowed = 'move';
+
+    // Hide default ghost image
+    const img = new Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // 1x1 transparent gif
+    e.dataTransfer.setDragImage(img, 0, 0);
+
+    // Create custom ghost
+    dragGhost = e.target.cloneNode(true);
+    // Copy computed styles for accurate size
+    const styles = window.getComputedStyle(e.target);
+    dragGhost.style.width = styles.width;
+    dragGhost.style.height = styles.height;
+    dragGhost.classList.add('dragging-ghost');
+    document.body.appendChild(dragGhost);
+    
+    // Position ghost initially based on cursor
+    dragGhost.style.left = `${e.pageX}px`;
+    dragGhost.style.top = `${e.pageY}px`;
+
+    // Make original element semi-transparent
+    setTimeout(() => e.target.classList.add('dragging-source'), 0);
+}
+
+function handleGridDragOver(e) {
+    e.preventDefault();
+    if (!dragGhost) return;
+    
+    const gridEl = document.getElementById('room-grid');
+    if (!gridEl) return;
+
+    const rect = gridEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const gridTemplateCols = getComputedStyle(gridEl).gridTemplateColumns.split(' ');
+    const cellWidth = rect.width / gridTemplateCols.length;
+    const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
+    const cellHeight = rect.height / gridTemplateRows.length;
+
+    // Snap ghost to grid
+    const snapX = Math.floor(x / cellWidth) * cellWidth + rect.left + window.scrollX;
+    const snapY = Math.floor(y / cellHeight) * cellHeight + rect.top + window.scrollY;
+
+    dragGhost.style.left = `${snapX}px`;
+    dragGhost.style.top = `${snapY}px`;
+}
+
+function cleanupDrag() {
+    if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+    }
+    document.querySelectorAll('.dragging-source').forEach(el => el.classList.remove('dragging-source'));
+}
+
 // --- EVENT HANDLERS ---
 async function handleRoomFormSubmit(e) {
     e.preventDefault();
@@ -160,6 +223,7 @@ function handleToolbarDragStart(e) {
 
 async function handleGridDrop(e) {
     e.preventDefault();
+    cleanupDrag(); // Remove custom ghost on drop
     if (!e.dataTransfer.getData('application/json') || !document.getElementById('room-grid')) return;
     
     const data = JSON.parse(e.dataTransfer.getData('application/json'));
@@ -332,12 +396,20 @@ function renderObject(objectData, parentGrid) {
 
     objEl.style.gridColumn = `${parseInt(objectData.PosX) + 1} / span ${width}`;
     objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
-    objEl.innerHTML = `<span class="truncate object-name">${assetInfo.AssetName}</span>`;
+    
+    // Hide name on unit, show in tooltip on hover for containers/shelves
+    if (typeClass === 'shelf' || typeClass === 'container') {
+        const childCount = spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
+        const tooltip = document.createElement('div');
+        tooltip.className = 'inventory-tooltip';
+        tooltip.innerHTML = `<strong>${assetInfo.AssetName}</strong><br>Assets: ${childCount}`;
+        objEl.appendChild(tooltip);
+    } else {
+        objEl.innerHTML = `<span class="truncate">${assetInfo.AssetName}</span>`;
+    }
 
-    objEl.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData.InstanceID }));
-        e.stopPropagation();
-    });
+    objEl.addEventListener('dragstart', (e) => handleObjectDragStart(e, objectData));
+    objEl.addEventListener('dragend', cleanupDrag);
 
     objEl.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -556,4 +628,3 @@ function initResize(e, instanceId, direction) {
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
 }
-

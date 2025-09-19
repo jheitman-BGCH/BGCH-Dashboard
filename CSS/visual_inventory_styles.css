@@ -15,9 +15,10 @@
     position: relative;
     height: 100%;
     width: 100%;
+    /* Darker gridlines for better visibility */
     background-image:
-        linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-        linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+        linear-gradient(to right, #d1d5db 1px, transparent 1px),
+        linear-gradient(to bottom, #d1d5db 1px, transparent 1px);
     /* background-size is now set dynamically via JS */
 }
 
@@ -33,6 +34,9 @@
     white-space: nowrap;
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
     cursor: grab;
+    /* Added margin for padding around the object */
+    margin: 4px;
+    box-sizing: border-box;
 }
 .visual-object:active {
     cursor: grabbing;
@@ -61,6 +65,56 @@
     border: 1px solid #6b7280; /* gray-500 */
     color: #1f2937; /* gray-800 */
 }
+
+/* --- Dragging Styles --- */
+.dragging-source {
+    opacity: 0.3;
+    transition: opacity 0.2s ease;
+}
+
+.dragging-ghost {
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0.8;
+    transition: transform 0.1s ease-out; /* Smooth lift effect */
+    transform: scale(1.05); /* Slightly bigger to feel "lifted" */
+}
+
+/* --- Hover Tooltip --- */
+.inventory-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 105%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #1f2937; /* gray-800 */
+    color: white;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem; /* rounded-md */
+    font-size: 0.875rem; /* text-sm */
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+    z-index: 50;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.inventory-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #1f2937 transparent transparent transparent;
+}
+
+.visual-object:hover .inventory-tooltip {
+    display: block;
+}
+
 
 /* --- Toolbar --- */
 .toolbar-item {
@@ -142,6 +196,3 @@
 .resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
 .resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
 .resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
-
-
-
