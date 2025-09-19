@@ -135,7 +135,6 @@ function initVisualInventory() {
 
 // --- NAVIGATION & RENDERING ---
 function navigateTo(id, name) {
-    // FIX: Add a guard clause to prevent crash if id is undefined
     if (!id) {
         console.error("navigateTo was called with an undefined ID. Aborting navigation.");
         return;
@@ -286,7 +285,6 @@ function populateRoomSelector() {
         option.textContent = room.RoomName;
         vi.roomSelector.appendChild(option);
     });
-    // Restore previous selection if it still exists
     if ([...vi.roomSelector.options].some(opt => opt.value === currentValue)) {
         vi.roomSelector.value = currentValue;
     }
@@ -333,7 +331,6 @@ async function handleToolbarDrop(data, gridX, gridY) {
         return;
     }
 
-    // 1. Create a new "Asset" record for the shelf/container itself
     const newAsset = {
         AssetID: `ASSET-${Date.now()}`,
         AssetName: data.name,
@@ -341,9 +338,8 @@ async function handleToolbarDrop(data, gridX, gridY) {
         Condition: "New",
     };
     await appendRowToSheet(ASSET_SHEET, ASSET_HEADERS, newAsset);
-    allAssets.push(newAsset); // Add to local state immediately
+    allAssets.push(newAsset);
 
-    // 2. Create the "Spatial Layout" instance for the new asset
     const newInstance = {
         InstanceID: `INST-${Date.now()}`,
         ReferenceID: newAsset.AssetID,
@@ -359,17 +355,15 @@ async function handleToolbarDrop(data, gridX, gridY) {
     const newRowIndex = await appendRowToSheet(SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS, newInstance);
     if(newRowIndex) {
         newInstance.rowIndex = newRowIndex;
-        spatialLayoutData.push(newInstance); // Add to local state
-        renderGrid(); // Re-render to show the new object
+        spatialLayoutData.push(newInstance);
+        renderGrid();
     } else {
-        // If we fail to get a row index, force a full refresh to be safe
         await loadAllSheetData();
     }
 }
 
 
 function selectObject(instanceId) {
-    // Remove existing controls
     document.querySelectorAll('.resize-handle, .rotate-handle, .delete-handle').forEach(el => el.remove());
     document.querySelectorAll('.visual-object.selected').forEach(el => el.classList.remove('selected'));
 
@@ -380,111 +374,9 @@ function selectObject(instanceId) {
     const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
     if (objEl) {
         objEl.classList.add('selected');
-        createObjectControls(objEl, instanceId);
+        // createObjectControls(objEl, instanceId); // Controls are now in the radial menu
     }
 }
-
-function createObjectControls(objEl, instanceId) {
-    // Delete Handle
-    const deleteHandle = document.createElement('div');
-    deleteHandle.className = 'delete-handle';
-    deleteHandle.innerHTML = '&times;';
-    deleteHandle.onclick = async (e) => {
-        e.stopPropagation();
-        if (confirm('Are you sure you want to delete this item?')) {
-            const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
-            if(instance) {
-                // Find and remove from local array
-                spatialLayoutData = spatialLayoutData.filter(i => i.InstanceID !== instanceId);
-                // Remove from sheet
-                await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
-                renderGrid();
-            }
-        }
-    };
-    objEl.appendChild(deleteHandle);
-    
-    // Rotate Handle
-    const rotateHandle = document.createElement('div');
-    rotateHandle.className = 'rotate-handle';
-    rotateHandle.innerHTML = '&#8635;'; // Rotate symbol
-    rotateHandle.onclick = async (e) => {
-        e.stopPropagation();
-        const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
-        if (instance) {
-            instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
-            await updateObjectInStateAndSheet(instance);
-            renderGrid();
-            // Re-select after render to show controls on rotated object
-            setTimeout(() => selectObject(instanceId), 50);
-        }
-    };
-    objEl.appendChild(rotateHandle);
-
-
-    // Resize Handles
-    const handles = ['n', 's', 'e', 'w'];
-    handles.forEach(dir => {
-        const handle = document.createElement('div');
-        handle.className = `resize-handle ${dir}`;
-        objEl.appendChild(handle);
-
-        handle.addEventListener('mousedown', (e) => initResize(e, instanceId, dir));
-    });
-}
-
-function initResize(e, instanceId, direction) {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
-    if (!instance) return;
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startWidth = parseInt(instance.Width);
-    const startHeight = parseInt(instance.Height);
-    
-    const rect = vi.roomGrid.getBoundingClientRect();
-    const gridTemplateCols = getComputedStyle(vi.roomGrid).gridTemplateColumns.split(' ');
-    const gridTemplateRows = getComputedStyle(vi.roomGrid).gridTemplateRows.split(' ');
-    const cellWidth = rect.width / gridTemplateCols.length;
-    const cellHeight = rect.height / gridTemplateRows.length;
-
-    function doDrag(e) {
-        const dx = (e.clientX - startX) / cellWidth;
-        const dy = (e.clientY - startY) / cellHeight;
-        let newWidth = startWidth;
-        let newHeight = startHeight;
-
-        if (direction === 'e') newWidth = Math.max(1, Math.round(startWidth + dx));
-        if (direction === 'w') newWidth = Math.max(1, Math.round(startWidth - dx)); // Not implemented: requires changing PosX
-        if (direction === 's') newHeight = Math.max(1, Math.round(startHeight + dy));
-        if (direction === 'n') newHeight = Math.max(1, Math.round(startHeight - dy)); // Not implemented: requires changing PosY
-
-        if (newWidth !== instance.Width || newHeight !== instance.Height) {
-            instance.Width = newWidth;
-            instance.Height = newHeight;
-            // Live update the grid appearance without writing to sheet yet
-            const objEl = vi.roomGrid.querySelector(`[data-instance-id="${instanceId}"]`);
-            if(objEl) {
-                objEl.style.gridColumnEnd = `span ${newWidth}`;
-                objEl.style.gridRowEnd = `span ${newHeight}`;
-            }
-        }
-    }
-
-    function stopDrag() {
-        document.removeEventListener('mousemove', doDrag);
-        document.removeEventListener('mouseup', stopDrag);
-        // Now, write the final state to the sheet
-        updateObjectInStateAndSheet(instance);
-    }
-
-    document.addEventListener('mousemove', doDrag);
-    document.addEventListener('mouseup', stopDrag);
-}
-
 
 async function updateObjectInStateAndSheet(updatedInstance) {
     const index = spatialLayoutData.findIndex(i => i.InstanceID === updatedInstance.InstanceID);
@@ -499,44 +391,29 @@ let activeRadialInstanceId = null;
 
 function showRadialMenu(x, y, instanceId) {
     activeRadialInstanceId = instanceId;
-    vi.radialMenu.classList.remove('hidden');
     vi.radialMenu.style.left = `${x}px`;
     vi.radialMenu.style.top = `${y}px`;
+    vi.radialMenu.classList.remove('hidden');
+    setTimeout(() => vi.radialMenu.classList.add('visible'), 10);
 
-    const items = vi.radialMenu.querySelectorAll('.menu-item');
-    const angle = 360 / items.length;
-    const radius = 60; // Increase radius for more space
-
-    items.forEach((item, index) => {
-        const theta = (angle * index - 90) * (Math.PI / 180); // -90 to start from the top
-        const itemX = radius * Math.cos(theta);
-        const itemY = radius * Math.sin(theta);
-        // Center the item on its calculated position
-        item.style.transform = `translate(-50%, -50%) translate(${itemX}px, ${itemY}px)`;
+    const buttonIds = ['rename', 'rotate', 'open', 'resize', 'delete'];
+    buttonIds.forEach(id => {
+        const btn = document.getElementById(`radial-${id}`);
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
     });
 
-    // Remove old listeners and add new ones to prevent multiple bindings
-    const renameBtn = document.getElementById('radial-rename').cloneNode(true);
-    document.getElementById('radial-rename').replaceWith(renameBtn);
-
-    const rotateBtn = document.getElementById('radial-rotate').cloneNode(true);
-    document.getElementById('radial-rotate').replaceWith(rotateBtn);
-
-    const openBtn = document.getElementById('radial-open').cloneNode(true);
-    document.getElementById('radial-open').replaceWith(openBtn);
-
-    const resizeBtn = document.getElementById('radial-resize').cloneNode(true);
-    document.getElementById('radial-resize').replaceWith(resizeBtn);
-
-    renameBtn.onclick = () => { handleRename(activeRadialInstanceId); hideRadialMenu(); };
-    rotateBtn.onclick = () => { handleRotate(activeRadialInstanceId); hideRadialMenu(); };
-    openBtn.onclick = () => { handleOpen(activeRadialInstanceId); hideRadialMenu(); };
-    resizeBtn.onclick = () => { handleResize(activeRadialInstanceId); hideRadialMenu(); };
+    document.getElementById('radial-rename').onclick = () => { handleRename(activeRadialInstanceId); hideRadialMenu(); };
+    document.getElementById('radial-rotate').onclick = () => { handleRotate(activeRadialInstanceId); hideRadialMenu(); };
+    document.getElementById('radial-open').onclick = () => { handleOpen(activeRadialInstanceId); hideRadialMenu(); };
+    document.getElementById('radial-resize').onclick = () => { handleResize(activeRadialInstanceId); hideRadialMenu(); };
+    document.getElementById('radial-delete').onclick = () => { handleDelete(activeRadialInstanceId); hideRadialMenu(); };
 }
 
 function hideRadialMenu() {
     if (vi.radialMenu) {
-        vi.radialMenu.classList.add('hidden');
+        vi.radialMenu.classList.remove('visible');
+        setTimeout(() => vi.radialMenu.classList.add('hidden'), 200);
     }
     activeRadialInstanceId = null;
 }
@@ -552,7 +429,7 @@ async function handleRename(instanceId) {
     if (newName && newName.trim() !== '' && newName.trim() !== asset.AssetName) {
         asset.AssetName = newName.trim();
         await updateRowInSheet(ASSET_SHEET, asset.rowIndex, ASSET_HEADERS, asset);
-        await loadAllSheetData(); // Refresh to reflect changes everywhere
+        await loadAllSheetData();
     }
 }
 
@@ -563,8 +440,6 @@ async function handleRotate(instanceId) {
         instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
         await updateObjectInStateAndSheet(instance);
         renderGrid();
-        // Re-select after render to show controls on rotated object
-        setTimeout(() => selectObject(instanceId), 50);
     }
 }
 
@@ -580,7 +455,24 @@ function handleOpen(instanceId) {
 
 function handleResize(instanceId) {
     selectObject(instanceId);
-    if (typeof showMessage === 'function') {
-        showMessage("Use the corner handles to resize the object.", "info");
+    showMessage("Resizing is not yet implemented. This is a placeholder.", "info");
+}
+
+async function handleDelete(instanceId) {
+    if (confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
+        const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+        if (instance) {
+            spatialLayoutData = spatialLayoutData.filter(i => i.InstanceID !== instanceId);
+            await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
+            
+            // Also delete the associated asset if it's a container/shelf
+            const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
+            if(asset && (asset.AssetType === 'Shelf' || asset.AssetType === 'Container')) {
+                 await deleteRowFromSheet(ASSET_SHEET, asset.rowIndex);
+            }
+            
+            await loadAllSheetData();
+        }
     }
 }
+

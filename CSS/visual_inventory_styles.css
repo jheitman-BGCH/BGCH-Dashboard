@@ -160,41 +160,42 @@
 /* --- Radial Menu --- */
 .radial-menu {
     position: fixed;
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.95);
-    box-shadow: 0 0 20px rgba(0,0,0,0.25);
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    width: 200px;
+    height: 200px;
     z-index: 1000;
     pointer-events: none;
-    transition: all 0.2s ease;
-    transform: translate(-50%, -50%); /* Center on cursor */
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+    transition: transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.15s ease-out;
 }
 
-.radial-menu.hidden {
-    display: none;
+.radial-menu.visible {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
 }
 
-.radial-menu .menu-item {
+.radial-menu img {
     position: absolute;
-    color: #333;
-    background-color: #fff;
-    padding: 6px 12px;
-    border-radius: 15px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-    transition: all 0.2s ease-in-out;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.2s ease, filter 0.2s ease;
     pointer-events: all;
-    border: 1px solid #ddd;
+    cursor: pointer;
 }
 
-.radial-menu .menu-item:hover {
-    background-color: #4f46e5;
-    color: white;
-    transform: scale(1.1);
+.radial-menu .radial-bg {
+    pointer-events: none;
 }
+
+.radial-menu .radial-button:hover {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 5px rgba(79, 70, 229, 0.7));
+}
+
+.radial-menu #radial-delete:hover {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.8));
+}
+
