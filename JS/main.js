@@ -6,6 +6,26 @@ import { initVisualInventory } from './visual_inventory_logic.js';
 
 // --- INITIALIZATION ---
 
+/**
+ * Callback for when the Google API script has loaded.
+ * This function needs to be on the global window object to be called by the external script.
+ */
+window.gapiLoaded = function() {
+    gapi.load('client', () => {
+        state.gapiInited = true;
+        checkAndInitialize();
+    });
+}
+
+/**
+ * Callback for when the Google Identity Services script has loaded.
+ * This function needs to be on the global window object to be called by the external script.
+ */
+window.gisLoaded = function() {
+    state.gisInited = true;
+    checkAndInitialize();
+}
+
 // Use DOMContentLoaded to ensure the entire DOM is ready before running scripts
 window.addEventListener('DOMContentLoaded', () => {
     ui.initUI(); // Initialize DOM element references in ui.js
@@ -26,30 +46,6 @@ function loadVisibleColumns() {
         state.visibleColumns = ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
     }
 }
-
-
-/**
- * Callback for when the Google API script has loaded.
- */
-function gapiLoaded() {
-    gapi.load('client', () => {
-        state.gapiInited = true;
-        checkAndInitialize();
-    });
-}
-
-/**
- * Callback for when the Google Identity Services script has loaded.
- */
-function gisLoaded() {
-    state.gisInited = true;
-    checkAndInitialize();
-}
-
-// Make callbacks global for the external script tags in index.html
-window.gapiLoaded = gapiLoaded;
-window.gisLoaded = gisLoaded;
-
 
 /**
  * Checks if both Google API clients are ready and then initializes them.
@@ -94,7 +90,12 @@ async function initializeGoogleClients() {
  * Handles the sign-in button click.
  */
 function handleAuthClick() {
-    state.tokenClient.requestAccessToken({ prompt: 'consent' });
+    if (state.tokenClient) {
+        state.tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        console.error("Authentication client not initialized.");
+        ui.showMessage("Authentication service is not ready. Please wait or refresh.", "error");
+    }
 }
 
 /**
@@ -201,6 +202,7 @@ function processAssetData(values) {
                 let value = row[headerMap[header]];
                 if (header === "LoginInfo" && value) {
                     try {
+                        // Basic check if the string could be base64
                         if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
                             value = atob(value);
                         }
@@ -349,7 +351,8 @@ function openCloneModal(assetId) {
 function setupEventListeners() {
     ui.dom.authorizeButton.onclick = handleAuthClick;
     ui.dom.signoutButton.onclick = handleSignoutClick;
-    ui.dom.refreshBtn.onclick = initializeAppData;
+    // FIX: Corrected DOM reference from refreshBtn to refreshDataBtn
+    ui.dom.refreshDataBtn.onclick = initializeAppData;
 
     window.addEventListener('datachanged', () => initializeAppData());
 
@@ -712,4 +715,3 @@ function handleChartClick(event, elements, filterId) {
         }
     }
 }
-
