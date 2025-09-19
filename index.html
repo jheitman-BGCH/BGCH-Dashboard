@@ -13,16 +13,101 @@
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <!-- The radial menu SVG container, which uses the sprite file -->
+    <!-- Inlined SVG Sprite -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+      <defs>
+        <!-- Rename Icon -->
+        <symbol id="icon-rename" viewBox="0 0 500 500">
+          <g opacity=".5">
+            <path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/>
+            <path fill="#282828" d="M334.84,338.76l69.32,69.32c-41.48,40.45-96.18,62.72-154.16,62.72s-112.68-22.26-154.16-62.72l69.32-69.32c22.95,21.95,53.04,34.03,84.84,34.03s61.89-12.08,84.84-34.03M334.85,337.36c-21.93,21.31-51.86,34.43-84.85,34.43s-62.92-13.12-84.85-34.43l-70.73,70.73c40.04,39.4,94.97,63.71,155.58,63.71s115.54-24.31,155.58-63.71l-70.73-70.73h0Z"/>
+          </g>
+          <g fill="#282828" font-family="MyriadPro-Regular, 'Myriad Pro'" font-size="60.74px" transform="scale(.92 1)">
+              <text transform="translate(144.7 411.28) rotate(27.73)">R</text>
+              <text transform="translate(175.87 427.11) rotate(17.84)">e</text>
+              <text transform="translate(207.21 436.9) rotate(7.64)">n</text>
+              <text transform="translate(242.65 441.07) rotate(-2.27)">a</text>
+              <text transform="translate(275.69 440.19) rotate(-14.96)">m</text>
+              <text transform="translate(325.96 425.02) rotate(-27.53)">e</text>
+          </g>
+        </symbol>
+        
+        <!-- Rotate Icon -->
+        <symbol id="icon-rotate" viewBox="0 0 500 500">
+          <g opacity=".5">
+            <path fill="#cecccc" d="M338.06,334.84c22.08-22.9,34.23-53.01,34.23-84.84s-12.15-61.94-34.23-84.84l70.03-70.03c40.77,41.61,63.21,96.59,63.21,154.87s-22.45,113.26-63.21,154.87l-70.03-70.03Z"/>
+            <path fill="#282828" d="M408.08,95.84c40.45,41.48,62.72,96.18,62.72,154.16s-22.26,112.68-62.72,154.16l-69.32-69.32c21.95-22.95,34.03-53.04,34.03-84.84s-12.08-61.89-34.03-84.84l69.32-69.32M408.09,94.42l-70.73,70.73c21.31,21.93,34.43,51.86,34.43,84.85s-13.12,62.92-34.43,84.85l70.73,70.73c39.4-40.04,63.71-94.97,63.71-155.58s-24.31-115.54-63.71-155.58h0Z"/>
+          </g>
+          <g fill="#282828" font-family="MyriadPro-Regular, 'Myriad Pro'" font-size="70.4px">
+            <text transform="translate(367.28 170.61) rotate(59.79)">R</text>
+            <text transform="translate(385.42 201.05) rotate(74.15)">o</text>
+            <text transform="translate(394.81 236.17) rotate(85.6)">t</text>
+            <text transform="translate(397.13 257.31) rotate(96.12)">a</text>
+            <text transform="translate(393.5 288.64) rotate(106.68)">t</text>
+            <text transform="translate(388.26 308.85) rotate(117.43)">e</text>
+          </g>
+        </symbol>
+
+        <!-- Resize Icon -->
+        <symbol id="icon-resize" viewBox="0 0 500 500">
+          <g opacity=".5">
+            <path fill="#cecccc" d="M91.91,404.87c-40.77-41.61-63.21-96.59-63.21-154.87s22.44-113.26,63.21-154.87l70.03,70.03c-22.08,22.9-34.23,53.01-34.23,84.84s12.15,61.95,34.23,84.84l-70.03,70.03Z"/>
+            <path fill="#282828" d="M91.92,95.84l69.32,69.32c-21.95,22.95-34.03,53.04-34.03,84.84s12.08,61.89,34.03,84.84l-69.32,69.32c-40.45-41.48-62.72-96.18-62.72-154.16s22.26-112.68,62.72-154.16M91.91,94.42c-39.4,40.04-63.71,94.97-63.71,155.58s24.31,115.54,63.71,155.58l70.73-70.73c-21.31-21.93-34.43-51.86-34.43-84.85s13.12-62.92,34.43-84.85l-70.73-70.73h0Z"/>
+          </g>
+          <g fill="#282828" font-family="MyriadPro-Regular, 'Myriad Pro'" font-size="70.4px">
+            <text transform="translate(128.14 328.98) rotate(-120.21)">R</text>
+            <text transform="translate(110.16 298.36) rotate(-106.47)">e</text>
+            <text transform="translate(100.96 266.71) rotate(-94.8)">s</text>
+            <text transform="translate(99.05 240.57) rotate(-86.67)">i</text>
+            <text transform="translate(99.27 225.78) rotate(-78.01)">z</text>
+            <text transform="translate(104.4 198.91) rotate(-66)">e</text>
+          </g>
+        </symbol>
+
+        <!-- Open Icon -->
+        <symbol id="icon-open" viewBox="0 0 500 500">
+            <g opacity=".5">
+                <path fill="#cecccc" d="M95.13,91.91c41.61-40.77,96.59-63.21,154.87-63.21s113.26,22.44,154.87,63.21l-70.03,70.03c-22.9-22.08-53.01-34.23-84.84-34.23s-61.94,12.15-84.84,34.23l-70.03-70.03Z"/>
+                <path fill="#282828" d="M250,29.2c57.98,0,112.68,22.26,154.16,62.72l-69.32,69.32c-22.95-21.95-53.04-34.03-84.84-34.03s-61.89,12.08-84.84,34.03l-69.32-69.32c41.48-40.45,96.18-62.72,154.16-62.72M250,28.2c-60.61,0-115.54,24.31-155.58,63.71l70.73,70.73c21.93-21.31,51.86-34.43,84.85-34.43s62.92,13.12,84.85,34.43l70.73-70.73c-40.04-39.4-94.97-63.71-155.58-63.71h0Z"/>
+            </g>
+            <g fill="#282828" font-family="MyriadPro-Regular, 'Myriad Pro'" font-size="70.4px">
+                <text transform="translate(173.89 125.21) rotate(-22.06)">O</text>
+                <text transform="translate(216.1 108.48) rotate(-6.07)">P</text>
+                <text transform="translate(250.79 104.65) rotate(7.15)">E</text>
+                <text transform="translate(282.59 107.5) rotate(22.23)">N</text>
+            </g>
+        </symbol>
+
+        <!-- Delete Icon -->
+        <symbol id="icon-delete" viewBox="0 0 500 500">
+          <g opacity=".5">
+            <path fill="#d30f00" d="M250,367.36c-64.71,0-117.36-52.65-117.36-117.36s52.65-117.36,117.36-117.36,117.36,52.65,117.36,117.36-52.65,117.36-117.36,117.36Z"/>
+            <path fill="#282828" d="M250,133.14c31.21,0,60.56,12.16,82.63,34.23,22.07,22.07,34.23,51.42,34.23,82.63s-12.16,60.56-34.23,82.63-51.42,34.23-82.63,34.23-60.56-12.16-82.63-34.23c-22.07-22.07-34.23-51.42-34.23-82.63s12.16-60.56,34.23-82.63c22.07-22.07,51.42-34.23,82.63-34.23M250,132.14c-65.09,0-117.86,52.77-117.86,117.86s52.77,117.86,117.86,117.86,117.86-52.77,117.86-117.86-52.77-117.86-117.86-117.86h0Z"/>
+          </g>
+          <text fill="#fff" font-family="MyriadPro-Regular, 'Myriad Pro'" font-size="63.11px" transform="translate(151.33 268.52)">
+              <tspan x="0" y="0">DEL</tspan><tspan letter-spacing=".02em" x="102.86" y="0">E</tspan><tspan letter-spacing="0em" x="134.92" y="0">TE</tspan>
+          </text>
+        </symbol>
+
+        <!-- Background Icon -->
+        <symbol id="icon-circle-background" viewBox="0 0 500 500">
+          <g opacity=".5">
+            <path fill="#e5e5e5" d="M250,479.84c-61.39,0-119.11-23.91-162.52-67.32-43.41-43.41-67.32-101.13-67.32-162.52s23.91-119.11,67.32-162.52C130.89,44.07,188.61,20.16,250,20.16s119.11,23.91,162.52,67.32c43.41,43.41,67.32,101.13,67.32,162.52s-23.91,119.11-67.32,162.52-101.13,67.32-162.52,67.32Z"/>
+            <path fill="#7c7c7c" d="M250,20.66c30.96,0,61,6.06,89.27,18.02,27.31,11.55,51.84,28.09,72.9,49.15,21.06,21.06,37.6,45.59,49.15,72.9,11.96,28.27,18.02,58.31,18.02,89.27s-6.06,61-18.02,89.27c-11.55,27.31-28.09,51.84-49.15,72.9-21.06,21.06-45.59,37.6-72.9,49.15-28.27,11.96-58.31,18.02-89.27,18.02s-61-6.06-89.27-18.02c-27.31-11.55-51.84-28.09-72.9-49.15-21.06-21.06-37.6-45.59-49.15-72.9-11.96-28.27-18.02-58.31-18.02-89.27s6.06-61,18.02-89.27c11.55-27.31,28.09-51.84,49.15-72.9,21.06-21.06,45.59,37.6,72.9-49.15,28.27-11.96,58.31-18.02,89.27-18.02M250,19.66C122.79,19.66,19.66,122.79,19.66,250s103.13,230.34,230.34,230.34,230.34-103.13,230.34-230.34S377.21,19.66,250,19.66h0Z"/>
+          </g>
+        </symbol>
+      </defs>
+    </svg>
+
+    <!-- The radial menu SVG container, which now uses the in-page sprite -->
     <div id="radial-menu" class="radial-menu hidden">
         <svg viewBox="0 0 500 500" class="radial-svg-container">
-            <!-- The order here determines the stacking order (last one on top) -->
-            <use href="SVG/radial-menu-sprite.svg#icon-circle-background" />
-            <use href="SVG/radial-menu-sprite.svg#icon-rename" class="radial-button" id="radial-rename-use"/>
-            <use href="SVG/radial-menu-sprite.svg#icon-rotate" class="radial-button" id="radial-rotate-use"/>
-            <use href="SVG/radial-menu-sprite.svg#icon-resize" class="radial-button" id="radial-resize-use"/>
-            <use href="SVG/radial-menu-sprite.svg#icon-open" class="radial-button" id="radial-open-use"/>
-            <use href="SVG/radial-menu-sprite.svg#icon-delete" class="radial-button" id="radial-delete-use"/>
+            <use href="#icon-circle-background" />
+            <use href="#icon-rename" class="radial-button" id="radial-rename-use"/>
+            <use href="#icon-rotate" class="radial-button" id="radial-rotate-use"/>
+            <use href="#icon-resize" class="radial-button" id="radial-resize-use"/>
+            <use href="#icon-open" class="radial-button" id="radial-open-use"/>
+            <use href="#icon-delete" class="radial-button" id="radial-delete-use"/>
         </svg>
     </div>
 
