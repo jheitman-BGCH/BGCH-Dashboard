@@ -1,4 +1,7 @@
 // JS/visual_inventory_logic.js
+import { state, ROOMS_SHEET, ROOMS_HEADERS, ASSET_SHEET, ASSET_HEADERS, SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS } from './state.js';
+import * as api from './sheetsService.js';
+import { toggleModal, showMessage } from './ui.js';
 
 // --- STATE ---
 let viState = {
@@ -22,18 +25,13 @@ let globalTooltip = null;
 function setupAndBindVisualInventory() {
     if (viListenersInitialized) return true;
 
-    // Main VI elements
     vi.roomSelector = document.getElementById('room-selector');
     vi.gridContainer = document.getElementById('room-grid-container');
     vi.createRoomBtn = document.getElementById('create-room-btn');
     vi.breadcrumbContainer = document.getElementById('breadcrumb-container');
-    
-    // Modals
     vi.roomModal = document.getElementById('room-modal');
     vi.roomForm = document.getElementById('room-form');
     vi.contentsModal = document.getElementById('contents-modal');
-    
-    // Radial Menu
     vi.radialMenu = document.getElementById('radial-menu');
     vi.radialRename = document.getElementById('radial-rename-use');
     vi.radialFlip = document.getElementById('radial-flip-use');
@@ -42,14 +40,12 @@ function setupAndBindVisualInventory() {
     vi.radialOpen = document.getElementById('radial-open-use');
     vi.radialDelete = document.getElementById('radial-delete-use');
 
-
     const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal, vi.radialMenu];
     if (criticalElements.some(el => !el)) {
         console.error("Fatal Error: A critical VI DOM element is missing.");
         return false;
     }
 
-    // --- Create Global Tooltip ---
     if (!document.getElementById('inventory-global-tooltip')) {
         globalTooltip = document.createElement('div');
         globalTooltip.id = 'inventory-global-tooltip';
@@ -58,7 +54,6 @@ function setupAndBindVisualInventory() {
         globalTooltip = document.getElementById('inventory-global-tooltip');
     }
 
-    // --- Event Listeners Setup ---
     vi.createRoomBtn.addEventListener('click', () => {
         vi.roomForm.reset();
         document.getElementById('room-id-hidden').value = '';
@@ -95,7 +90,6 @@ function setupAndBindVisualInventory() {
     vi.radialMenu.addEventListener('mouseenter', () => clearTimeout(hideMenuTimeout));
     vi.radialMenu.addEventListener('mouseleave', () => hideMenuTimeout = setTimeout(hideRadialMenu, 500));
 
-    // Bind Radial Menu Buttons
     vi.radialRename.addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
     vi.radialFlip.addEventListener('click', () => { handleFlip(viState.activeRadialInstanceId); hideRadialMenu(); });
     vi.radialRotate.addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
@@ -107,18 +101,18 @@ function setupAndBindVisualInventory() {
     return true;
 }
 
-function initVisualInventory() {
+export function initVisualInventory() {
     if (!setupAndBindVisualInventory()) return;
 
     populateRoomSelector();
     const lastRoom = localStorage.getItem('lastActiveRoomId');
-    if (lastRoom && allRooms.some(r => r.RoomID === lastRoom)) {
+    if (lastRoom && state.allRooms.some(r => r.RoomID === lastRoom)) {
         vi.roomSelector.value = lastRoom;
-        const room = allRooms.find(r => r.RoomID === lastRoom);
+        const room = state.allRooms.find(r => r.RoomID === lastRoom);
         if (room) navigateTo(room.RoomID, room.RoomName);
-    } else if (allRooms.length > 0) {
-        vi.roomSelector.value = allRooms[0].RoomID;
-        navigateTo(allRooms[0].RoomID, allRooms[0].RoomName);
+    } else if (state.allRooms.length > 0) {
+        vi.roomSelector.value = state.allRooms[0].RoomID;
+        navigateTo(state.allRooms[0].RoomID, state.allRooms[0].RoomName);
     } else {
         renderGrid();
     }
@@ -187,20 +181,18 @@ async function handleRoomFormSubmit(e) {
         GridWidth: document.getElementById('grid-width').value,
         GridHeight: document.getElementById('grid-height').value,
     };
-    const newRowIndex = await appendRowToSheet(ROOMS_SHEET, ROOMS_HEADERS, roomData);
-    if (newRowIndex) {
-        roomData.rowIndex = newRowIndex;
-        allRooms.push(roomData);
-        populateRoomSelector();
-        vi.roomSelector.value = roomData.RoomID;
-        navigateTo(roomData.RoomID, roomData.RoomName);
-    }
+    
+    const rowData = ROOMS_HEADERS.map(header => roomData[header] || '');
+    await api.appendSheetValues(ROOMS_SHEET, [rowData]);
+    
     toggleModal(vi.roomModal, false);
+    // Dispatch event to notify main app that data has changed
+    window.dispatchEvent(new CustomEvent('datachanged'));
 }
 
 function handleRoomSelection(e) {
     if (e.target.value) {
-        const room = allRooms.find(r => r.RoomID === e.target.value);
+        const room = state.allRooms.find(r => r.RoomID === e.target.value);
         if (room) navigateTo(room.RoomID, room.RoomName);
     } else {
         viState.activeParentId = null;
@@ -244,11 +236,11 @@ async function handleGridDrop(e) {
     if (data.type === 'new-object') {
         await handleToolbarDrop(data, gridX, gridY);
     } else if (data.type === 'move') {
-        const instance = spatialLayoutData.find(i => i.InstanceID === data.instanceId);
+        const instance = state.spatialLayoutData.find(i => i.InstanceID === data.instanceId);
         if (instance) {
             instance.PosX = gridX;
             instance.PosY = gridY;
-            await updateObjectInStateAndSheet(instance);
+            await updateObjectInSheet(instance);
             renderGrid();
         }
     }
@@ -265,9 +257,7 @@ async function handleToolbarDrop(data, gridX, gridY) {
         AssetType: data.assetType,
         Condition: "New",
     };
-    await appendRowToSheet(ASSET_SHEET, ASSET_HEADERS, newAsset);
-    allAssets.push(newAsset);
-
+    
     const newInstance = {
         InstanceID: `INST-${Date.now()}`,
         ReferenceID: newAsset.AssetID,
@@ -280,14 +270,15 @@ async function handleToolbarDrop(data, gridX, gridY) {
         ShelfRows: data.shelfRows,
         ShelfCols: data.shelfCols,
     };
-    const newRowIndex = await appendRowToSheet(SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS, newInstance);
-    if(newRowIndex) {
-        newInstance.rowIndex = newRowIndex;
-        spatialLayoutData.push(newInstance);
-        renderGrid();
-    } else {
-        await loadAllSheetData();
-    }
+    
+    // Write both new asset and new instance, then trigger a full refresh
+    const newAssetRow = ASSET_HEADERS.map(h => newAsset[h] || '');
+    const newInstanceRow = SPATIAL_LAYOUT_HEADERS.map(h => newInstance[h] || '');
+    
+    await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
+    await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, [newInstanceRow]);
+    
+    window.dispatchEvent(new CustomEvent('datachanged'));
 }
 
 // --- NAVIGATION & RENDERING ---
@@ -356,12 +347,12 @@ function renderGrid() {
     let gridWidth, gridHeight;
 
     if (viState.activeParentId.startsWith('ROOM-')) {
-        parentObject = allRooms.find(r => r.RoomID === viState.activeParentId);
+        parentObject = state.allRooms.find(r => r.RoomID === viState.activeParentId);
         if (!parentObject) return;
         gridWidth = parentObject.GridWidth;
         gridHeight = parentObject.GridHeight;
     } else {
-        parentObject = spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
+        parentObject = state.spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
         if (!parentObject) return;
         const assetInfo = getAssetByRefId(parentObject.ReferenceID);
         if (!assetInfo || !['Shelf', 'Container'].includes(assetInfo.AssetType)) {
@@ -376,7 +367,6 @@ function renderGrid() {
     roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
     roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
 
-    // Set background size for visible grid lines
     setTimeout(() => {
         const rect = roomGrid.getBoundingClientRect();
         const cellWidth = rect.width / gridWidth;
@@ -384,8 +374,7 @@ function renderGrid() {
         roomGrid.style.backgroundSize = `${cellWidth}px ${cellHeight}px`;
     }, 0);
 
-
-    const childObjects = spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
+    const childObjects = state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
     childObjects.forEach(obj => renderObject(obj, roomGrid));
 }
 
@@ -429,25 +418,14 @@ function renderObject(objectData, parentGrid) {
 
     objEl.addEventListener('dragstart', (e) => handleObjectDragStart(e, objectData));
     objEl.addEventListener('dragend', cleanupDrag);
-
-    objEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectObject(objectData.InstanceID);
-    });
-
+    objEl.addEventListener('click', (e) => { e.stopPropagation(); selectObject(objectData.InstanceID); });
     objEl.addEventListener('dblclick', (e) => {
         if (typeClass === 'shelf' || typeClass === 'container') {
             e.stopPropagation();
             navigateTo(objectData.InstanceID, assetInfo.AssetName);
         }
     });
-    
-    objEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showRadialMenu(e.clientX, e.clientY, objectData.InstanceID);
-    });
-
+    objEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showRadialMenu(e.clientX, e.clientY, objectData.InstanceID); });
     parentGrid.appendChild(objEl);
 }
 
@@ -456,27 +434,18 @@ function showTooltip(event, objectData) {
     const assetInfo = getAssetByRefId(objectData.ReferenceID);
     if (!assetInfo || !globalTooltip) return;
 
-    const childCount = spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
+    const childCount = state.spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
     globalTooltip.innerHTML = `<strong>${assetInfo.AssetName}</strong><br>Assets: ${childCount}`;
-    
-    globalTooltip.style.display = 'block'; // Make it visible to calculate size
+    globalTooltip.style.display = 'block';
 
     const rect = event.target.getBoundingClientRect();
     const tooltipRect = globalTooltip.getBoundingClientRect();
-
-    let top = rect.top - tooltipRect.height - 10; // 10px buffer above
+    let top = rect.top - tooltipRect.height - 10;
     let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
 
-    // Adjust if tooltip goes off-screen
-    if (top < 0) {
-        top = rect.bottom + 10; // move below
-    }
-    if (left < 0) {
-        left = 5; // 5px padding from left edge
-    }
-    if (left + tooltipRect.width > window.innerWidth) {
-        left = window.innerWidth - tooltipRect.width - 5; // 5px padding from right edge
-    }
+    if (top < 0) top = rect.bottom + 10;
+    if (left < 0) left = 5;
+    if (left + tooltipRect.width > window.innerWidth) left = window.innerWidth - tooltipRect.width - 5;
 
     globalTooltip.style.left = `${left}px`;
     globalTooltip.style.top = `${top}px`;
@@ -491,7 +460,7 @@ function populateRoomSelector() {
     if (!vi.roomSelector) return;
     const currentValue = vi.roomSelector.value;
     vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
-    allRooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
+    state.allRooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
         const option = document.createElement('option');
         option.value = room.RoomID;
         option.textContent = room.RoomName;
@@ -503,30 +472,23 @@ function populateRoomSelector() {
 }
 
 function getAssetByRefId(refId) {
-    return allAssets.find(a => a.AssetID === refId);
+    return state.allAssets.find(a => a.AssetID === refId);
 }
 
 // --- OBJECT MANIPULATION & SELECTION ---
 function selectObject(instanceId) {
     document.querySelectorAll('.resize-handle').forEach(el => el.remove());
     document.querySelectorAll('.visual-object.selected').forEach(el => el.classList.remove('selected'));
-
     viState.selectedInstanceId = instanceId;
     if (!instanceId) return;
-
     const roomGrid = document.getElementById('room-grid');
     const objEl = roomGrid?.querySelector(`[data-instance-id="${instanceId}"]`);
-    if (objEl) {
-        objEl.classList.add('selected');
-    }
+    if (objEl) objEl.classList.add('selected');
 }
 
-async function updateObjectInStateAndSheet(updatedInstance) {
-    const index = spatialLayoutData.findIndex(i => i.InstanceID === updatedInstance.InstanceID);
-    if (index > -1) {
-        spatialLayoutData[index] = updatedInstance;
-        await updateRowInSheet(SPATIAL_LAYOUT_SHEET, updatedInstance.rowIndex, SPATIAL_LAYOUT_HEADERS, updatedInstance);
-    }
+async function updateObjectInSheet(updatedInstance) {
+    const rowData = SPATIAL_LAYOUT_HEADERS.map(header => updatedInstance[header] || '');
+    await api.updateSheetValues(`${SPATIAL_LAYOUT_SHEET}!A${updatedInstance.rowIndex}`, [rowData]);
 }
 
 // --- RADIAL MENU ---
@@ -534,7 +496,7 @@ function showRadialMenu(x, y, instanceId) {
     clearTimeout(hideMenuTimeout);
     viState.activeRadialInstanceId = instanceId;
     
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     const asset = instance ? getAssetByRefId(instance.ReferenceID) : null;
     if (!asset) return;
 
@@ -551,9 +513,7 @@ function showRadialMenu(x, y, instanceId) {
     vi.radialMenu.style.top = `${y}px`;
     vi.radialMenu.classList.remove('hidden');
     
-    setTimeout(() => {
-        vi.radialMenu.classList.add('visible');
-    }, 10);
+    setTimeout(() => vi.radialMenu.classList.add('visible'), 10);
 }
 
 function hideRadialMenu() {
@@ -567,52 +527,50 @@ function hideRadialMenu() {
 
 async function handleRename(instanceId) {
     if (!instanceId) return;
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-    const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
+    const asset = state.allAssets.find(a => a.AssetID === instance.ReferenceID);
     if (!asset) return;
     const newName = prompt("Enter new name:", asset.AssetName);
     if (newName && newName.trim() && newName.trim() !== asset.AssetName) {
         asset.AssetName = newName.trim();
-        await updateRowInSheet(ASSET_SHEET, asset.rowIndex, ASSET_HEADERS, asset);
-        await loadAllSheetData();
+        const rowData = ASSET_HEADERS.map(h => asset[h] || '');
+        await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]);
+        window.dispatchEvent(new CustomEvent('datachanged'));
     }
 }
 
 async function handleFlip(instanceId) {
     if (!instanceId) return;
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
         const flipMap = { 'East': 'West', 'West': 'East', 'North': 'South', 'South': 'North' };
         instance.Orientation = flipMap[instance.Orientation] || 'East';
-        await updateObjectInStateAndSheet(instance);
+        await updateObjectInSheet(instance);
         renderGrid();
     }
 }
 
 async function handleRotate(instanceId) {
     if (!instanceId) return;
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-
     const asset = getAssetByRefId(instance.ReferenceID);
     if (!asset) return;
-
     if (asset.AssetType === 'Door') {
         const rotateMap = { 'East': 'South', 'South': 'West', 'West': 'North', 'North': 'East' };
         instance.Orientation = rotateMap[instance.Orientation] || 'South';
     } else {
         instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
     }
-    
-    await updateObjectInStateAndSheet(instance);
+    await updateObjectInSheet(instance);
     renderGrid();
     setTimeout(() => selectObject(instanceId), 50);
 }
 
 function handleOpen(instanceId) {
     if (!instanceId) return;
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
         const assetInfo = getAssetByRefId(instance.ReferenceID);
         if (assetInfo) navigateTo(instance.InstanceID, assetInfo.AssetName);
@@ -629,22 +587,20 @@ function handleResize(instanceId) {
 
 async function handleDelete(instanceId) {
     if (!instanceId) return;
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-
     if (confirm('Are you sure you want to permanently delete this item and its asset record? This cannot be undone.')) {
-        spatialLayoutData = spatialLayoutData.filter(i => i.InstanceID !== instanceId);
-        
-        const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
+        const asset = state.allAssets.find(a => a.AssetID === instance.ReferenceID);
         if (asset) {
-            allAssets = allAssets.filter(a => a.AssetID !== instance.ReferenceID);
-            await deleteRowFromSheet(ASSET_SHEET, asset.rowIndex);
+            const sheetId = state.sheetIds[ASSET_SHEET];
+            await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } }] });
         }
-
-        await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
-        renderGrid();
+        const layoutSheetId = state.sheetIds[SPATIAL_LAYOUT_SHEET];
+        await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } }] });
+        window.dispatchEvent(new CustomEvent('datachanged'));
     }
 }
+
 
 function createObjectResizeHandles(objEl, instanceId) {
     document.querySelectorAll('.resize-handle').forEach(el => el.remove());
@@ -661,7 +617,7 @@ function initResize(e, instanceId, direction) {
     e.preventDefault();
     e.stopPropagation();
     
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
 
     const startX = e.clientX;
@@ -712,11 +668,10 @@ function initResize(e, instanceId, direction) {
     function stopDrag() {
         document.removeEventListener('mousemove', doDrag);
         document.removeEventListener('mouseup', stopDrag);
-        updateObjectInStateAndSheet(instance);
+        updateObjectInSheet(instance);
         setTimeout(() => createObjectResizeHandles(document.querySelector(`[data-instance-id="${instanceId}"]`), instanceId), 50);
     }
 
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
 }
-
