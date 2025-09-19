@@ -78,8 +78,8 @@ function setupAndBindVisualInventory() {
     vi.radialMenu.querySelector('#radial-resize-use').addEventListener('click', () => { handleResize(viState.activeRadialInstanceId); hideRadialMenu(); });
     vi.radialMenu.querySelector('#radial-open-use').addEventListener('click', () => { handleOpen(viState.activeRadialInstanceId); hideRadialMenu(); });
     vi.radialMenu.querySelector('#radial-delete-use').addEventListener('click', async () => { 
-        hideRadialMenu();
         await handleDelete(viState.activeRadialInstanceId); 
+        hideRadialMenu();
     });
 
 
@@ -418,6 +418,7 @@ function hideRadialMenu() {
 }
 
 async function handleRename(instanceId) {
+    if (!instanceId) return;
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
 
@@ -433,6 +434,7 @@ async function handleRename(instanceId) {
 }
 
 async function handleRotate(instanceId) {
+    if (!instanceId) return;
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
         instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
@@ -443,6 +445,7 @@ async function handleRotate(instanceId) {
 }
 
 function handleOpen(instanceId) {
+    if (!instanceId) return;
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
         const assetInfo = getAssetByRefId(instance.ReferenceID);
@@ -451,6 +454,7 @@ function handleOpen(instanceId) {
 }
 
 function handleResize(instanceId) {
+    if (!instanceId) return;
     selectObject(instanceId);
     const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
     if(objEl) createObjectResizeHandles(objEl, instanceId);
@@ -458,18 +462,21 @@ function handleResize(instanceId) {
 }
 
 async function handleDelete(instanceId) {
+    if (!instanceId) return;
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
 
-    if (confirm('Are you sure you want to delete this item? This cannot be undone.')) {
+    if (confirm('Are you sure you want to permanently delete this item and its asset record? This cannot be undone.')) {
         spatialLayoutData = spatialLayoutData.filter(i => i.InstanceID !== instanceId);
-        await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
         
         const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
         if (asset) {
             allAssets = allAssets.filter(a => a.AssetID !== instance.ReferenceID);
             await deleteRowFromSheet(ASSET_SHEET, asset.rowIndex);
         }
+
+        await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
+        
         renderGrid();
     }
 }
@@ -505,9 +512,6 @@ function initResize(e, instanceId, direction) {
     function doDrag(e) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
-
-        let newWidth = instance.Width;
-        let newHeight = instance.Height;
         
         const orientation = instance.Orientation || 'Horizontal';
         const w_prop = orientation === 'Horizontal' ? 'Width' : 'Height';
@@ -518,9 +522,9 @@ function initResize(e, instanceId, direction) {
         const dy_cells = Math.round(dy / cellHeight);
 
         if (direction === 'e') instance[w_prop] = Math.max(1, start_w + dx_cells);
-        if (direction === 'w') instance[w_prop] = Math.max(1, start_w - dx_cells); // Note: this will also require changing PosX, which is more complex
+        if (direction === 'w') instance[w_prop] = Math.max(1, start_w - dx_cells);
         if (direction === 's') instance[h_prop] = Math.max(1, start_h + dy_cells);
-        if (direction === 'n') instance[h_prop] = Math.max(1, start_h - dy_cells); // Note: this will also require changing PosY
+        if (direction === 'n') instance[h_prop] = Math.max(1, start_h - dy_cells);
         
         const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
         if(objEl) {
