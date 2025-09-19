@@ -8,6 +8,8 @@
     position: relative;
     min-height: 60vh;
     border-radius: 0.5rem;
+    /* Added padding */
+    padding: 1rem;
 }
 
 #room-grid {
@@ -66,6 +68,23 @@
     color: #1f2937; /* gray-800 */
 }
 
+.visual-object.wall {
+    background-color: #4b5563; /* gray-600 */
+    border: 1px solid #1f2937; /* gray-800 */
+}
+
+.visual-object.door {
+    background-color: transparent;
+    border: 2px solid #9ca3af; /* gray-400 */
+}
+
+.visual-object.door svg {
+    width: 100%;
+    height: 100%;
+    fill: #4b5563; /* gray-600 */
+    transition: transform 0.2s ease-in-out;
+}
+
 /* --- Dragging Styles --- */
 .dragging-source {
     opacity: 0.3;
@@ -81,13 +100,10 @@
     transform: scale(1.05); /* Slightly bigger to feel "lifted" */
 }
 
-/* --- Hover Tooltip --- */
-.inventory-tooltip {
+/* --- Global Hover Tooltip --- */
+#inventory-global-tooltip {
     display: none;
-    position: absolute;
-    bottom: 105%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed; /* Use fixed to escape parent overflow */
     background-color: #1f2937; /* gray-800 */
     color: white;
     padding: 0.5rem 0.75rem;
@@ -96,25 +112,10 @@
     line-height: 1.2;
     text-align: center;
     white-space: nowrap;
-    z-index: 50;
+    z-index: 2000; /* High z-index */
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    pointer-events: none; /* Make sure it doesn't interfere with mouse events */
 }
-
-.inventory-tooltip::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -5px;
-    border-width: 5px;
-    border-style: solid;
-    border-color: #1f2937 transparent transparent transparent;
-}
-
-.visual-object:hover .inventory-tooltip {
-    display: block;
-}
-
 
 /* --- Toolbar --- */
 .toolbar-item {
@@ -171,6 +172,10 @@
     transition: opacity 0.15s ease-in-out, filter 0.15s ease-in-out;
 }
 
+.radial-button.hidden {
+    display: none;
+}
+
 .radial-button:hover {
     opacity: 1; /* Full opacity on hover */
     filter: brightness(1.1) saturate(1.2); /* Add a pop effect */
@@ -196,3 +201,4 @@
 .resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
 .resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
 .resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+

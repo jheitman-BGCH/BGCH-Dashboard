@@ -14,8 +14,9 @@ let vi = {};
 let viListenersInitialized = false;
 let hideMenuTimeout; // Variable to manage the hide timer
 
-// --- DRAG STATE ---
+// --- DRAG STATE & GLOBAL UI ---
 let dragGhost = null;
+let globalTooltip = null;
 
 // --- INITIALIZATION ---
 function setupAndBindVisualInventory() {
@@ -34,11 +35,27 @@ function setupAndBindVisualInventory() {
     
     // Radial Menu
     vi.radialMenu = document.getElementById('radial-menu');
+    vi.radialRename = document.getElementById('radial-rename-use');
+    vi.radialFlip = document.getElementById('radial-flip-use');
+    vi.radialRotate = document.getElementById('radial-rotate-use');
+    vi.radialResize = document.getElementById('radial-resize-use');
+    vi.radialOpen = document.getElementById('radial-open-use');
+    vi.radialDelete = document.getElementById('radial-delete-use');
+
 
     const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal, vi.radialMenu];
     if (criticalElements.some(el => !el)) {
         console.error("Fatal Error: A critical VI DOM element is missing.");
         return false;
+    }
+
+    // --- Create Global Tooltip ---
+    if (!document.getElementById('inventory-global-tooltip')) {
+        globalTooltip = document.createElement('div');
+        globalTooltip.id = 'inventory-global-tooltip';
+        document.body.appendChild(globalTooltip);
+    } else {
+        globalTooltip = document.getElementById('inventory-global-tooltip');
     }
 
     // --- Event Listeners Setup ---
@@ -60,7 +77,7 @@ function setupAndBindVisualInventory() {
         item.addEventListener('dragstart', handleToolbarDragStart);
     });
     
-    vi.gridContainer.addEventListener('dragover', handleGridDragOver); // Modified
+    vi.gridContainer.addEventListener('dragover', handleGridDragOver);
     vi.gridContainer.addEventListener('drop', handleGridDrop);
     
     vi.gridContainer.addEventListener('click', (e) => {
@@ -69,32 +86,22 @@ function setupAndBindVisualInventory() {
         }
     });
 
-    // Global listener to hide the radial menu
     document.addEventListener('click', (e) => {
         if (vi.radialMenu && !vi.radialMenu.contains(e.target) && !e.target.closest('.visual-object')) {
             hideRadialMenu();
         }
     });
     
-    // Add hover listeners for the fade-out effect
-    vi.radialMenu.addEventListener('mouseenter', () => {
-        clearTimeout(hideMenuTimeout); // Cancel hiding if the mouse re-enters
-    });
-
-    vi.radialMenu.addEventListener('mouseleave', () => {
-        // Start a timer to hide the menu after a short delay
-        hideMenuTimeout = setTimeout(hideRadialMenu, 500); // 500ms delay
-    });
+    vi.radialMenu.addEventListener('mouseenter', () => clearTimeout(hideMenuTimeout));
+    vi.radialMenu.addEventListener('mouseleave', () => hideMenuTimeout = setTimeout(hideRadialMenu, 500));
 
     // Bind Radial Menu Buttons
-    vi.radialMenu.querySelector('#radial-rename-use').addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialMenu.querySelector('#radial-rotate-use').addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialMenu.querySelector('#radial-resize-use').addEventListener('click', () => { handleResize(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialMenu.querySelector('#radial-open-use').addEventListener('click', () => { handleOpen(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialMenu.querySelector('#radial-delete-use').addEventListener('click', async () => { 
-        await handleDelete(viState.activeRadialInstanceId); 
-        hideRadialMenu();
-    });
+    vi.radialRename.addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
+    vi.radialFlip.addEventListener('click', () => { handleFlip(viState.activeRadialInstanceId); hideRadialMenu(); });
+    vi.radialRotate.addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
+    vi.radialResize.addEventListener('click', () => { handleResize(viState.activeRadialInstanceId); hideRadialMenu(); });
+    vi.radialOpen.addEventListener('click', () => { handleOpen(viState.activeRadialInstanceId); hideRadialMenu(); });
+    vi.radialDelete.addEventListener('click', async () => { await handleDelete(viState.activeRadialInstanceId); hideRadialMenu(); });
 
     viListenersInitialized = true;
     return true;
@@ -123,25 +130,20 @@ function handleObjectDragStart(e, objectData) {
     e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData.InstanceID }));
     e.dataTransfer.effectAllowed = 'move';
 
-    // Hide default ghost image
     const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // 1x1 transparent gif
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     e.dataTransfer.setDragImage(img, 0, 0);
 
-    // Create custom ghost
     dragGhost = e.target.cloneNode(true);
-    // Copy computed styles for accurate size
     const styles = window.getComputedStyle(e.target);
     dragGhost.style.width = styles.width;
     dragGhost.style.height = styles.height;
     dragGhost.classList.add('dragging-ghost');
     document.body.appendChild(dragGhost);
     
-    // Position ghost initially based on cursor
     dragGhost.style.left = `${e.pageX}px`;
     dragGhost.style.top = `${e.pageY}px`;
 
-    // Make original element semi-transparent
     setTimeout(() => e.target.classList.add('dragging-source'), 0);
 }
 
@@ -161,9 +163,8 @@ function handleGridDragOver(e) {
     const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
     const cellHeight = rect.height / gridTemplateRows.length;
 
-    // Snap ghost to grid
-    const snapX = Math.floor(x / cellWidth) * cellWidth + rect.left + window.scrollX;
-    const snapY = Math.floor(y / cellHeight) * cellHeight + rect.top + window.scrollY;
+    const snapX = Math.floor(x / cellWidth) * cellWidth + rect.left;
+    const snapY = Math.floor(y / cellHeight) * cellHeight + rect.top;
 
     dragGhost.style.left = `${snapX}px`;
     dragGhost.style.top = `${snapY}px`;
@@ -223,7 +224,7 @@ function handleToolbarDragStart(e) {
 
 async function handleGridDrop(e) {
     e.preventDefault();
-    cleanupDrag(); // Remove custom ghost on drop
+    cleanupDrag();
     if (!e.dataTransfer.getData('application/json') || !document.getElementById('room-grid')) return;
     
     const data = JSON.parse(e.dataTransfer.getData('application/json'));
@@ -234,11 +235,11 @@ async function handleGridDrop(e) {
 
     const gridTemplateCols = getComputedStyle(gridEl).gridTemplateColumns.split(' ');
     const cellWidth = rect.width / gridTemplateCols.length;
-    const gridX = Math.min(gridTemplateCols.length, Math.max(0, Math.floor(x / cellWidth)));
+    const gridX = Math.min(gridTemplateCols.length - (data.width || 1) + 1, Math.max(0, Math.floor(x / cellWidth)));
 
     const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
     const cellHeight = rect.height / gridTemplateRows.length;
-    const gridY = Math.min(gridTemplateRows.length, Math.max(0, Math.floor(y / cellHeight)));
+    const gridY = Math.min(gridTemplateRows.length - (data.height || 1) + 1, Math.max(0, Math.floor(y / cellHeight)));
     
     if (data.type === 'new-object') {
         await handleToolbarDrop(data, gridX, gridY);
@@ -275,7 +276,7 @@ async function handleToolbarDrop(data, gridX, gridY) {
         PosY: gridY,
         Width: data.width,
         Height: data.height,
-        Orientation: "Horizontal",
+        Orientation: data.assetType === 'Door' ? 'East' : 'Horizontal',
         ShelfRows: data.shelfRows,
         ShelfCols: data.shelfCols,
     };
@@ -375,6 +376,15 @@ function renderGrid() {
     roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
     roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
 
+    // Set background size for visible grid lines
+    setTimeout(() => {
+        const rect = roomGrid.getBoundingClientRect();
+        const cellWidth = rect.width / gridWidth;
+        const cellHeight = rect.height / gridHeight;
+        roomGrid.style.backgroundSize = `${cellWidth}px ${cellHeight}px`;
+    }, 0);
+
+
     const childObjects = spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
     childObjects.forEach(obj => renderObject(obj, roomGrid));
 }
@@ -388,23 +398,32 @@ function renderObject(objectData, parentGrid) {
     objEl.dataset.instanceId = objectData.InstanceID;
     objEl.setAttribute('draggable', 'true');
 
-    const typeClass = assetInfo.AssetType === 'Shelf' ? 'shelf' : (assetInfo.AssetType === 'Container' ? 'container' : 'asset-item');
+    const typeClassMap = { 'Shelf': 'shelf', 'Container': 'container', 'Wall': 'wall', 'Door': 'door' };
+    const typeClass = typeClassMap[assetInfo.AssetType] || 'asset-item';
     objEl.classList.add(typeClass);
 
-    const width = objectData.Orientation === 'Vertical' ? objectData.Height : objectData.Width;
-    const height = objectData.Orientation === 'Vertical' ? objectData.Width : objectData.Height;
-
+    const isDoor = assetInfo.AssetType === 'Door';
+    const isRotatable = assetInfo.AssetType !== 'Wall';
+    
+    let width = objectData.Width;
+    let height = objectData.Height;
+    if (isRotatable && !isDoor && objectData.Orientation === 'Vertical') {
+        [width, height] = [height, width];
+    }
+    
     objEl.style.gridColumn = `${parseInt(objectData.PosX) + 1} / span ${width}`;
     objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
     
-    // Hide name on unit, show in tooltip on hover for containers/shelves
     if (typeClass === 'shelf' || typeClass === 'container') {
-        const childCount = spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
-        const tooltip = document.createElement('div');
-        tooltip.className = 'inventory-tooltip';
-        tooltip.innerHTML = `<strong>${assetInfo.AssetName}</strong><br>Assets: ${childCount}`;
-        objEl.appendChild(tooltip);
-    } else {
+        objEl.addEventListener('mouseenter', (e) => showTooltip(e, objectData));
+        objEl.addEventListener('mouseleave', hideTooltip);
+    } else if (isDoor) {
+        objEl.innerHTML = `<svg viewBox="0 0 500 500"><path d="M500,500h-95.21c.22-62.74-17.01-124.74-49.41-178.11-49.99-82.35-134.38-140.31-229.69-156.99-10.12-1.77-20.32-2.86-30.48-4.27v339.37H0v-28.91l.88-.75c.24-.02.44.46.58.46h61.92l.34-313.3c.24-.71.76-.83,1.42-.95,1.93-.35,7.04-.26,9.34-.26,25.01.06,53.35,4.68,77.52,10.94,139.42,36.08,243.83,158.82,254.8,303.02l93.2.84v28.91Z"/></svg>`;
+        const svg = objEl.querySelector('svg');
+        if (objectData.Orientation === 'North') svg.style.transform = 'rotate(270deg)';
+        if (objectData.Orientation === 'South') svg.style.transform = 'rotate(90deg)';
+        if (objectData.Orientation === 'West') svg.style.transform = 'scaleX(-1)';
+    } else if(typeClass !== 'wall') {
         objEl.innerHTML = `<span class="truncate">${assetInfo.AssetName}</span>`;
     }
 
@@ -426,12 +445,45 @@ function renderObject(objectData, parentGrid) {
     objEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (typeClass === 'shelf' || typeClass === 'container') {
-            showRadialMenu(e.clientX, e.clientY, objectData.InstanceID);
-        }
+        showRadialMenu(e.clientX, e.clientY, objectData.InstanceID);
     });
 
     parentGrid.appendChild(objEl);
+}
+
+// --- TOOLTIP ---
+function showTooltip(event, objectData) {
+    const assetInfo = getAssetByRefId(objectData.ReferenceID);
+    if (!assetInfo || !globalTooltip) return;
+
+    const childCount = spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
+    globalTooltip.innerHTML = `<strong>${assetInfo.AssetName}</strong><br>Assets: ${childCount}`;
+    
+    globalTooltip.style.display = 'block'; // Make it visible to calculate size
+
+    const rect = event.target.getBoundingClientRect();
+    const tooltipRect = globalTooltip.getBoundingClientRect();
+
+    let top = rect.top - tooltipRect.height - 10; // 10px buffer above
+    let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+    // Adjust if tooltip goes off-screen
+    if (top < 0) {
+        top = rect.bottom + 10; // move below
+    }
+    if (left < 0) {
+        left = 5; // 5px padding from left edge
+    }
+    if (left + tooltipRect.width > window.innerWidth) {
+        left = window.innerWidth - tooltipRect.width - 5; // 5px padding from right edge
+    }
+
+    globalTooltip.style.left = `${left}px`;
+    globalTooltip.style.top = `${top}px`;
+}
+
+function hideTooltip() {
+    if (globalTooltip) globalTooltip.style.display = 'none';
 }
 
 // --- UI POPULATION & HELPERS ---
@@ -479,8 +531,22 @@ async function updateObjectInStateAndSheet(updatedInstance) {
 
 // --- RADIAL MENU ---
 function showRadialMenu(x, y, instanceId) {
-    clearTimeout(hideMenuTimeout); // Prevent the menu from hiding immediately if it was in the process of fading out
+    clearTimeout(hideMenuTimeout);
     viState.activeRadialInstanceId = instanceId;
+    
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const asset = instance ? getAssetByRefId(instance.ReferenceID) : null;
+    if (!asset) return;
+
+    const isContainer = asset.AssetType === 'Shelf' || asset.AssetType === 'Container';
+    const isDoor = asset.AssetType === 'Door';
+    const isWall = asset.AssetType === 'Wall';
+
+    vi.radialRename.classList.toggle('hidden', isDoor || isWall);
+    vi.radialFlip.classList.toggle('hidden', !isDoor);
+    vi.radialOpen.classList.toggle('hidden', !isContainer);
+    vi.radialRotate.classList.toggle('hidden', isWall);
+    
     vi.radialMenu.style.left = `${x}px`;
     vi.radialMenu.style.top = `${y}px`;
     vi.radialMenu.classList.remove('hidden');
@@ -493,39 +559,55 @@ function showRadialMenu(x, y, instanceId) {
 function hideRadialMenu() {
     if (vi.radialMenu) {
         vi.radialMenu.classList.remove('visible');
-        setTimeout(() => {
-            vi.radialMenu.classList.add('hidden');
-        }, 200); // Wait for transition to finish before hiding
+        setTimeout(() => vi.radialMenu.classList.add('hidden'), 200);
     }
     viState.activeRadialInstanceId = null;
-    clearTimeout(hideMenuTimeout); // Ensure any pending timeouts are cleared
+    clearTimeout(hideMenuTimeout);
 }
 
 async function handleRename(instanceId) {
     if (!instanceId) return;
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-
     const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
     if (!asset) return;
-
-    const newName = prompt("Enter new name for the object:", asset.AssetName);
-    if (newName && newName.trim() !== '' && newName.trim() !== asset.AssetName) {
+    const newName = prompt("Enter new name:", asset.AssetName);
+    if (newName && newName.trim() && newName.trim() !== asset.AssetName) {
         asset.AssetName = newName.trim();
         await updateRowInSheet(ASSET_SHEET, asset.rowIndex, ASSET_HEADERS, asset);
         await loadAllSheetData();
     }
 }
 
-async function handleRotate(instanceId) {
+async function handleFlip(instanceId) {
     if (!instanceId) return;
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
-        instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
+        const flipMap = { 'East': 'West', 'West': 'East', 'North': 'South', 'South': 'North' };
+        instance.Orientation = flipMap[instance.Orientation] || 'East';
         await updateObjectInStateAndSheet(instance);
         renderGrid();
-        setTimeout(() => selectObject(instanceId), 50);
     }
+}
+
+async function handleRotate(instanceId) {
+    if (!instanceId) return;
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    if (!instance) return;
+
+    const asset = getAssetByRefId(instance.ReferenceID);
+    if (!asset) return;
+
+    if (asset.AssetType === 'Door') {
+        const rotateMap = { 'East': 'South', 'South': 'West', 'West': 'North', 'North': 'East' };
+        instance.Orientation = rotateMap[instance.Orientation] || 'South';
+    } else {
+        instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
+    }
+    
+    await updateObjectInStateAndSheet(instance);
+    renderGrid();
+    setTimeout(() => selectObject(instanceId), 50);
 }
 
 function handleOpen(instanceId) {
@@ -560,7 +642,6 @@ async function handleDelete(instanceId) {
         }
 
         await deleteRowFromSheet(SPATIAL_LAYOUT_SHEET, instance.rowIndex);
-        
         renderGrid();
     }
 }
@@ -585,37 +666,46 @@ function initResize(e, instanceId, direction) {
 
     const startX = e.clientX;
     const startY = e.clientY;
-    const startWidth = parseInt(instance.Width);
-    const startHeight = parseInt(instance.Height);
+    let startWidth = parseInt(instance.Width);
+    let startHeight = parseInt(instance.Height);
+    let startPosX = parseInt(instance.PosX);
+    let startPosY = parseInt(instance.PosY);
     
     const gridEl = document.getElementById('room-grid');
     const rect = gridEl.getBoundingClientRect();
-    const cellWidth = rect.width / gridEl.style.gridTemplateColumns.split(' ').length;
-    const cellHeight = rect.height / gridEl.style.gridTemplateRows.split(' ').length;
+    const gridTemplateCols = getComputedStyle(gridEl).gridTemplateColumns.split(' ');
+    const cellWidth = rect.width / gridTemplateCols.length;
+    const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
+    const cellHeight = rect.height / gridTemplateRows.length;
 
     function doDrag(e) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
-        
-        const orientation = instance.Orientation || 'Horizontal';
-        const w_prop = orientation === 'Horizontal' ? 'Width' : 'Height';
-        const h_prop = orientation === 'Horizontal' ? 'Height' : 'Width';
-        const start_w = orientation === 'Horizontal' ? startWidth : startHeight;
-        const start_h = orientation === 'Horizontal' ? startHeight : startWidth;
         const dx_cells = Math.round(dx / cellWidth);
         const dy_cells = Math.round(dy / cellHeight);
 
-        if (direction === 'e') instance[w_prop] = Math.max(1, start_w + dx_cells);
-        if (direction === 'w') instance[w_prop] = Math.max(1, start_w - dx_cells);
-        if (direction === 's') instance[h_prop] = Math.max(1, start_h + dy_cells);
-        if (direction === 'n') instance[h_prop] = Math.max(1, start_h - dy_cells);
+        let newWidth = startWidth, newHeight = startHeight, newPosX = startPosX, newPosY = startPosY;
+
+        if (direction === 'e') newWidth = Math.max(1, startWidth + dx_cells);
+        if (direction === 's') newHeight = Math.max(1, startHeight + dy_cells);
+        if (direction === 'w') {
+            newWidth = Math.max(1, startWidth - dx_cells);
+            if(newWidth !== startWidth) newPosX = startPosX + dx_cells;
+        }
+        if (direction === 'n') {
+            newHeight = Math.max(1, startHeight - dy_cells);
+            if(newHeight !== startHeight) newPosY = startPosY + dy_cells;
+        }
+        
+        instance.Width = newWidth;
+        instance.Height = newHeight;
+        instance.PosX = newPosX;
+        instance.PosY = newPosY;
         
         const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
         if(objEl) {
-            const width = instance.Orientation === 'Vertical' ? instance.Height : instance.Width;
-            const height = instance.Orientation === 'Vertical' ? instance.Width : instance.Height;
-            objEl.style.gridColumnEnd = `span ${width}`;
-            objEl.style.gridRowEnd = `span ${height}`;
+            objEl.style.gridColumn = `${newPosX + 1} / span ${newWidth}`;
+            objEl.style.gridRow = `${newPosY + 1} / span ${newHeight}`;
         }
     }
 
@@ -623,8 +713,10 @@ function initResize(e, instanceId, direction) {
         document.removeEventListener('mousemove', doDrag);
         document.removeEventListener('mouseup', stopDrag);
         updateObjectInStateAndSheet(instance);
+        setTimeout(() => createObjectResizeHandles(document.querySelector(`[data-instance-id="${instanceId}"]`), instanceId), 50);
     }
 
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
 }
+

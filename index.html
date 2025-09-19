@@ -29,6 +29,18 @@
           </g>
         </symbol>
         
+        <!-- Flip Icon -->
+        <symbol id="icon-flip" viewBox="0 0 500 500">
+            <g opacity=".5">
+                <path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/>
+            </g>
+            <g>
+                <path d="M214.71,443.38v-.59l25.81-54.45c1.25-1.17,2.62.01,2.66,1.47v52.55c.04.81-.25,1.55-.89,2.04l-25.99.16c-.87.07-1.09-.66-1.6-1.19Z"/>
+                <path d="M287.78,442.8v.59c-.51.53-.73,1.26-1.6,1.19l-25.99-.16c-.64-.49-.92-1.23-.89-2.04v-52.26c-.05-2.05,1.77-3.09,3.01-1.22l25.47,53.91ZM283.97,441.62l-21.71-45.48v45.48h21.71Z"/>
+                <path d="M251.98,386.46c1.94,1,1.72,4.95,1.48,6.91-.32,2.64-4.11,2.69-4.42,0-.23-1.99-.49-5.88,1.47-6.9h1.47Z"/>
+            </g>
+        </symbol>
+
         <!-- Rotate Icon -->
         <symbol id="icon-rotate" viewBox="0 0 500 500">
           <g opacity=".5">
@@ -105,6 +117,7 @@
     <div id="radial-menu" class="radial-menu hidden">
         <svg viewBox="0 0 500 500" class="radial-svg-container">
             <use href="#icon-rename" class="radial-button" id="radial-rename-use"/>
+            <use href="#icon-flip" class="radial-button hidden" id="radial-flip-use"/>
             <use href="#icon-rotate" class="radial-button" id="radial-rotate-use"/>
             <use href="#icon-resize" class="radial-button" id="radial-resize-use"/>
             <use href="#icon-open" class="radial-button" id="radial-open-use"/>
@@ -321,6 +334,8 @@
                                 <div class="toolbar-item bg-white border" draggable="true" data-asset-type="Shelf" data-name="Tall Shelf" data-width="2" data-height="5" data-shelf-rows="5" data-shelf-cols="2">Tall Shelf (2x5)</div>
                                 <div class="toolbar-item bg-white border" draggable="true" data-asset-type="Container" data-name="New Box" data-width="2" data-height="2">Box (2x2)</div>
                                 <div class="toolbar-item bg-white border" draggable="true" data-asset-type="Container" data-name="Small Box" data-width="1" data-height="1">Small Box (1x1)</div>
+                                <div class="toolbar-item bg-white border" draggable="true" data-asset-type="Wall" data-name="Wall" data-width="1" data-height="1">Wall</div>
+                                <div class="toolbar-item bg-white border" draggable="true" data-asset-type="Door" data-name="Door" data-width="1" data-height="1">Door</div>
                             </div>
                             <h3 class="font-bold mb-4 mt-6">Assets</h3>
                             <div id="unplaced-assets-list" class="space-y-2 max-h-96 overflow-y-auto">

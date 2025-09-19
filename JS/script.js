@@ -1060,4 +1060,3 @@ async function appendRowToSheet(sheetName, headers, dataObject) {
         return newRowIndex;
     }
 }
-
