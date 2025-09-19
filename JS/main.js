@@ -6,11 +6,13 @@ import { initVisualInventory } from './visual_inventory_logic.js';
 
 // --- INITIALIZATION ---
 
-window.onload = () => {
+// Use DOMContentLoaded to ensure the entire DOM is ready before running scripts
+window.addEventListener('DOMContentLoaded', () => {
     ui.initUI(); // Initialize DOM element references in ui.js
     loadVisibleColumns();
     setupEventListeners();
-};
+});
+
 
 /**
  * Loads the user's preferred visible columns from local storage.
@@ -136,7 +138,6 @@ async function initializeAppData() {
         ];
         const { meta, data } = await api.fetchSheetMetadataAndData(ranges);
         
-        // Store sheet IDs for later use (e.g., deleting rows)
         const newSheetIds = {};
         meta.sheets.forEach(sheet => {
             newSheetIds[sheet.properties.title] = sheet.properties.sheetId;
@@ -151,7 +152,6 @@ async function initializeAppData() {
         processRoomData(roomValues);
         processSpatialLayoutData(layoutValues);
 
-        // Populate Main UI
         applyFiltersAndSearch();
         ui.populateFilterDropdowns();
         ui.populateModalDropdowns();
@@ -159,7 +159,6 @@ async function initializeAppData() {
         ui.renderOverviewCharts(handleChartClick);
         ui.populateColumnSelector();
 
-        // Initialize Visual Inventory if its tab is active
         if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
             initVisualInventory();
         }
@@ -202,7 +201,6 @@ function processAssetData(values) {
                 let value = row[headerMap[header]];
                 if (header === "LoginInfo" && value) {
                     try {
-                        // Basic check if it looks like base64
                         if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
                             value = atob(value);
                         }
@@ -353,7 +351,6 @@ function setupEventListeners() {
     ui.dom.signoutButton.onclick = handleSignoutClick;
     ui.dom.refreshBtn.onclick = initializeAppData;
 
-    // Listen for data changes from other modules (like visual inventory)
     window.addEventListener('datachanged', () => initializeAppData());
 
     ui.dom.addAssetBtn.onclick = () => {
@@ -378,39 +375,31 @@ function setupEventListeners() {
     ui.dom.employeesTab.addEventListener('click', () => switchTab('employees'));
     ui.dom.visualInventoryTab.addEventListener('click', () => switchTab('visual-inventory'));
 
-    // Dynamic "Add New" dropdowns
     ui.dom.site.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.site, document.getElementById('site-new')));
     ui.dom.location.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.location, document.getElementById('location-new')));
     ui.dom.container.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.container, document.getElementById('container-new')));
     ui.dom.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.assetType, document.getElementById('asset-type-new')));
     ui.dom.assignedTo.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.assignedTo, document.getElementById('assigned-to-new')));
 
-    // Filters
     document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
         el.addEventListener('input', applyFiltersAndSearch);
     });
     
-    // Chart type selectors
     document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', () => ui.renderOverviewCharts(handleChartClick)));
 
-    // Asset form submission
     ui.dom.assetForm.onsubmit = handleAssetFormSubmit;
 
-    // Asset table interactions (delegated)
     ui.dom.assetTableHead.addEventListener('click', handleSortClick);
     ui.dom.assetTableBody.addEventListener('click', handleTableClick);
 
-    // Employee asset list interactions (delegated)
     ui.dom.employeeAssetList.addEventListener('click', (e) => {
         const targetItem = e.target.closest('.employee-asset-item');
         if (targetItem) ui.openDetailModal(targetItem.dataset.id, openEditModal);
     });
 
-    // Detail modal close
     ui.dom.detailModalCloseBtn.onclick = () => ui.toggleModal(ui.dom.detailModal, false);
     ui.dom.detailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.detailModal, false);
     
-    // Close actions dropdown when clicking elsewhere
     window.addEventListener('click', (e) => {
         if (!e.target.closest('.actions-menu')) {
             document.querySelectorAll('.actions-dropdown.show').forEach(d => d.classList.remove('show'));
@@ -474,7 +463,7 @@ async function handleAssetFormSubmit(e) {
         } else {
             await api.appendSheetValues(ASSET_SHEET, [rowData]);
         }
-        await initializeAppData(); // Full refresh after edit/add
+        await initializeAppData();
     } catch (err) {
         console.error(err);
         ui.showMessage(`Error saving asset: ${err.result.error.message}`);
@@ -485,7 +474,7 @@ async function handleAssetFormSubmit(e) {
 }
 
 /**
- * Handles all clicks within the asset table body using event delegation.
+ * Handles clicks within the asset table body (for actions, details, etc.).
  * @param {Event} e - The click event.
  */
 function handleTableClick(e) {
@@ -518,14 +507,14 @@ function handleTableClick(e) {
 }
 
 /**
- * Handles clicks on the table header for sorting.
+ * Handles clicks on the table header for sorting columns.
  * @param {Event} e - The click event.
  */
 function handleSortClick(e) {
-    const target = e.target.closest('th[data-column]');
-    if (!target) return;
+    const th = e.target.closest('th[data-column]');
+    if (!th) return;
 
-    const colName = target.dataset.column;
+    const colName = th.dataset.column;
     if (state.sortState.column === colName) {
         state.sortState.direction = state.sortState.direction === 'asc' ? 'desc' : 'asc';
     } else {

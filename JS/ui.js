@@ -76,6 +76,7 @@ export function showMessage(text, type = 'error') {
  * @param {boolean} show - True to show the modal, false to hide.
  */
 export function toggleModal(modal, show) {
+    if (!modal) return;
     if (show) {
         modal.classList.remove('hidden');
         setTimeout(() => {
@@ -163,6 +164,17 @@ export function renderTable(assetsToRender) {
     headerHTML += `<th scope="col" class="px-6 py-3">Actions</th>`;
     headerRow.innerHTML = headerHTML;
     dom.assetTableHead.appendChild(headerRow);
+
+    // Re-attach the 'select-all' checkbox listener after rendering
+    const selectAllCheckbox = dom.assetTableHead.querySelector('#select-all-assets');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+            dom.assetTableBody.querySelectorAll('.asset-checkbox').forEach(checkbox => {
+                checkbox.checked = e.target.checked;
+            });
+            updateBulkEditButtonVisibility();
+        });
+    }
 
     const sortedAssets = [...assetsToRender].sort((a, b) => {
         const valA = a[state.sortState.column] || '';
