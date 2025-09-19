@@ -12,6 +12,7 @@ let viState = {
 // --- DOM REFERENCES & FLAGS ---
 let vi = {};
 let viListenersInitialized = false;
+let hideMenuTimeout; // Variable to manage the hide timer
 
 // --- INITIALIZATION ---
 function setupAndBindVisualInventory() {
@@ -72,6 +73,16 @@ function setupAndBindVisualInventory() {
         }
     });
     
+    // Add hover listeners for the fade-out effect
+    vi.radialMenu.addEventListener('mouseenter', () => {
+        clearTimeout(hideMenuTimeout); // Cancel hiding if the mouse re-enters
+    });
+
+    vi.radialMenu.addEventListener('mouseleave', () => {
+        // Start a timer to hide the menu after a short delay
+        hideMenuTimeout = setTimeout(hideRadialMenu, 500); // 500ms delay
+    });
+
     // Bind Radial Menu Buttons
     vi.radialMenu.querySelector('#radial-rename-use').addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
     vi.radialMenu.querySelector('#radial-rotate-use').addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
@@ -81,7 +92,6 @@ function setupAndBindVisualInventory() {
         await handleDelete(viState.activeRadialInstanceId); 
         hideRadialMenu();
     });
-
 
     viListenersInitialized = true;
     return true;
@@ -397,6 +407,7 @@ async function updateObjectInStateAndSheet(updatedInstance) {
 
 // --- RADIAL MENU ---
 function showRadialMenu(x, y, instanceId) {
+    clearTimeout(hideMenuTimeout); // Prevent the menu from hiding immediately if it was in the process of fading out
     viState.activeRadialInstanceId = instanceId;
     vi.radialMenu.style.left = `${x}px`;
     vi.radialMenu.style.top = `${y}px`;
@@ -412,9 +423,10 @@ function hideRadialMenu() {
         vi.radialMenu.classList.remove('visible');
         setTimeout(() => {
             vi.radialMenu.classList.add('hidden');
-        }, 200);
+        }, 200); // Wait for transition to finish before hiding
     }
     viState.activeRadialInstanceId = null;
+    clearTimeout(hideMenuTimeout); // Ensure any pending timeouts are cleared
 }
 
 async function handleRename(instanceId) {

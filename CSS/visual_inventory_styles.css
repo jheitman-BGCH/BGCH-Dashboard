@@ -89,13 +89,15 @@
 /* --- New Radial Menu using SVG Sprite --- */
 .radial-menu {
     position: fixed;
-    width: 200px;
-    height: 200px;
+    /* Reduced size by ~15% from 200px */
+    width: 170px;
+    height: 170px;
     z-index: 1000;
-    pointer-events: none; /* Let clicks pass through the container div */
-    transform: translate(-50%, -50%) scale(0.5);
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(0.8);
     opacity: 0;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+    /* Adjusted transition for a smoother fade */
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease-out;
 }
 
 .radial-menu.visible {
@@ -112,11 +114,17 @@
 .radial-button {
     cursor: pointer;
     opacity: 0.8; /* Dimmed by default */
-    transition: opacity 0.15s ease-in-out;
+    transition: opacity 0.15s ease-in-out, filter 0.15s ease-in-out;
 }
 
 .radial-button:hover {
     opacity: 1; /* Full opacity on hover */
+    filter: brightness(1.1) saturate(1.2); /* Add a pop effect */
+}
+
+/* Specific hover effect for the delete button to make it more vibrant */
+#radial-delete-use:hover {
+    filter: brightness(1.25);
 }
 
 
@@ -134,4 +142,6 @@
 .resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
 .resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
 .resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+
+
 
