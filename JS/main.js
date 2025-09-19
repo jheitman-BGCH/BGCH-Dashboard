@@ -397,6 +397,7 @@ function setupEventListeners() {
     ui.dom.assetForm.onsubmit = handleAssetFormSubmit;
 
     // Asset table interactions (delegated)
+    ui.dom.assetTableHead.addEventListener('click', handleSortClick);
     ui.dom.assetTableBody.addEventListener('click', handleTableClick);
 
     // Employee asset list interactions (delegated)
@@ -495,18 +496,6 @@ function handleTableClick(e) {
     }
     const assetId = target.closest('tr')?.dataset.id;
 
-    if(target.closest('th[data-column]')){
-        const colName = target.closest('th[data-column]').dataset.column;
-        if (state.sortState.column === colName) {
-            state.sortState.direction = state.sortState.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-            state.sortState.column = colName;
-            state.sortState.direction = 'asc';
-        }
-        applyFiltersAndSearch();
-        return;
-    }
-
     if (target.closest('.actions-btn')) {
         const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
         document.querySelectorAll('.actions-dropdown.show').forEach(d => d !== dropdown && d.classList.remove('show'));
@@ -526,6 +515,24 @@ function handleTableClick(e) {
         return;
     }
     if (assetId) ui.openDetailModal(assetId, openEditModal);
+}
+
+/**
+ * Handles clicks on the table header for sorting.
+ * @param {Event} e - The click event.
+ */
+function handleSortClick(e) {
+    const target = e.target.closest('th[data-column]');
+    if (!target) return;
+
+    const colName = target.dataset.column;
+    if (state.sortState.column === colName) {
+        state.sortState.direction = state.sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortState.column = colName;
+        state.sortState.direction = 'asc';
+    }
+    applyFiltersAndSearch();
 }
 
 /**
@@ -716,3 +723,4 @@ function handleChartClick(event, elements, filterId) {
         }
     }
 }
+

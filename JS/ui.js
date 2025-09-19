@@ -29,8 +29,8 @@ export function initUI() {
         'column-checkboxes', 'column-cancel-btn', 'column-save-btn'
     ];
     ids.forEach(id => {
-        // Simple conversion from snake-case to camelCase for property names
-        const key = id.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+        // Convert snake_case and kebab-case to camelCase for property names
+        const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
         dom[key] = document.getElementById(id);
     });
 }
@@ -163,8 +163,6 @@ export function renderTable(assetsToRender) {
     headerHTML += `<th scope="col" class="px-6 py-3">Actions</th>`;
     headerRow.innerHTML = headerHTML;
     dom.assetTableHead.appendChild(headerRow);
-
-    // Event listeners for sorting are attached in main.js
 
     const sortedAssets = [...assetsToRender].sort((a, b) => {
         const valA = a[state.sortState.column] || '';
@@ -405,3 +403,4 @@ export function renderOverviewCharts(clickCallback) {
     state.charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
     state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'employee-select'));
 }
+
