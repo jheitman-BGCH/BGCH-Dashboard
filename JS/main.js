@@ -1,5 +1,5 @@
 // JS/main.js
-import { state, CLIENT_ID, SCOPES, ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS } from './state.js';
+import { state, CLIENT_ID, SCOPES, ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS } from './state.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
@@ -161,9 +161,10 @@ async function initializeAppData() {
         const roomValues = data[1].values || [];
         const layoutValues = data[2].values || [];
 
-        processAssetData(assetValues);
-        processRoomData(roomValues);
-        processSpatialLayoutData(layoutValues);
+        // Use the unified processing function for all sheets
+        state.allAssets = processSheetData(assetValues, ASSET_HEADERS, 'AssetID');
+        state.allRooms = processSheetData(roomValues, ROOMS_HEADERS, 'RoomID');
+        state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADERS, 'InstanceID');
 
         applyFiltersAndSearch();
         ui.populateFilterDropdowns();
@@ -190,121 +191,80 @@ async function initializeAppData() {
 }
 
 /**
- * Processes raw data from the 'Asset' sheet into structured objects.
- * @param {Array<Array<any>>} values - The raw cell values from the sheet.
+ * A unified function to process raw sheet data into an array of structured objects.
+ * It maps row data to object keys based on a predefined header array, making it resilient
+ * to column order changes and trimming whitespace from actual sheet headers.
+ * @param {Array<Array<any>>} values - The raw cell values from the sheet, with row 0 being headers.
+ * @param {string[]} expectedHeaders - The array of header strings the application expects.
+ * @param {string} idKey - The name of the property that serves as the unique identifier for a row.
+ * @returns {Array<Object>} An array of processed objects.
  */
-function processAssetData(values) {
+function processSheetData(values, expectedHeaders, idKey) {
     if (!values || values.length < 1) {
-        state.allAssets = [];
-        return;
+        return [];
     }
-    const headers = values[0];
+
+    // Trim headers from the sheet to prevent issues with leading/trailing whitespace.
+    const actualHeaders = values[0].map(h => h ? String(h).trim() : '');
     const headerMap = {};
-    headers.forEach((header, index) => headerMap[header] = index);
+    actualHeaders.forEach((header, index) => {
+        headerMap[header] = index;
+    });
+
+    // Check for missing headers that are expected by the app
+    expectedHeaders.forEach(header => {
+        if (headerMap[header] === undefined) {
+            console.warn(`Expected header "${header}" not found in sheet. Data for this column will be missing.`);
+        }
+    });
+
     const dataRows = values.slice(1);
-    const assetIdIndex = headerMap["AssetID"];
+    const idKeyIndex = headerMap[idKey];
 
-    state.allAssets = dataRows
-        .map((row, index) => ({ data: row, originalIndex: index }))
-        .filter(item => item.data && item.data.length > assetIdIndex && item.data[assetIdIndex])
-        .map(item => {
-            const row = item.data;
-            const asset = { rowIndex: item.originalIndex + 2 };
-            ASSET_HEADERS.forEach(header => {
-                let value = row[headerMap[header]];
-                if (header === "LoginInfo" && value) {
-                    try {
-                        // Basic check if the string could be base64
-                        if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
-                            value = atob(value);
-                        }
-                    } catch (e) {
-                        console.warn("Could not decode login info, treating as plain text:", value);
-                    }
-                }
-                asset[header] = value;
-            });
-            return asset;
-        });
-}
-
-/**
- * Processes raw data from the 'Rooms' sheet.
- * @param {Array<Array<any>>} values - Raw cell values.
- */
-function processRoomData(values) {
-    if (!values || values.length < 1) {
-        state.allRooms = [];
-        return;
-    }
-    const headers = values[0].map(h => h.trim());
-    const headerMap = {};
-    headers.forEach((header, index) => headerMap[header] = index);
-    const dataRows = values.slice(1);
-    const roomIdIndex = headerMap["RoomID"];
-
-    state.allRooms = dataRows
-        .map((row, index) => ({ data: row, originalIndex: index }))
-        .filter(item => item.data && item.data.length > roomIdIndex && item.data[roomIdIndex])
-        .map(item => {
-            const row = item.data;
-            return {
-                rowIndex: item.originalIndex + 2,
-                RoomID: row[headerMap["RoomID"]],
-                RoomName: row[headerMap["RoomName"]] || '',
-                GridWidth: parseInt(row[headerMap["GridWidth"]], 10) || 10,
-                GridHeight: parseInt(row[headerMap["GridHeight"]], 10) || 10,
-            };
-        });
-}
-
-/**
- * Processes raw data from the 'Spatial Layout' sheet.
- * @param {Array<Array<any>>} values - Raw cell values.
- */
-function processSpatialLayoutData(values) {
-    if (!values || values.length < 1) {
-        state.spatialLayoutData = [];
-        return;
-    }
-    const headers = values[0];
-    const headerMap = {};
-    headers.forEach((header, index) => headerMap[header.trim()] = index);
-    const dataRows = values.slice(1);
-    const instanceIdIndex = headerMap["InstanceID"];
-
-    if (instanceIdIndex === undefined) {
-        console.error('CRITICAL: "InstanceID" header not found in Spatial Layout sheet. Headers found:', headers);
-        state.spatialLayoutData = [];
-        return;
+    if (idKeyIndex === undefined) {
+        console.error(`CRITICAL: The unique ID key "${idKey}" was not found in the sheet headers. Cannot process data. Headers found:`, actualHeaders);
+        return [];
     }
 
     const processedData = [];
     dataRows.forEach((row, index) => {
-        const originalSheetRow = index + 2;
-        if (!row || row.join('').trim() === '') return;
-        const instanceId = row[instanceIdIndex];
-        if (!instanceId) {
-            console.warn(`Skipping row ${originalSheetRow} in 'Spatial Layout' because "InstanceID" is missing. Data:`, row);
-            return;
+        const originalSheetRow = index + 2; // +1 for slice, +1 for 1-based index
+        // Ensure the row is not empty and has a value for the primary ID.
+        if (!row || row.length === 0 || !row[idKeyIndex]) {
+            return; // Skip empty or invalid rows silently
         }
 
-        processedData.push({
-            rowIndex: originalSheetRow,
-            InstanceID: instanceId,
-            ReferenceID: row[headerMap["ReferenceID"]],
-            ParentID: row[headerMap["ParentID"]],
-            PosX: parseInt(row[headerMap["PosX"]], 10) || 0,
-            PosY: parseInt(row[headerMap["PosY"]], 10) || 0,
-            Width: parseInt(row[headerMap["Width"]], 10) || 1,
-            Height: parseInt(row[headerMap["Height"]], 10) || 1,
-            Orientation: row[headerMap["Orientation"]] || 'Horizontal',
-            ShelfRows: row[headerMap["ShelfRows"]] ? parseInt(row[headerMap["ShelfRows"]], 10) : null,
-            ShelfCols: row[headerMap["ShelfCols"]] ? parseInt(row[headerMap["ShelfCols"]], 10) : null,
+        const item = { rowIndex: originalSheetRow };
+        expectedHeaders.forEach(header => {
+            const colIndex = headerMap[header];
+            let value = (colIndex !== undefined) ? row[colIndex] : undefined;
+
+            // Centralized data transformations
+            if (header === "LoginInfo" && value) {
+                try {
+                    if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
+                        value = atob(value);
+                    }
+                } catch (e) {
+                    console.warn(`Could not decode login info for row ${originalSheetRow}, treating as plain text.`);
+                }
+            } else if (['GridWidth', 'GridHeight', 'PosX', 'PosY', 'Width', 'Height', 'ShelfRows', 'ShelfCols'].includes(header)) {
+                const parsedValue = value ? parseInt(value, 10) : NaN;
+                if (isNaN(parsedValue)) {
+                    if (['Width', 'Height'].includes(header)) value = 1;
+                    else if (['PosX', 'PosY'].includes(header)) value = 0;
+                    else if (['GridWidth', 'GridHeight'].includes(header)) value = 10;
+                    else value = null;
+                } else {
+                    value = parsedValue;
+                }
+            }
+            item[header] = value === undefined ? '' : value; // Default to empty string if column is missing or value is undefined
         });
+        processedData.push(item);
     });
-    
-    state.spatialLayoutData = processedData;
+
+    return processedData;
 }
 
 
