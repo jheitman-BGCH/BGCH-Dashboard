@@ -8,13 +8,58 @@ export const ROOMS_SHEET = 'Rooms';
 export const SPATIAL_LAYOUT_SHEET = 'Spatial Layout';
 
 export const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
-export const ASSET_HEADERS = [
-    "AssetID", "AssetName", "AssetType", "Quantity", "Site", "Location", "Container",
-    "IntendedUserType", "Condition", "IDCode", "ModelNumber", "SerialNumber", "AssignedTo",
-    "DateIssued", "PurchaseDate", "Specs", "LoginInfo", "Notes", "ParentObjectID"
+
+// --- HEADER MAPPING CONFIGURATION ---
+// This section defines the expected data keys and their possible header names in the spreadsheet.
+// This allows for flexibility in sheet column naming (e.g., "AssetID" vs "Asset ID").
+
+export const ASSET_HEADER_MAP = [
+    { key: "AssetID", aliases: ["AssetID", "Asset ID"] },
+    { key: "AssetName", aliases: ["AssetName", "Asset Name", "Item Name"] },
+    { key: "AssetType", aliases: ["AssetType", "Asset Type", "Item Type"] },
+    { key: "Quantity", aliases: ["Quantity", "No. of Item"] },
+    { key: "Site", aliases: ["Site"] },
+    { key: "Location", aliases: ["Location"] },
+    { key: "Container", aliases: ["Container"] },
+    { key: "IntendedUserType", aliases: ["IntendedUserType", "Intended User Type", "Intended User"] },
+    { key: "Condition", aliases: ["Condition"] },
+    { key: "IDCode", aliases: ["IDCode", "ID Code"] },
+    { key: "ModelNumber", aliases: ["ModelNumber", "Model Number"] },
+    { key: "SerialNumber", aliases: ["SerialNumber", "Serial Number"] },
+    { key: "AssignedTo", aliases: ["AssignedTo", "Assigned To", "Assignment (Employee)"] },
+    { key: "DateIssued", aliases: ["DateIssued", "Date Issued"] },
+    { key: "PurchaseDate", aliases: ["PurchaseDate", "Purchase Date"] },
+    { key: "Specs", aliases: ["Specs"] },
+    { key: "LoginInfo", aliases: ["LoginInfo", "Login Info", "Password / Login Info"] },
+    { key: "Notes", aliases: ["Notes"] },
+    { key: "ParentObjectID", aliases: ["ParentObjectID", "Parent Object ID"] }
 ];
-export const ROOMS_HEADERS = ["RoomID", "RoomName", "GridWidth", "GridHeight"];
-export const SPATIAL_LAYOUT_HEADERS = ["InstanceID", "ReferenceID", "ParentID", "PosX", "PosY", "Width", "Height", "Orientation", "ShelfRows", "ShelfCols"];
+
+export const ROOMS_HEADER_MAP = [
+    { key: "RoomID", aliases: ["RoomID", "Room ID"] },
+    { key: "RoomName", aliases: ["RoomName", "Room Name"] },
+    { key: "GridWidth", aliases: ["GridWidth", "Grid Width"] },
+    { key: "GridHeight", aliases: ["GridHeight", "Grid Height"] }
+];
+
+export const SPATIAL_LAYOUT_HEADER_MAP = [
+    { key: "InstanceID", aliases: ["InstanceID", "Instance ID"] },
+    { key: "ReferenceID", aliases: ["ReferenceID", "Reference ID"] },
+    { key: "ParentID", aliases: ["ParentID", "Parent ID"] },
+    { key: "PosX", aliases: ["PosX", "Pos X"] },
+    { key: "PosY", aliases: ["PosY", "Pos Y"] },
+    { key: "Width", aliases: ["Width"] },
+    { key: "Height", aliases: ["Height"] },
+    { key: "Orientation", aliases: ["Orientation"] },
+    { key: "ShelfRows", aliases: ["ShelfRows", "Shelf Rows"] },
+    { key: "ShelfCols", aliases: ["ShelfCols", "Shelf Cols"] }
+];
+
+// --- DERIVED HEADER ARRAYS ---
+// These are generated from the maps for compatibility with parts of the app that just need the keys.
+export const ASSET_HEADERS = ASSET_HEADER_MAP.map(h => h.key);
+export const ROOMS_HEADERS = ROOMS_HEADER_MAP.map(h => h.key);
+export const SPATIAL_LAYOUT_HEADERS = SPATIAL_LAYOUT_HEADER_MAP.map(h => h.key);
 
 
 export const CHART_COLORS = [
