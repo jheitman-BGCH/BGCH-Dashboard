@@ -1,5 +1,5 @@
 // JS/main.js
-import { state, CLIENT_ID, SCOPES, ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS } from './state.js';
+import { state, CLIENT_ID, SCOPES, ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
@@ -161,10 +161,10 @@ async function initializeAppData() {
         const roomValues = data[1].values || [];
         const layoutValues = data[2].values || [];
 
-        // Use the unified processing function for all sheets
-        state.allAssets = processSheetData(assetValues, ASSET_HEADERS, 'AssetID');
-        state.allRooms = processSheetData(roomValues, ROOMS_HEADERS, 'RoomID');
-        state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADERS, 'InstanceID');
+        // Use the unified processing function with header maps for all sheets
+        state.allAssets = processSheetData(assetValues, ASSET_HEADER_MAP, 'AssetID');
+        state.allRooms = processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID');
+        state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID');
 
         applyFiltersAndSearch();
         ui.populateFilterDropdowns();
@@ -192,34 +192,55 @@ async function initializeAppData() {
 
 /**
  * A unified function to process raw sheet data into an array of structured objects.
- * It maps row data to object keys based on a predefined header array, making it resilient
- * to column order changes and trimming whitespace from actual sheet headers.
+ * It maps row data to object keys based on a flexible header map, making it resilient
+ * to column order and naming variations (case-insensitive, ignores spaces).
  * @param {Array<Array<any>>} values - The raw cell values from the sheet, with row 0 being headers.
- * @param {string[]} expectedHeaders - The array of header strings the application expects.
+ * @param {Array<Object>} headerMapConfig - The configuration array mapping keys to header aliases.
  * @param {string} idKey - The name of the property that serves as the unique identifier for a row.
  * @returns {Array<Object>} An array of processed objects.
  */
-function processSheetData(values, expectedHeaders, idKey) {
+function processSheetData(values, headerMapConfig, idKey) {
     if (!values || values.length < 1) {
         return [];
     }
 
-    // Trim headers from the sheet to prevent issues with leading/trailing whitespace.
     const actualHeaders = values[0].map(h => h ? String(h).trim() : '');
-    const headerMap = {};
+    
+    // Helper to normalize headers for robust matching (lowercase, no spaces)
+    const normalizeHeader = (header) => header.toLowerCase().replace(/\s+/g, '');
+
+    // Create a map from the normalized header on the sheet to its original column index
+    const normalizedSheetHeaderMap = {};
     actualHeaders.forEach((header, index) => {
-        headerMap[header] = index;
+        const normalized = normalizeHeader(header);
+        if (normalized) {
+            normalizedSheetHeaderMap[normalized] = index;
+        }
     });
 
-    // Check for missing headers that are expected by the app
-    expectedHeaders.forEach(header => {
-        if (headerMap[header] === undefined) {
-            console.warn(`Expected header "${header}" not found in sheet. Data for this column will be missing.`);
+    // This will map the CANONICAL key (e.g., "AssetID") to the column index.
+    const columnIndexMap = {};
+    
+    // Build the columnIndexMap by checking normalized aliases against the normalized sheet headers.
+    headerMapConfig.forEach(config => {
+        for (const alias of config.aliases) {
+            const normalizedAlias = normalizeHeader(alias);
+            if (normalizedSheetHeaderMap.hasOwnProperty(normalizedAlias)) {
+                columnIndexMap[config.key] = normalizedSheetHeaderMap[normalizedAlias];
+                return; // Found a match for this key, move to the next config item.
+            }
+        }
+    });
+
+    // Check for missing headers that are expected by the app and issue warnings.
+    headerMapConfig.forEach(config => {
+        if (columnIndexMap[config.key] === undefined) {
+            console.warn(`Expected header "${config.key}" (or its aliases: ${config.aliases.join(', ')}) not found in sheet. Data for this column will be missing.`);
         }
     });
 
     const dataRows = values.slice(1);
-    const idKeyIndex = headerMap[idKey];
+    const idKeyIndex = columnIndexMap[idKey];
 
     if (idKeyIndex === undefined) {
         console.error(`CRITICAL: The unique ID key "${idKey}" was not found in the sheet headers. Cannot process data. Headers found:`, actualHeaders);
@@ -231,16 +252,17 @@ function processSheetData(values, expectedHeaders, idKey) {
         const originalSheetRow = index + 2; // +1 for slice, +1 for 1-based index
         // Ensure the row is not empty and has a value for the primary ID.
         if (!row || row.length === 0 || !row[idKeyIndex]) {
-            return; // Skip empty or invalid rows silently
+            return; // Skip empty or invalid rows.
         }
 
         const item = { rowIndex: originalSheetRow };
-        expectedHeaders.forEach(header => {
-            const colIndex = headerMap[header];
+        headerMapConfig.forEach(config => {
+            const headerKey = config.key;
+            const colIndex = columnIndexMap[headerKey];
             let value = (colIndex !== undefined) ? row[colIndex] : undefined;
 
             // Centralized data transformations
-            if (header === "LoginInfo" && value) {
+            if (headerKey === "LoginInfo" && value) {
                 try {
                     if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
                         value = atob(value);
@@ -248,18 +270,18 @@ function processSheetData(values, expectedHeaders, idKey) {
                 } catch (e) {
                     console.warn(`Could not decode login info for row ${originalSheetRow}, treating as plain text.`);
                 }
-            } else if (['GridWidth', 'GridHeight', 'PosX', 'PosY', 'Width', 'Height', 'ShelfRows', 'ShelfCols'].includes(header)) {
+            } else if (['GridWidth', 'GridHeight', 'PosX', 'PosY', 'Width', 'Height', 'ShelfRows', 'ShelfCols'].includes(headerKey)) {
                 const parsedValue = value ? parseInt(value, 10) : NaN;
                 if (isNaN(parsedValue)) {
-                    if (['Width', 'Height'].includes(header)) value = 1;
-                    else if (['PosX', 'PosY'].includes(header)) value = 0;
-                    else if (['GridWidth', 'GridHeight'].includes(header)) value = 10;
+                    if (['Width', 'Height'].includes(headerKey)) value = 1;
+                    else if (['PosX', 'PosY'].includes(headerKey)) value = 0;
+                    else if (['GridWidth', 'GridHeight'].includes(headerKey)) value = 10;
                     else value = null;
                 } else {
                     value = parsedValue;
                 }
             }
-            item[header] = value === undefined ? '' : value; // Default to empty string if column is missing or value is undefined
+            item[headerKey] = value === undefined ? '' : value; // Default to empty string if column is missing or value is undefined
         });
         processedData.push(item);
     });
@@ -686,3 +708,4 @@ function handleChartClick(event, elements, filterId) {
         }
     }
 }
+
