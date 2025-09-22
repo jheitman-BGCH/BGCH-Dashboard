@@ -29,8 +29,8 @@ export function initUI() {
         'column-checkboxes', 'column-cancel-btn', 'column-save-btn'
     ];
     ids.forEach(id => {
-        // Convert snake_case and kebab-case to camelCase for property names
-        const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
+        // Simple conversion from snake-case to camelCase for property names
+        const key = id.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
         dom[key] = document.getElementById(id);
     });
 }
@@ -76,7 +76,6 @@ export function showMessage(text, type = 'error') {
  * @param {boolean} show - True to show the modal, false to hide.
  */
 export function toggleModal(modal, show) {
-    if (!modal) return;
     if (show) {
         modal.classList.remove('hidden');
         setTimeout(() => {
@@ -165,16 +164,7 @@ export function renderTable(assetsToRender) {
     headerRow.innerHTML = headerHTML;
     dom.assetTableHead.appendChild(headerRow);
 
-    // Re-attach the 'select-all' checkbox listener after rendering
-    const selectAllCheckbox = dom.assetTableHead.querySelector('#select-all-assets');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', (e) => {
-            dom.assetTableBody.querySelectorAll('.asset-checkbox').forEach(checkbox => {
-                checkbox.checked = e.target.checked;
-            });
-            updateBulkEditButtonVisibility();
-        });
-    }
+    // Event listeners for sorting are attached in main.js
 
     const sortedAssets = [...assetsToRender].sort((a, b) => {
         const valA = a[state.sortState.column] || '';
@@ -415,4 +405,3 @@ export function renderOverviewCharts(clickCallback) {
     state.charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
     state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'employee-select'));
 }
-
