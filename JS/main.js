@@ -6,32 +6,43 @@ import { initVisualInventory } from './visual_inventory_logic.js';
 
 // --- INITIALIZATION ---
 
-/**
- * Callback for when the Google API script has loaded.
- * This function needs to be on the global window object to be called by the external script.
- */
-window.gapiLoaded = function() {
-    gapi.load('client', () => {
-        state.gapiInited = true;
-        checkAndInitialize();
-    });
-}
-
-/**
- * Callback for when the Google Identity Services script has loaded.
- * This function needs to be on the global window object to be called by the external script.
- */
-window.gisLoaded = function() {
-    state.gisInited = true;
-    checkAndInitialize();
-}
-
 // Use DOMContentLoaded to ensure the entire DOM is ready before running scripts
 window.addEventListener('DOMContentLoaded', () => {
     ui.initUI(); // Initialize DOM element references in ui.js
     loadVisibleColumns();
     setupEventListeners();
+    loadGoogleApiScripts(); // Dynamically load Google scripts to prevent race conditions
 });
+
+/**
+ * Dynamically loads Google API scripts and sets up their onload callbacks.
+ * This approach avoids global scope pollution and timing issues with module scripts.
+ */
+function loadGoogleApiScripts() {
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.defer = true;
+    gapiScript.onload = () => {
+        // This callback runs once the GAPI script is loaded.
+        gapi.load('client', () => {
+            state.gapiInited = true;
+            checkAndInitialize();
+        });
+    };
+    document.body.appendChild(gapiScript);
+
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.defer = true;
+    gisScript.onload = () => {
+        // This callback runs once the GIS script is loaded.
+        state.gisInited = true;
+        checkAndInitialize();
+    };
+    document.body.appendChild(gisScript);
+}
 
 
 /**
@@ -42,7 +53,7 @@ function loadVisibleColumns() {
     if (savedCols) {
         state.visibleColumns = JSON.parse(savedCols);
     } else {
-        // Default columns
+        // Default columns if none are saved
         state.visibleColumns = ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
     }
 }
@@ -76,6 +87,7 @@ async function initializeGoogleClients() {
                 }
             },
         });
+        // Attempt to get a token without user interaction
         state.tokenClient.requestAccessToken({ prompt: 'none' });
     } catch (error) {
         console.error("Error initializing Google clients:", error);
@@ -87,7 +99,7 @@ async function initializeGoogleClients() {
 // --- AUTHENTICATION ---
 
 /**
- * Handles the sign-in button click.
+ * Handles the sign-in button click, prompting the user for consent.
  */
 function handleAuthClick() {
     if (state.tokenClient) {
@@ -351,7 +363,6 @@ function openCloneModal(assetId) {
 function setupEventListeners() {
     ui.dom.authorizeButton.onclick = handleAuthClick;
     ui.dom.signoutButton.onclick = handleSignoutClick;
-    // FIX: Corrected DOM reference from refreshBtn to refreshDataBtn
     ui.dom.refreshDataBtn.onclick = initializeAppData;
 
     window.addEventListener('datachanged', () => initializeAppData());
