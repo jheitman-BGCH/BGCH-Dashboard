@@ -1,5 +1,5 @@
 // JS/main.js
-import { state, CLIENT_ID, SPREADSHEET_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
+import { state, CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, SPREADSHEET_ID } from './state.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
@@ -457,7 +457,7 @@ function setupEventListeners() {
         const assetItem = e.target.closest('.employee-asset-item');
         if (assetItem && assetItem.dataset.assetId) {
             ui.toggleModal(ui.dom.employeeDetailModal, false); // Close employee modal first
-            ui.openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
+            openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
         }
     });
 
@@ -603,7 +603,9 @@ function handleTableClick(e) {
         if (target.classList.contains('edit-btn')) openEditModal(target.dataset.id);
         else if (target.classList.contains('clone-btn')) openCloneModal(target.dataset.id);
         else if (target.classList.contains('delete-btn')) {
-            handleDeleteRow(ASSET_SHEET, target.dataset.rowIndex);
+            if (confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
+                handleDeleteRow(ASSET_SHEET, target.dataset.rowIndex);
+            }
         }
         dropdown.classList.remove('show');
         return;
@@ -687,17 +689,27 @@ async function handleBulkUpdate() {
     ui.setLoading(true);
     try {
         const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
-        if (selectedAssetIds.length === 0) return;
+        if (selectedAssetIds.length === 0) {
+            return;
+        }
 
         const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${ASSET_SHEET}!1:1` });
         const sheetHeaders = response.result.values ? response.result.values[0] : [];
         const headerMap = {};
-        sheetHeaders.forEach((header, i) => headerMap[header] = String.fromCharCode(65 + i));
+        sheetHeaders.forEach((header, i) => {
+            const foundHeader = ASSET_HEADER_MAP.find(h => h.aliases.includes(header));
+            if(foundHeader) {
+                headerMap[foundHeader.key] = String.fromCharCode(65 + i);
+            }
+        });
 
         const getSelectValue = (id) => {
             const select = document.getElementById(id);
             const newInp = document.getElementById(`${id}-new`);
-            return select.value === '--new--' ? newInp.value : select.value;
+            if (newInp) {
+                return select.value === '--new--' ? newInp.value : select.value;
+            }
+            return select.value;
         };
 
         const fields = [
@@ -709,18 +721,27 @@ async function handleBulkUpdate() {
             { checkId: 'bulk-update-assigned-to-check', fieldName: 'AssignedTo', getValue: () => document.getElementById('bulk-assigned-to').value } // Value is now EmployeeID
         ];
 
-        const updates = [];
+        const data = [];
         fields.forEach(field => {
             if (document.getElementById(field.checkId).checked) {
                 const value = field.getValue();
-                selectedAssetIds.forEach(id => {
-                    const asset = state.allAssets.find(a => a.AssetID === id);
-                    if (asset) updates.push({ range: `${ASSET_SHEET}!${headerMap[field.fieldName]}${asset.rowIndex}`, values: [[value]] });
-                });
+                const colLetter = headerMap[field.fieldName];
+                if (colLetter) {
+                    selectedAssetIds.forEach(id => {
+                        const asset = state.allAssets.find(a => a.AssetID === id);
+                        if (asset) {
+                            data.push({
+                                range: `${ASSET_SHEET}!${colLetter}${asset.rowIndex}`,
+                                values: [[value]]
+                            });
+                        }
+                    });
+                }
             }
         });
-        if (updates.length > 0) {
-            await api.batchUpdateSheetValues(updates);
+
+        if (data.length > 0) {
+            await api.batchUpdateSheetValues(data);
             await initializeAppData();
         }
     } catch (err) {
@@ -798,18 +819,29 @@ function switchTab(tabName) {
  * @param {string} filterId - The ID of the filter dropdown to update.
  */
 function handleChartClick(event, elements, filterId) {
-    if (elements.length > 0) {
-        const chart = elements[0].element.$context.chart;
-        const label = chart.data.labels[elements[0].index];
-        
-        ui.dom.filterSearch.value = '';
-        ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
-            if (document.getElementById(id)) document.getElementById(id).value = '';
-        });
-        if (document.getElementById(filterId)) {
-            document.getElementById(filterId).value = label;
-            switchTab('inventory');
-            applyFiltersAndSearch();
-        }
+    if (!elements || elements.length === 0) {
+        return;
     }
+    const chart = elements[0].element.$context.chart;
+    const label = chart.data.labels[elements[0].index];
+
+    // Clear all existing filters before applying the new one.
+    ui.dom.filterSearch.value = '';
+    ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
+        const filterEl = document.getElementById(id);
+        if (filterEl) {
+            filterEl.value = '';
+        }
+    });
+
+    // Apply the new filter from the chart click.
+    const targetFilterEl = document.getElementById(filterId);
+    if (targetFilterEl) {
+        targetFilterEl.value = label;
+    }
+    
+    // Switch to the inventory tab to show the results and apply the filter.
+    switchTab('inventory');
+    applyFiltersAndSearch();
 }
+
