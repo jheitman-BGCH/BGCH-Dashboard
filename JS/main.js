@@ -1,5 +1,5 @@
 // JS/main.js
-import { state, CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
+import { state, CLIENT_ID, SPREADSHEET_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
@@ -457,7 +457,7 @@ function setupEventListeners() {
         const assetItem = e.target.closest('.employee-asset-item');
         if (assetItem && assetItem.dataset.assetId) {
             ui.toggleModal(ui.dom.employeeDetailModal, false); // Close employee modal first
-            openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
+            ui.openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
         }
     });
 
@@ -603,9 +603,7 @@ function handleTableClick(e) {
         if (target.classList.contains('edit-btn')) openEditModal(target.dataset.id);
         else if (target.classList.contains('clone-btn')) openCloneModal(target.dataset.id);
         else if (target.classList.contains('delete-btn')) {
-            if (confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
-                handleDeleteRow(ASSET_SHEET, target.dataset.rowIndex);
-            }
+            handleDeleteRow(ASSET_SHEET, target.dataset.rowIndex);
         }
         dropdown.classList.remove('show');
         return;
@@ -691,7 +689,7 @@ async function handleBulkUpdate() {
         const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
         if (selectedAssetIds.length === 0) return;
 
-        const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: state.SPREADSHEET_ID, range: `${ASSET_SHEET}!1:1` });
+        const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${ASSET_SHEET}!1:1` });
         const sheetHeaders = response.result.values ? response.result.values[0] : [];
         const headerMap = {};
         sheetHeaders.forEach((header, i) => headerMap[header] = String.fromCharCode(65 + i));
@@ -815,4 +813,3 @@ function handleChartClick(event, elements, filterId) {
         }
     }
 }
-

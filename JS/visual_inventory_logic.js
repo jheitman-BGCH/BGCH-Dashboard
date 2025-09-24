@@ -589,16 +589,16 @@ async function handleDelete(instanceId) {
     if (!instanceId) return;
     const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-    if (confirm('Are you sure you want to permanently delete this item and its asset record? This cannot be undone.')) {
-        const asset = state.allAssets.find(a => a.AssetID === instance.ReferenceID);
-        if (asset) {
-            const sheetId = state.sheetIds[ASSET_SHEET];
-            await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } }] });
-        }
-        const layoutSheetId = state.sheetIds[SPATIAL_LAYOUT_SHEET];
-        await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } }] });
-        window.dispatchEvent(new CustomEvent('datachanged'));
+
+    // Directly delete without confirmation
+    const asset = state.allAssets.find(a => a.AssetID === instance.ReferenceID);
+    if (asset) {
+        const sheetId = state.sheetIds[ASSET_SHEET];
+        await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } }] });
     }
+    const layoutSheetId = state.sheetIds[SPATIAL_LAYOUT_SHEET];
+    await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } }] });
+    window.dispatchEvent(new CustomEvent('datachanged'));
 }
 
 
