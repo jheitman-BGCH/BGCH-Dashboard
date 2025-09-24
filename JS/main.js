@@ -385,7 +385,7 @@ function setupEventListeners() {
         ui.dom.rowIndex.value = '';
         ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
             document.getElementById(`${id}-new`)?.classList.add('hidden');
-            document.getElementById(`${id}-new`)?.value = '';
+            document.getElementById(`${id}-new`)?.value === '';
             document.getElementById(id).value = '';
         });
         ui.toggleModal(ui.dom.assetModal, true);
@@ -844,4 +844,5 @@ function handleChartClick(event, elements, filterId) {
     switchTab('inventory');
     applyFiltersAndSearch();
 }
+
 
