@@ -300,17 +300,15 @@
             </div>
 
             <div id="employees-panel" class="hidden">
-                 <div class="bg-white p-6 rounded-lg shadow-md">
-                     <h2 class="text-2xl font-bold mb-6">View Assets by Employee</h2>
-                     <div class="mb-4 max-w-sm">
-                         <label for="employee-select" class="block text-sm font-medium text-gray-700">Select Employee</label>
-                         <select id="employee-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                             <option value="">-- Select an Employee --</option>
-                         </select>
-                     </div>
-                     <div id="employee-asset-list" class="mt-6 border-t pt-4">
-                         </div>
-                 </div>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Employee Directory</h2>
+                    <button id="add-employee-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Add New Employee
+                    </button>
+                </div>
+                <div id="employee-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Employee cards will be injected here -->
+                </div>
             </div>
 
             <div id="visual-inventory-panel" class="hidden">
@@ -629,6 +627,67 @@
         </div>
     </div>
 
+    <div id="employee-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-lg mx-auto rounded-lg shadow-xl z-10 transform scale-95">
+            <form id="employee-form" class="p-8">
+                <h2 id="employee-modal-title" class="text-2xl font-bold mb-6">Add New Employee</h2>
+                <input type="hidden" id="employee-id">
+                <div class="space-y-4">
+                    <div>
+                        <label for="employee-name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                        <input type="text" id="employee-name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label for="employee-title" class="block text-sm font-medium text-gray-700">Job Title</label>
+                        <input type="text" id="employee-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label for="employee-department" class="block text-sm font-medium text-gray-700">Department</label>
+                        <input type="text" id="employee-department" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                     <div>
+                        <label for="employee-email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                        <input type="email" id="employee-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                     <div>
+                        <label for="employee-phone" class="block text-sm font-medium text-gray-700">Phone Number</label>
+                        <input type="tel" id="employee-phone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="employee-cancel-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="submit" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="employee-detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white w-full max-w-2xl mx-auto rounded-lg shadow-xl z-10 transform scale-95 max-h-[90vh] overflow-y-auto">
+            <div class="p-8">
+                <div id="employee-detail-header" class="mb-6 border-b pb-4">
+                     <h2 id="employee-detail-name" class="text-2xl font-bold">Employee Name</h2>
+                     <p id="employee-detail-title-dept" class="text-gray-600">Job Title</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-gray-800">Contact Information</h3>
+                        <div id="employee-detail-info" class="space-y-2 text-sm"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-gray-800">Assigned Assets</h3>
+                        <div id="employee-detail-assets" class="space-y-3 max-h-60 overflow-y-auto pr-2"></div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="employee-detail-close-btn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- A single module entry point which will load other scripts dynamically -->
     <script type="module" src="JS/main.js"></script>
     

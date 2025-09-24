@@ -4,6 +4,7 @@
 export const CLIENT_ID = '525866256494-i4g16ahgtjvm851k1q5k9qg05vjbv1dt.apps.googleusercontent.com';
 export const SPREADSHEET_ID = '1YZ1bACVHyudX08jqSuojSBAxSPO5_bRp9czImJhShhY';
 export const ASSET_SHEET = 'Asset';
+export const EMPLOYEES_SHEET = 'Employees';
 export const ROOMS_SHEET = 'Rooms';
 export const SPATIAL_LAYOUT_SHEET = 'Spatial Layout';
 
@@ -35,6 +36,15 @@ export const ASSET_HEADER_MAP = [
     { key: "ParentObjectID", aliases: ["ParentObjectID", "Parent Object ID"] }
 ];
 
+export const EMPLOYEE_HEADER_MAP = [
+    { key: "EmployeeID", aliases: ["EmployeeID", "Employee ID"] },
+    { key: "EmployeeName", aliases: ["EmployeeName", "Name"] },
+    { key: "Title", aliases: ["Title"] },
+    { key: "Department", aliases: ["Department"] },
+    { key: "Email", aliases: ["Email"] },
+    { key: "Phone", aliases: ["Phone"] },
+];
+
 export const ROOMS_HEADER_MAP = [
     { key: "RoomID", aliases: ["RoomID", "Room ID"] },
     { key: "RoomName", aliases: ["RoomName", "Room Name"] },
@@ -58,6 +68,7 @@ export const SPATIAL_LAYOUT_HEADER_MAP = [
 // --- DERIVED HEADER ARRAYS ---
 // These are generated from the maps for compatibility with parts of the app that just need the keys.
 export const ASSET_HEADERS = ASSET_HEADER_MAP.map(h => h.key);
+export const EMPLOYEE_HEADERS = EMPLOYEE_HEADER_MAP.map(h => h.key);
 export const ROOMS_HEADERS = ROOMS_HEADER_MAP.map(h => h.key);
 export const SPATIAL_LAYOUT_HEADERS = SPATIAL_LAYOUT_HEADER_MAP.map(h => h.key);
 
@@ -75,6 +86,7 @@ const _state = {
     gapiInited: false,
     gisInited: false,
     allAssets: [],
+    allEmployees: [],
     allRooms: [],
     spatialLayoutData: [],
     charts: {},
@@ -92,6 +104,8 @@ export const state = {
     set gisInited(val) { _state.gisInited = val; },
     get allAssets() { return _state.allAssets; },
     set allAssets(val) { _state.allAssets = val; },
+    get allEmployees() { return _state.allEmployees; },
+    set allEmployees(val) { _state.allEmployees = val; },
     get allRooms() { return _state.allRooms; },
     set allRooms(val) { _state.allRooms = val; },
     get spatialLayoutData() { return _state.spatialLayoutData; },

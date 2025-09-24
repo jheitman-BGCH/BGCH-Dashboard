@@ -1,5 +1,5 @@
 // JS/main.js
-import { state, CLIENT_ID, SCOPES, ASSET_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
+import { state, CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
@@ -147,7 +147,8 @@ async function initializeAppData() {
         const ranges = [
             `${ASSET_SHEET}!A:Z`,
             `${ROOMS_SHEET}!A:Z`,
-            `${SPATIAL_LAYOUT_SHEET}!A:Z`
+            `${SPATIAL_LAYOUT_SHEET}!A:Z`,
+            `${EMPLOYEES_SHEET}!A:Z`
         ];
         const { meta, data } = await api.fetchSheetMetadataAndData(ranges);
         
@@ -160,16 +161,18 @@ async function initializeAppData() {
         const assetValues = data[0].values || [];
         const roomValues = data[1].values || [];
         const layoutValues = data[2].values || [];
+        const employeeValues = data[3]?.values || [];
 
         // Use the unified processing function with header maps for all sheets
         state.allAssets = processSheetData(assetValues, ASSET_HEADER_MAP, 'AssetID');
         state.allRooms = processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID');
         state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID');
-
+        state.allEmployees = processSheetData(employeeValues, EMPLOYEE_HEADER_MAP, 'EmployeeID');
+        
         applyFiltersAndSearch();
         ui.populateFilterDropdowns();
         ui.populateModalDropdowns();
-        ui.populateEmployeeDropdown();
+        ui.renderEmployeeList(state.allEmployees, state.allAssets);
         ui.renderOverviewCharts(handleChartClick);
         ui.populateColumnSelector();
 
@@ -181,7 +184,7 @@ async function initializeAppData() {
         console.error("Caught error during data load:", err);
         const errorMessage = err.result?.error?.message || err.message || 'Unknown error';
         if (errorMessage.includes("Unable to parse range")) {
-            ui.showMessage(`Error: A required sheet is missing. Please ensure 'Asset', 'Rooms', and 'Spatial Layout' sheets exist.`);
+            ui.showMessage(`Error: A required sheet is missing. Please ensure 'Asset', 'Rooms', 'Spatial Layout', and 'Employees' sheets exist.`);
         } else {
             ui.showMessage(`Error loading data: ${errorMessage}`);
         }
@@ -364,7 +367,6 @@ function setupEventListeners() {
 
     ui.dom.cancelBtn.onclick = () => ui.toggleModal(ui.dom.assetModal, false);
     ui.dom.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.assetModal, false);
-    ui.dom.employeeSelect.onchange = ui.displayEmployeeAssets;
 
     ui.dom.inventoryTab.addEventListener('click', () => switchTab('inventory'));
     ui.dom.overviewTab.addEventListener('click', () => switchTab('overview'));
@@ -384,18 +386,32 @@ function setupEventListeners() {
     document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', () => ui.renderOverviewCharts(handleChartClick)));
 
     ui.dom.assetForm.onsubmit = handleAssetFormSubmit;
+    ui.dom.employeeForm.onsubmit = handleEmployeeFormSubmit;
 
     ui.dom.assetTableHead.addEventListener('click', handleSortClick);
     ui.dom.assetTableBody.addEventListener('click', handleTableClick);
 
-    ui.dom.employeeAssetList.addEventListener('click', (e) => {
-        const targetItem = e.target.closest('.employee-asset-item');
-        if (targetItem) ui.openDetailModal(targetItem.dataset.id, openEditModal);
-    });
-
     ui.dom.detailModalCloseBtn.onclick = () => ui.toggleModal(ui.dom.detailModal, false);
     ui.dom.detailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.detailModal, false);
     
+    // Employee Panel Listeners
+    ui.dom.addEmployeeBtn.onclick = () => {
+        ui.dom.employeeForm.reset();
+        ui.dom.employeeModalTitle.textContent = 'Add New Employee';
+        ui.toggleModal(ui.dom.employeeModal, true);
+    };
+    ui.dom.employeeListContainer.addEventListener('click', e => {
+        const card = e.target.closest('.employee-card');
+        if (card && card.dataset.id) {
+            ui.openEmployeeDetailModal(card.dataset.id);
+        }
+    });
+    ui.dom.employeeCancelBtn.onclick = () => ui.toggleModal(ui.dom.employeeModal, false);
+    ui.dom.employeeModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.employeeModal, false);
+    ui.dom.employeeDetailCloseBtn.onclick = () => ui.toggleModal(ui.dom.employeeDetailModal, false);
+    ui.dom.employeeDetailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.employeeDetailModal, false);
+
+
     window.addEventListener('click', (e) => {
         if (!e.target.closest('.actions-menu')) {
             document.querySelectorAll('.actions-dropdown.show').forEach(d => d.classList.remove('show'));
@@ -468,6 +484,37 @@ async function handleAssetFormSubmit(e) {
         ui.setLoading(false);
     }
 }
+
+/**
+ * Handles form submission for adding a new employee.
+ * @param {Event} e - The form submission event.
+ */
+async function handleEmployeeFormSubmit(e) {
+    e.preventDefault();
+    ui.setLoading(true);
+    try {
+        const employeeData = {
+            EmployeeID: `EMP-${Date.now()}`,
+            EmployeeName: document.getElementById('employee-name').value,
+            Title: document.getElementById('employee-title').value,
+            Department: document.getElementById('employee-department').value,
+            Email: document.getElementById('employee-email').value,
+            Phone: document.getElementById('employee-phone').value,
+        };
+
+        const rowData = EMPLOYEE_HEADERS.map(header => employeeData[header] || '');
+        await api.appendSheetValues(EMPLOYEES_SHEET, [rowData]);
+        await initializeAppData();
+
+    } catch (err) {
+        console.error(err);
+        ui.showMessage(`Error saving employee: ${err.result.error.message}`);
+    } finally {
+        ui.toggleModal(ui.dom.employeeModal, false);
+        ui.setLoading(false);
+    }
+}
+
 
 /**
  * Handles clicks within the asset table body (for actions, details, etc.).
@@ -690,11 +737,16 @@ function switchTab(tabName) {
  */
 function handleChartClick(event, elements, filterId) {
     if (elements.length > 0) {
-        const label = elements[0].element.$context.chart.data.labels[elements[0].index];
+        const chart = elements[0].element.$context.chart;
+        const label = chart.data.labels[elements[0].index];
+        
         if (filterId === 'employee-select') {
-            switchTab('employees');
-            document.getElementById('employee-select').value = label;
-            ui.displayEmployeeAssets();
+             // Find the corresponding employee in the employee list and show their details
+            const employee = state.allEmployees.find(emp => emp.EmployeeName === label);
+            if(employee) {
+                switchTab('employees');
+                ui.openEmployeeDetailModal(employee.EmployeeID);
+            }
         } else {
             ui.dom.filterSearch.value = '';
             ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
@@ -708,4 +760,3 @@ function handleChartClick(event, elements, filterId) {
         }
     }
 }
-

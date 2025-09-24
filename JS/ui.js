@@ -14,19 +14,22 @@ export function initUI() {
         'auth-section', 'dashboard-section', 'authorize_button', 'signout_button',
         'add-asset-btn', 'bulk-edit-btn', 'refresh-data-btn', 'asset-modal',
         'asset-form', 'cancel-btn', 'loading-indicator', 'no-data-message',
-        'employee-select', 'employee-asset-list', 'detail-modal', 'bulk-edit-modal',
-        'column-modal', 'inventory-tab', 'overview-tab', 'employees-tab',
-        'visual-inventory-tab', 'inventory-panel', 'overview-panel',
-        'employees-panel', 'visual-inventory-panel', 'asset-table-head',
-        'asset-table-body', 'filter-search', 'filter-site', 'filter-location',
-        'filter-asset-type', 'filter-condition', 'filter-intended-user-type',
-        'filter-assigned-to', 'filter-model-number', 'detail-modal-title',
-        'detail-modal-content', 'detail-modal-edit-btn', 'modal-title', 'asset-id',
-        'row-index', 'asset-name', 'quantity', 'intended-user-type', 'condition',
-        'id-code', 'serial-number', 'model-number', 'date-issued', 'purchase-date',
-        'specs', 'login-info', 'notes', 'site', 'location', 'container',
-        'asset-type', 'assigned-to', 'detail-modal-close-btn', 'customize-cols-btn',
-        'column-checkboxes', 'column-cancel-btn', 'column-save-btn'
+        'detail-modal', 'bulk-edit-modal', 'column-modal', 'inventory-tab', 
+        'overview-tab', 'employees-tab', 'visual-inventory-tab', 'inventory-panel',
+        'overview-panel', 'employees-panel', 'visual-inventory-panel', 
+        'asset-table-head', 'asset-table-body', 'filter-search', 'filter-site', 
+        'filter-location', 'filter-asset-type', 'filter-condition', 
+        'filter-intended-user-type', 'filter-assigned-to', 'filter-model-number', 
+        'detail-modal-title', 'detail-modal-content', 'detail-modal-edit-btn', 
+        'modal-title', 'asset-id', 'row-index', 'asset-name', 'quantity', 
+        'intended-user-type', 'condition', 'id-code', 'serial-number', 
+        'model-number', 'date-issued', 'purchase-date', 'specs', 'login-info', 
+        'notes', 'site', 'location', 'container', 'asset-type', 'assigned-to', 
+        'detail-modal-close-btn', 'customize-cols-btn', 'column-checkboxes', 
+        'column-cancel-btn', 'column-save-btn', 'add-employee-btn', 'employee-list-container',
+        'employee-modal', 'employee-form', 'employee-cancel-btn', 'employee-modal-title',
+        'employee-detail-modal', 'employee-detail-name', 'employee-detail-title-dept',
+        'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn'
     ];
     ids.forEach(id => {
         // Convert snake_case and kebab-case to camelCase for property names
@@ -94,8 +97,8 @@ export function toggleModal(modal, show) {
  * Populates dropdowns in the main asset form and bulk edit form.
  */
 export function populateModalDropdowns() {
-    const fields = ['Site', 'Location', 'Container', 'AssetType', 'AssignedTo'];
-    const bulkFields = ['Site', 'Location', 'Container', 'AssignedTo'];
+    const fields = ['Site', 'Location', 'Container', 'AssetType'];
+    const bulkFields = ['Site', 'Location', 'Container'];
 
     const populate = (key, prefix = '') => {
         const select = document.getElementById(`${prefix}${key.toLowerCase()}`);
@@ -113,9 +116,27 @@ export function populateModalDropdowns() {
         addNewOption.textContent = 'Add New...';
         select.appendChild(addNewOption);
     }
-
+    
+    // Populate standard fields from asset data
     fields.forEach(key => populate(key, ''));
     bulkFields.forEach(key => populate(key, 'bulk-'));
+
+    // Populate "Assigned To" from employee data
+    const assignedToSelects = [document.getElementById('assigned-to'), document.getElementById('bulk-assigned-to')];
+    assignedToSelects.forEach(select => {
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Unassigned --</option>';
+        state.allEmployees.forEach(emp => {
+            const option = document.createElement('option');
+            option.value = emp.EmployeeName;
+            option.textContent = emp.EmployeeName;
+            select.appendChild(option);
+        });
+        const addNewOption = document.createElement('option');
+        addNewOption.value = '--new--';
+        addNewOption.textContent = 'Add New...';
+        select.appendChild(addNewOption);
+    });
 }
 
 
@@ -292,44 +313,82 @@ export function populateAssetForm(asset) {
 
 
 /**
- * Populates the employee dropdown in the "Employees" tab.
+ * Renders the list of employees as cards in the Employees tab.
+ * @param {Array<Object>} employees - The list of employee objects.
+ * @param {Array<Object>} allAssets - The list of all asset objects.
  */
-export function populateEmployeeDropdown() {
-    const employees = [...new Set(state.allAssets.map(a => a.AssignedTo).filter(Boolean))].sort();
-    dom.employeeSelect.innerHTML = '<option value="">-- Select an Employee --</option>';
-    employees.forEach(e => {
-        const option = document.createElement('option');
-        option.value = e;
-        option.textContent = e;
-        dom.employeeSelect.appendChild(option);
+export function renderEmployeeList(employees, allAssets) {
+    if (!dom.employeeListContainer) return;
+    dom.employeeListContainer.innerHTML = '';
+
+    if (!employees || employees.length === 0) {
+        dom.employeeListContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No employees found. Click "Add New Employee" to start.</p>`;
+        return;
+    }
+
+    employees.forEach(emp => {
+        const assignedAssets = allAssets.filter(asset => asset.AssignedTo === emp.EmployeeName);
+        const card = document.createElement('div');
+        card.className = 'employee-card bg-white p-5 rounded-lg shadow-md cursor-pointer border border-gray-200';
+        card.dataset.id = emp.EmployeeID;
+        card.innerHTML = `
+            <h3 class="text-lg font-bold text-gray-900 truncate">${emp.EmployeeName}</h3>
+            <p class="text-sm text-gray-600">${emp.Title || 'N/A'}</p>
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <p class="text-sm text-gray-500">
+                    <span class="font-semibold text-gray-700">${assignedAssets.length}</span>
+                    assets assigned
+                </p>
+            </div>
+        `;
+        dom.employeeListContainer.appendChild(card);
     });
 }
 
 /**
- * Displays the list of assets for the selected employee.
+ * Opens and populates the employee detail modal.
+ * @param {string} employeeId - The ID of the employee to show.
  */
-export function displayEmployeeAssets() {
-    const selectedEmployee = dom.employeeSelect.value;
-    if (!selectedEmployee) {
-        dom.employeeAssetList.innerHTML = '';
+export function openEmployeeDetailModal(employeeId) {
+    const employee = state.allEmployees.find(e => e.EmployeeID === employeeId);
+    if (!employee) {
+        showMessage('Employee not found.');
         return;
     }
-    const assets = state.allAssets.filter(a => a.AssignedTo === selectedEmployee);
-    if (assets.length === 0) {
-        dom.employeeAssetList.innerHTML = `<p class="text-gray-500">No assets assigned to this employee.</p>`;
-        return;
-    }
-    dom.employeeAssetList.innerHTML = `
-        <ul class="divide-y divide-gray-200">
-            ${assets.map(a => `
-                <li class="p-3 employee-asset-item" data-id="${a.AssetID}">
-                    <p class="text-sm font-medium">${a.AssetName}</p>
-                    <p class="text-sm text-gray-500">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
-                </li>
-            `).join('')}
-        </ul>
+
+    dom.employeeDetailName.textContent = employee.EmployeeName;
+    dom.employeeDetailTitleDept.textContent = `${employee.Title || 'No Title'} | ${employee.Department || 'No Department'}`;
+
+    dom.employeeDetailInfo.innerHTML = `
+        <div>
+            <dt class="font-semibold text-gray-600">Email:</dt>
+            <dd class="text-gray-800">${employee.Email || 'N/A'}</dd>
+        </div>
+        <div>
+            <dt class="font-semibold text-gray-600">Phone:</dt>
+            <dd class="text-gray-800">${employee.Phone || 'N/A'}</dd>
+        </div>
     `;
+
+    const assignedAssets = state.allAssets.filter(a => a.AssignedTo === employee.EmployeeName);
+    if (assignedAssets.length > 0) {
+        dom.employeeDetailAssets.innerHTML = `
+            <ul class="divide-y divide-gray-200">
+                ${assignedAssets.map(a => `
+                    <li class="py-2">
+                        <p class="text-sm font-medium text-gray-900">${a.AssetName}</p>
+                        <p class="text-xs text-gray-500">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    } else {
+        dom.employeeDetailAssets.innerHTML = `<p class="text-sm text-gray-500">No assets currently assigned.</p>`;
+    }
+
+    toggleModal(dom.employeeDetailModal, true);
 }
+
 
 /**
  * Shows/hides the "Add New..." text input for a dynamic select dropdown.
@@ -394,7 +453,9 @@ export function populateColumnSelector() {
  * @param {function} clickCallback - The callback function to execute when a chart segment is clicked.
  */
 export function renderOverviewCharts(clickCallback) {
-    Object.values(state.charts).forEach(chart => chart.destroy());
+    Object.values(state.charts).forEach(chart => {
+        if(chart.destroy) chart.destroy();
+    });
     const processData = (key) => {
         const counts = state.allAssets.reduce((acc, asset) => {
             const value = asset[key] || 'Uncategorized';
@@ -415,4 +476,3 @@ export function renderOverviewCharts(clickCallback) {
     state.charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
     state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'employee-select'));
 }
-
