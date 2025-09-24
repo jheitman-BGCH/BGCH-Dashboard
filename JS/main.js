@@ -169,10 +169,11 @@ async function initializeAppData() {
         state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID');
         state.allEmployees = processSheetData(employeeValues, EMPLOYEE_HEADER_MAP, 'EmployeeID');
         
-        applyFiltersAndSearch();
+        applyFiltersAndSearch(); // For assets
+        applyEmployeeFiltersAndSearch(); // For employees
         ui.populateFilterDropdowns();
+        ui.populateEmployeeFilterDropdowns();
         ui.populateModalDropdowns();
-        ui.renderEmployeeList(state.allEmployees, state.allAssets);
         ui.renderOverviewCharts(handleChartClick);
         ui.populateColumnSelector();
 
@@ -312,11 +313,36 @@ function applyFiltersAndSearch() {
 
     let filteredAssets = state.allAssets.filter(asset => {
         const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
-        const matchesFilters = Object.entries(filters).every(([key, value]) => !value || asset[key] === value);
+        const matchesFilters = Object.entries(filters).every(([key, value]) => {
+            if (!value) return true;
+            if (key === 'AssignedTo') {
+                // Here, value is an employee NAME from the filter dropdown.
+                // We need to find the ID for that name and match it against the asset's AssignedTo (which is an ID).
+                const employee = state.allEmployees.find(e => e.EmployeeName === value);
+                return employee ? asset[key] === employee.EmployeeID : false;
+            }
+            return asset[key] === value;
+        });
         return matchesSearch && matchesFilters;
     });
 
     ui.renderTable(filteredAssets);
+}
+
+/**
+ * Filters and re-renders the employee list based on search and department selection.
+ */
+function applyEmployeeFiltersAndSearch() {
+    const searchTerm = ui.dom.employeeSearch.value.toLowerCase();
+    const department = ui.dom.employeeDepartmentFilter.value;
+
+    const filteredEmployees = state.allEmployees.filter(emp => {
+        const matchesSearch = searchTerm ? emp.EmployeeName.toLowerCase().includes(searchTerm) : true;
+        const matchesDept = department ? emp.Department === department : true;
+        return matchesSearch && matchesDept;
+    });
+
+    ui.renderEmployeeList(filteredEmployees, state.allAssets);
 }
 
 
@@ -358,8 +384,8 @@ function setupEventListeners() {
         ui.dom.assetId.value = '';
         ui.dom.rowIndex.value = '';
         ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
-            document.getElementById(`${id}-new`).classList.add('hidden');
-            document.getElementById(`${id}-new`).value = '';
+            document.getElementById(`${id}-new`)?.classList.add('hidden');
+            document.getElementById(`${id}-new`)?.value = '';
             document.getElementById(id).value = '';
         });
         ui.toggleModal(ui.dom.assetModal, true);
@@ -377,7 +403,7 @@ function setupEventListeners() {
     ui.dom.location.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.location, document.getElementById('location-new')));
     ui.dom.container.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.container, document.getElementById('container-new')));
     ui.dom.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.assetType, document.getElementById('asset-type-new')));
-    ui.dom.assignedTo.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.assignedTo, document.getElementById('assigned-to-new')));
+    // assigned-to dropdown no longer has a "new" input, so no listener needed here.
 
     document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
         el.addEventListener('input', applyFiltersAndSearch);
@@ -398,8 +424,12 @@ function setupEventListeners() {
     ui.dom.addEmployeeBtn.onclick = () => {
         ui.dom.employeeForm.reset();
         ui.dom.employeeModalTitle.textContent = 'Add New Employee';
+        ui.dom.employeeId.value = '';
+        ui.dom.employeeRowIndex.value = '';
         ui.toggleModal(ui.dom.employeeModal, true);
     };
+    ui.dom.employeeSearch.addEventListener('input', applyEmployeeFiltersAndSearch);
+    ui.dom.employeeDepartmentFilter.addEventListener('change', applyEmployeeFiltersAndSearch);
     ui.dom.employeeListContainer.addEventListener('click', e => {
         const card = e.target.closest('.employee-card');
         if (card && card.dataset.id) {
@@ -410,7 +440,26 @@ function setupEventListeners() {
     ui.dom.employeeModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.employeeModal, false);
     ui.dom.employeeDetailCloseBtn.onclick = () => ui.toggleModal(ui.dom.employeeDetailModal, false);
     ui.dom.employeeDetailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.employeeDetailModal, false);
+    
+    ui.dom.employeeDetailEditBtn.addEventListener('click', (e) => {
+        const employeeId = e.target.dataset.employeeId;
+        if (employeeId) {
+            const employee = state.allEmployees.find(emp => emp.EmployeeID === employeeId);
+            if (employee) {
+                ui.toggleModal(ui.dom.employeeDetailModal, false);
+                ui.populateEmployeeForm(employee);
+                ui.toggleModal(ui.dom.employeeModal, true);
+            }
+        }
+    });
 
+    ui.dom.employeeDetailAssets.addEventListener('click', e => {
+        const assetItem = e.target.closest('.employee-asset-item');
+        if (assetItem && assetItem.dataset.assetId) {
+            ui.toggleModal(ui.dom.employeeDetailModal, false); // Close employee modal first
+            openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
+        }
+    });
 
     window.addEventListener('click', (e) => {
         if (!e.target.closest('.actions-menu')) {
@@ -433,8 +482,12 @@ async function handleAssetFormSubmit(e) {
     try {
         const getSelectValue = (id) => {
             const select = document.getElementById(id);
-            const newInp = document.getElementById(`${id}-new`);
-            return select.value === '--new--' ? newInp.value : select.value;
+            // The 'assigned-to' select does not have a '--new--' text input.
+            if (id !== 'assigned-to') {
+                const newInp = document.getElementById(`${id}-new`);
+                return select.value === '--new--' ? newInp.value : select.value;
+            }
+            return select.value;
         };
 
         const assetData = {
@@ -451,7 +504,7 @@ async function handleAssetFormSubmit(e) {
             IDCode: ui.dom.idCode.value,
             SerialNumber: ui.dom.serialNumber.value,
             ModelNumber: ui.dom.modelNumber.value,
-            AssignedTo: getSelectValue('assigned-to'),
+            AssignedTo: getSelectValue('assigned-to'), // This will be an EmployeeID
             DateIssued: ui.dom.dateIssued.value,
             PurchaseDate: ui.dom.purchaseDate.value,
             Specs: ui.dom.specs.value,
@@ -486,7 +539,7 @@ async function handleAssetFormSubmit(e) {
 }
 
 /**
- * Handles form submission for adding a new employee.
+ * Handles form submission for adding or editing an employee.
  * @param {Event} e - The form submission event.
  */
 async function handleEmployeeFormSubmit(e) {
@@ -494,7 +547,8 @@ async function handleEmployeeFormSubmit(e) {
     ui.setLoading(true);
     try {
         const employeeData = {
-            EmployeeID: `EMP-${Date.now()}`,
+            EmployeeID: ui.dom.employeeId.value,
+            rowIndex: ui.dom.employeeRowIndex.value,
             EmployeeName: document.getElementById('employee-name').value,
             Title: document.getElementById('employee-title').value,
             Department: document.getElementById('employee-department').value,
@@ -502,8 +556,18 @@ async function handleEmployeeFormSubmit(e) {
             Phone: document.getElementById('employee-phone').value,
         };
 
+        const isUpdate = !!employeeData.rowIndex;
+        if (!isUpdate && !employeeData.EmployeeID) {
+            employeeData.EmployeeID = `EMP-${Date.now()}`;
+        }
+
         const rowData = EMPLOYEE_HEADERS.map(header => employeeData[header] || '');
-        await api.appendSheetValues(EMPLOYEES_SHEET, [rowData]);
+
+        if (isUpdate) {
+            await api.updateSheetValues(`${EMPLOYEES_SHEET}!A${employeeData.rowIndex}`, [rowData]);
+        } else {
+            await api.appendSheetValues(EMPLOYEES_SHEET, [rowData]);
+        }
         await initializeAppData();
 
     } catch (err) {
@@ -644,7 +708,7 @@ async function handleBulkUpdate() {
             { checkId: 'bulk-update-container-check', fieldName: 'Container', getValue: () => getSelectValue('bulk-container') },
             { checkId: 'bulk-update-intended-user-check', fieldName: 'IntendedUserType', getValue: () => document.getElementById('bulk-intended-user-type').value },
             { checkId: 'bulk-update-condition-check', fieldName: 'Condition', getValue: () => document.getElementById('bulk-condition').value },
-            { checkId: 'bulk-update-assigned-to-check', fieldName: 'AssignedTo', getValue: () => getSelectValue('bulk-assigned-to') }
+            { checkId: 'bulk-update-assigned-to-check', fieldName: 'AssignedTo', getValue: () => document.getElementById('bulk-assigned-to').value } // Value is now EmployeeID
         ];
 
         const updates = [];
@@ -740,23 +804,15 @@ function handleChartClick(event, elements, filterId) {
         const chart = elements[0].element.$context.chart;
         const label = chart.data.labels[elements[0].index];
         
-        if (filterId === 'employee-select') {
-             // Find the corresponding employee in the employee list and show their details
-            const employee = state.allEmployees.find(emp => emp.EmployeeName === label);
-            if(employee) {
-                switchTab('employees');
-                ui.openEmployeeDetailModal(employee.EmployeeID);
-            }
-        } else {
-            ui.dom.filterSearch.value = '';
-            ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
-                if (document.getElementById(id)) document.getElementById(id).value = '';
-            });
-            if (document.getElementById(filterId)) {
-                document.getElementById(filterId).value = label;
-                switchTab('inventory');
-                applyFiltersAndSearch();
-            }
+        ui.dom.filterSearch.value = '';
+        ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
+            if (document.getElementById(id)) document.getElementById(id).value = '';
+        });
+        if (document.getElementById(filterId)) {
+            document.getElementById(filterId).value = label;
+            switchTab('inventory');
+            applyFiltersAndSearch();
         }
     }
 }
+

@@ -29,7 +29,9 @@ export function initUI() {
         'column-cancel-btn', 'column-save-btn', 'add-employee-btn', 'employee-list-container',
         'employee-modal', 'employee-form', 'employee-cancel-btn', 'employee-modal-title',
         'employee-detail-modal', 'employee-detail-name', 'employee-detail-title-dept',
-        'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn'
+        'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn',
+        'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
+        'employee-id', 'employee-row-index'
     ];
     ids.forEach(id => {
         // Convert snake_case and kebab-case to camelCase for property names
@@ -126,16 +128,14 @@ export function populateModalDropdowns() {
     assignedToSelects.forEach(select => {
         if (!select) return;
         select.innerHTML = '<option value="">-- Unassigned --</option>';
-        state.allEmployees.forEach(emp => {
-            const option = document.createElement('option');
-            option.value = emp.EmployeeName;
-            option.textContent = emp.EmployeeName;
-            select.appendChild(option);
+        state.allEmployees
+            .sort((a,b) => a.EmployeeName.localeCompare(b.EmployeeName))
+            .forEach(emp => {
+                const option = document.createElement('option');
+                option.value = emp.EmployeeID; // Use EmployeeID as value
+                option.textContent = emp.EmployeeName;
+                select.appendChild(option);
         });
-        const addNewOption = document.createElement('option');
-        addNewOption.value = '--new--';
-        addNewOption.textContent = 'Add New...';
-        select.appendChild(addNewOption);
     });
 }
 
@@ -149,7 +149,15 @@ export function populateFilterDropdowns() {
     filters.forEach(key => {
         const select = document.getElementById(`filter-${key.toLowerCase()}`);
         if (!select) return;
-        const uniqueValues = [...new Set(state.allAssets.map(asset => asset[key]).filter(Boolean))].sort();
+        
+        let uniqueValues;
+        if (key === 'AssignedTo') {
+            // For the 'AssignedTo' filter, we want to show names, not IDs.
+            uniqueValues = [...new Set(state.allEmployees.map(emp => emp.EmployeeName))].sort();
+        } else {
+            uniqueValues = [...new Set(state.allAssets.map(asset => asset[key]).filter(Boolean))].sort();
+        }
+
         const currentValue = select.value;
         select.innerHTML = `<option value="">All</option>`;
         uniqueValues.forEach(value => {
@@ -212,7 +220,12 @@ export function renderTable(assetsToRender) {
         tr.dataset.id = asset.AssetID;
         let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>`;
         state.visibleColumns.forEach(colName => {
-            const value = asset[colName] || '';
+            let value = asset[colName] || '';
+            // If column is AssignedTo, display the employee name instead of the ID
+            if (colName === 'AssignedTo') {
+                const employee = state.allEmployees.find(e => e.EmployeeID === value);
+                value = employee ? employee.EmployeeName : (value || '');
+            }
             rowHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm">${value}</td>`;
         });
         rowHtml += `
@@ -245,12 +258,18 @@ export function openDetailModal(assetId, openEditCallback) {
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
     dom.detailModalContent.innerHTML = `
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
-            ${ASSET_HEADERS.filter(h => h !== "LoginInfo").map(key => `
+            ${ASSET_HEADERS.filter(h => h !== "LoginInfo").map(key => {
+                let displayValue = asset[key] || 'N/A';
+                if (key === 'AssignedTo') {
+                    const employee = state.allEmployees.find(e => e.EmployeeID === asset[key]);
+                    displayValue = employee ? employee.EmployeeName : 'Unassigned';
+                }
+                return `
                 <div>
                     <dt>${key}:</dt>
-                    <dd>${asset[key] || 'N/A'}</dd>
+                    <dd>${displayValue}</dd>
                 </div>
-            `).join('')}
+            `}).join('')}
         </dl>
     `;
     const newEditBtn = dom.detailModalEditBtn.cloneNode(true);
@@ -298,36 +317,41 @@ export function populateAssetForm(asset) {
 
         if (value && optionExists) {
             select.value = value;
-            newInp.classList.add('hidden');
-        } else if (value) {
+            if(newInp) newInp.classList.add('hidden');
+        } else if (value && field.id !== 'assigned-to') { // assigned-to doesn't have a 'new' text input
             select.value = '--new--';
-            newInp.value = value;
-            newInp.classList.remove('hidden');
+            if(newInp) {
+                newInp.value = value;
+                newInp.classList.remove('hidden');
+            }
         } else {
             select.value = '';
-            newInp.classList.add('hidden');
-            newInp.value = '';
+            if(newInp) {
+                newInp.classList.add('hidden');
+                newInp.value = '';
+            }
         }
     });
 }
 
-
 /**
  * Renders the list of employees as cards in the Employees tab.
- * @param {Array<Object>} employees - The list of employee objects.
+ * @param {Array<Object>} employeesToRender - The list of employee objects to display.
  * @param {Array<Object>} allAssets - The list of all asset objects.
  */
-export function renderEmployeeList(employees, allAssets) {
+export function renderEmployeeList(employeesToRender, allAssets) {
     if (!dom.employeeListContainer) return;
     dom.employeeListContainer.innerHTML = '';
 
-    if (!employees || employees.length === 0) {
-        dom.employeeListContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No employees found. Click "Add New Employee" to start.</p>`;
+    if (!employeesToRender || employeesToRender.length === 0) {
+        dom.employeeListContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No employees match the current filters.</p>`;
         return;
     }
 
-    employees.forEach(emp => {
-        const assignedAssets = allAssets.filter(asset => asset.AssignedTo === emp.EmployeeName);
+    const sortedEmployees = [...employeesToRender].sort((a, b) => a.EmployeeName.localeCompare(b.EmployeeName));
+
+    sortedEmployees.forEach(emp => {
+        const assignedAssets = allAssets.filter(asset => asset.AssignedTo === emp.EmployeeID);
         const card = document.createElement('div');
         card.className = 'employee-card bg-white p-5 rounded-lg shadow-md cursor-pointer border border-gray-200';
         card.dataset.id = emp.EmployeeID;
@@ -370,14 +394,14 @@ export function openEmployeeDetailModal(employeeId) {
         </div>
     `;
 
-    const assignedAssets = state.allAssets.filter(a => a.AssignedTo === employee.EmployeeName);
+    const assignedAssets = state.allAssets.filter(a => a.AssignedTo === employee.EmployeeID);
     if (assignedAssets.length > 0) {
         dom.employeeDetailAssets.innerHTML = `
             <ul class="divide-y divide-gray-200">
                 ${assignedAssets.map(a => `
-                    <li class="py-2">
-                        <p class="text-sm font-medium text-gray-900">${a.AssetName}</p>
-                        <p class="text-xs text-gray-500">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
+                    <li class="py-2 cursor-pointer hover:bg-gray-100 rounded-md p-2 employee-asset-item" data-asset-id="${a.AssetID}">
+                        <p class="text-sm font-medium text-gray-900 pointer-events-none">${a.AssetName}</p>
+                        <p class="text-xs text-gray-500 pointer-events-none">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
                     </li>
                 `).join('')}
             </ul>
@@ -385,8 +409,43 @@ export function openEmployeeDetailModal(employeeId) {
     } else {
         dom.employeeDetailAssets.innerHTML = `<p class="text-sm text-gray-500">No assets currently assigned.</p>`;
     }
-
+    
+    dom.employeeDetailEditBtn.dataset.employeeId = employeeId;
     toggleModal(dom.employeeDetailModal, true);
+}
+
+
+/**
+ * Populates the employee form for editing.
+ * @param {object} employee - The employee object to edit.
+ */
+export function populateEmployeeForm(employee) {
+    dom.employeeForm.reset();
+    dom.employeeId.value = employee.EmployeeID || '';
+    dom.employeeRowIndex.value = employee.rowIndex || '';
+    document.getElementById('employee-name').value = employee.EmployeeName || '';
+    document.getElementById('employee-title').value = employee.Title || '';
+    document.getElementById('employee-department').value = employee.Department || '';
+    document.getElementById('employee-email').value = employee.Email || '';
+    document.getElementById('employee-phone').value = employee.Phone || '';
+    dom.employeeModalTitle.textContent = 'Edit Employee';
+}
+
+/**
+ * Populates the department filter dropdown on the Employees tab.
+ */
+export function populateEmployeeFilterDropdowns() {
+    if (!dom.employeeDepartmentFilter) return;
+    const departments = [...new Set(state.allEmployees.map(e => e.Department).filter(Boolean))].sort();
+    const currentVal = dom.employeeDepartmentFilter.value;
+    dom.employeeDepartmentFilter.innerHTML = '<option value="">All Departments</option>';
+    departments.forEach(dept => {
+        const option = document.createElement('option');
+        option.value = dept;
+        option.textContent = dept;
+        dom.employeeDepartmentFilter.appendChild(option);
+    });
+    dom.employeeDepartmentFilter.value = currentVal;
 }
 
 
@@ -458,13 +517,28 @@ export function renderOverviewCharts(clickCallback) {
     });
     const processData = (key) => {
         const counts = state.allAssets.reduce((acc, asset) => {
-            const value = asset[key] || 'Uncategorized';
-            if (key === 'AssignedTo' && value === 'Uncategorized') return acc;
+            let value;
+            if (key === 'AssignedTo') {
+                const employee = state.allEmployees.find(e => e.EmployeeID === asset.AssignedTo);
+                value = employee ? employee.EmployeeName : 'Unassigned';
+            } else {
+                value = asset[key] || 'Uncategorized';
+            }
+    
+            if (key !== 'AssignedTo' && value === 'Uncategorized') {
+                return acc;
+            }
+    
             acc[value] = (acc[value] || 0) + 1;
             return acc;
         }, {});
+    
+        if (key === 'AssignedTo') {
+            delete counts.Unassigned; 
+        }
         return { labels: Object.keys(counts), data: Object.values(counts) };
     };
+    
     const createChartConfig = (type, data, label, filterId) => ({
         type: type,
         data: { labels: data.labels, datasets: [{ label, data: data.data, backgroundColor: CHART_COLORS, borderWidth: 1 }] },
@@ -474,5 +548,6 @@ export function renderOverviewCharts(clickCallback) {
     state.charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(document.getElementById('site-chart-type').value, processData('Site'), 'Assets per Site', 'filter-site'));
     state.charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(document.getElementById('condition-chart-type').value, processData('Condition'), 'Assets by Condition', 'filter-condition'));
     state.charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
-    state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'employee-select'));
+    state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'filter-assigned-to'));
 }
+
