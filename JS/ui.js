@@ -96,6 +96,14 @@ export function toggleModal(modal, show) {
 }
 
 /**
+ * Converts a camelCase string to kebab-case.
+ * e.g., 'AssetType' -> 'asset-type'
+ * @param {string} str - The string to convert.
+ * @returns {string} The kebab-cased string.
+ */
+const camelToKebab = (str) => str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+
+/**
  * Populates dropdowns in the main asset form and bulk edit form.
  */
 export function populateModalDropdowns() {
@@ -103,8 +111,12 @@ export function populateModalDropdowns() {
     const bulkFields = ['Site', 'Location', 'Container'];
 
     const populate = (key, prefix = '') => {
-        const select = document.getElementById(`${prefix}${key.toLowerCase()}`);
-        if (!select) return;
+        const selectId = `${prefix}${camelToKebab(key)}`;
+        const select = document.getElementById(selectId);
+        if (!select) {
+            console.warn(`Could not find select element with ID: ${selectId}`);
+            return;
+        }
         const uniqueValues = [...new Set(state.allAssets.map(asset => asset[key]).filter(Boolean))].sort();
         select.innerHTML = '<option value="">-- Select --</option>';
         uniqueValues.forEach(value => {
@@ -147,8 +159,13 @@ export function populateFilterDropdowns() {
     const filters = ['Site', 'AssetType', 'Condition', 'AssignedTo', 'ModelNumber', 'Location', 'IntendedUserType'];
 
     filters.forEach(key => {
-        const select = document.getElementById(`filter-${key.toLowerCase()}`);
-        if (!select) return;
+        const selectId = `filter-${camelToKebab(key)}`;
+        const select = document.getElementById(selectId);
+
+        if (!select) {
+             console.warn(`Could not find filter select element with ID: ${selectId}`);
+            return;
+        }
         
         let uniqueValues;
         if (key === 'AssignedTo') {
