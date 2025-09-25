@@ -5,31 +5,22 @@ import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
 
 // --- INITIALIZATION ---
-
-// Use DOMContentLoaded to ensure the entire DOM is ready before running scripts
 window.addEventListener('DOMContentLoaded', () => {
-    ui.initUI(); // Initialize DOM element references in ui.js
+    ui.initUI();
     loadVisibleColumns();
     setupEventListeners();
-    loadGoogleApiScripts(); // Dynamically load Google scripts to prevent race conditions
+    loadGoogleApiScripts();
 });
 
-/**
- * Dynamically loads Google API scripts and sets up their onload callbacks.
- * This approach avoids global scope pollution and timing issues with module scripts.
- */
 function loadGoogleApiScripts() {
     const gapiScript = document.createElement('script');
     gapiScript.src = 'https://apis.google.com/js/api.js';
     gapiScript.async = true;
     gapiScript.defer = true;
-    gapiScript.onload = () => {
-        // This callback runs once the GAPI script is loaded.
-        gapi.load('client', () => {
-            state.gapiInited = true;
-            checkAndInitialize();
-        });
-    };
+    gapiScript.onload = () => gapi.load('client', () => {
+        state.gapiInited = true;
+        checkAndInitialize();
+    });
     document.body.appendChild(gapiScript);
 
     const gisScript = document.createElement('script');
@@ -37,85 +28,61 @@ function loadGoogleApiScripts() {
     gisScript.async = true;
     gisScript.defer = true;
     gisScript.onload = () => {
-        // This callback runs once the GIS script is loaded.
         state.gisInited = true;
         checkAndInitialize();
     };
     document.body.appendChild(gisScript);
 }
 
-
-/**
- * Loads the user's preferred visible columns from local storage.
- */
 function loadVisibleColumns() {
-    const savedCols = localStorage.getItem('visibleColumns');
-    if (savedCols) {
-        state.visibleColumns = JSON.parse(savedCols);
-    } else {
-        // Default columns if none are saved
+    try {
+        const savedCols = localStorage.getItem('visibleColumns');
+        state.visibleColumns = savedCols ? JSON.parse(savedCols) : ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
+    } catch (e) {
         state.visibleColumns = ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
     }
 }
 
-/**
- * Checks if both Google API clients are ready and then initializes them.
- */
 function checkAndInitialize() {
     if (state.gapiInited && state.gisInited) {
         initializeGoogleClients();
     }
 }
 
-/**
- * Initializes the GAPI and GIS clients for authentication and Sheets API access.
- */
 async function initializeGoogleClients() {
     try {
-        await gapi.client.init({
-            discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
-        });
+        await gapi.client.init({ discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'] });
         state.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
             callback: (tokenResponse) => {
-                if (tokenResponse && tokenResponse.access_token) {
+                if (tokenResponse?.access_token) {
                     handleSigninStatusChange(true);
-                } else if (tokenResponse.error) {
-                    console.warn("Silent auth failed:", tokenResponse.error);
+                } else {
+                    console.warn("Silent auth failed or token expired.", tokenResponse?.error);
                     handleSigninStatusChange(false);
                 }
             },
         });
-        // Attempt to get a token without user interaction
         state.tokenClient.requestAccessToken({ prompt: 'none' });
     } catch (error) {
         console.error("Error initializing Google clients:", error);
-        ui.showMessage("Failed to initialize Google services. Check your Client ID.");
+        ui.showMessage("Failed to initialize Google services. Check Client ID & API permissions.");
     }
 }
 
-
 // --- AUTHENTICATION ---
-
-/**
- * Handles the sign-in button click, prompting the user for consent.
- */
 function handleAuthClick() {
     if (state.tokenClient) {
         state.tokenClient.requestAccessToken({ prompt: 'consent' });
     } else {
-        console.error("Authentication client not initialized.");
-        ui.showMessage("Authentication service is not ready. Please wait or refresh.", "error");
+        ui.showMessage("Authentication service is not ready. Please refresh.", "error");
     }
 }
 
-/**
- * Handles the sign-out button click.
- */
 function handleSignoutClick() {
     const token = gapi.client.getToken();
-    if (token !== null) {
+    if (token) {
         google.accounts.oauth2.revoke(token.access_token, () => {
             gapi.client.setToken('');
             handleSigninStatusChange(false);
@@ -123,10 +90,6 @@ function handleSignoutClick() {
     }
 }
 
-/**
- * Updates the UI based on sign-in status and triggers the initial data load.
- * @param {boolean} isSignedIn - The user's current sign-in status.
- */
 function handleSigninStatusChange(isSignedIn) {
     ui.updateSigninStatus(isSignedIn);
     if (isSignedIn) {
@@ -134,43 +97,28 @@ function handleSigninStatusChange(isSignedIn) {
     }
 }
 
-
 // --- DATA FETCHING AND PROCESSING ---
-
-/**
- * Main function to load all data from Google Sheets, process it, and render the UI.
- * This is the primary refresh function for the application.
- */
 async function initializeAppData() {
     ui.setLoading(true);
     try {
-        const ranges = [
-            `${ASSET_SHEET}!A:Z`,
-            `${ROOMS_SHEET}!A:Z`,
-            `${SPATIAL_LAYOUT_SHEET}!A:Z`,
-            `${EMPLOYEES_SHEET}!A:Z`
-        ];
+        const ranges = [`${ASSET_SHEET}!A:Z`, `${ROOMS_SHEET}!A:Z`, `${SPATIAL_LAYOUT_SHEET}!A:Z`, `${EMPLOYEES_SHEET}!A:Z`];
         const { meta, data } = await api.fetchSheetMetadataAndData(ranges);
         
-        const newSheetIds = {};
-        meta.sheets.forEach(sheet => {
-            newSheetIds[sheet.properties.title] = sheet.properties.sheetId;
-        });
-        state.sheetIds = newSheetIds;
+        state.sheetIds = meta.sheets.reduce((acc, sheet) => {
+            acc[sheet.properties.title] = sheet.properties.sheetId;
+            return acc;
+        }, {});
         
-        const assetValues = data[0].values || [];
-        const roomValues = data[1].values || [];
-        const layoutValues = data[2].values || [];
-        const employeeValues = data[3]?.values || [];
+        const [assetValues, roomValues, layoutValues, employeeValues] = data.map(range => range.values || []);
 
-        // Use the unified processing function with header maps for all sheets
         state.allAssets = processSheetData(assetValues, ASSET_HEADER_MAP, 'AssetID');
         state.allRooms = processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID');
         state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID');
         state.allEmployees = processSheetData(employeeValues, EMPLOYEE_HEADER_MAP, 'EmployeeID');
         
-        applyFiltersAndSearch(); // For assets
-        applyEmployeeFiltersAndSearch(); // For employees
+        // Populate UI
+        applyFiltersAndSearch();
+        applyEmployeeFiltersAndSearch();
         ui.populateFilterDropdowns();
         ui.populateEmployeeFilterDropdowns();
         ui.populateModalDropdowns();
@@ -180,12 +128,11 @@ async function initializeAppData() {
         if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
             initVisualInventory();
         }
-
     } catch (err) {
-        console.error("Caught error during data load:", err);
-        const errorMessage = err.result?.error?.message || err.message || 'Unknown error';
+        console.error("Error during data load:", err);
+        const errorMessage = err.result?.error?.message || err.message || 'An unknown error occurred';
         if (errorMessage.includes("Unable to parse range")) {
-            ui.showMessage(`Error: A required sheet is missing. Please ensure 'Asset', 'Rooms', 'Spatial Layout', and 'Employees' sheets exist.`);
+            ui.showMessage(`Error: A required sheet is missing. Ensure 'Asset', 'Rooms', 'Spatial Layout', and 'Employees' sheets exist.`);
         } else {
             ui.showMessage(`Error loading data: ${errorMessage}`);
         }
@@ -194,111 +141,48 @@ async function initializeAppData() {
     }
 }
 
-/**
- * A unified function to process raw sheet data into an array of structured objects.
- * It maps row data to object keys based on a flexible header map, making it resilient
- * to column order and naming variations (case-insensitive, ignores spaces).
- * @param {Array<Array<any>>} values - The raw cell values from the sheet, with row 0 being headers.
- * @param {Array<Object>} headerMapConfig - The configuration array mapping keys to header aliases.
- * @param {string} idKey - The name of the property that serves as the unique identifier for a row.
- * @returns {Array<Object>} An array of processed objects.
- */
 function processSheetData(values, headerMapConfig, idKey) {
-    if (!values || values.length < 1) {
-        return [];
-    }
+    if (!values || values.length < 1) return [];
 
-    const actualHeaders = values[0].map(h => h ? String(h).trim() : '');
-    
-    // Helper to normalize headers for robust matching (lowercase, no spaces)
-    const normalizeHeader = (header) => header.toLowerCase().replace(/\s+/g, '');
+    const actualHeaders = values[0].map(h => String(h || '').trim());
+    const normalize = (header) => header.toLowerCase().replace(/\s+/g, '');
 
-    // Create a map from the normalized header on the sheet to its original column index
-    const normalizedSheetHeaderMap = {};
-    actualHeaders.forEach((header, index) => {
-        const normalized = normalizeHeader(header);
-        if (normalized) {
-            normalizedSheetHeaderMap[normalized] = index;
-        }
-    });
+    const headerIndexMap = actualHeaders.reduce((acc, header, index) => {
+        const normalized = normalize(header);
+        if (normalized) acc[normalized] = index;
+        return acc;
+    }, {});
 
-    // This will map the CANONICAL key (e.g., "AssetID") to the column index.
     const columnIndexMap = {};
-    
-    // Build the columnIndexMap by checking normalized aliases against the normalized sheet headers.
-    headerMapConfig.forEach(config => {
+    for (const config of headerMapConfig) {
         for (const alias of config.aliases) {
-            const normalizedAlias = normalizeHeader(alias);
-            if (normalizedSheetHeaderMap.hasOwnProperty(normalizedAlias)) {
-                columnIndexMap[config.key] = normalizedSheetHeaderMap[normalizedAlias];
-                return; // Found a match for this key, move to the next config item.
+            const normalizedAlias = normalize(alias);
+            if (headerIndexMap.hasOwnProperty(normalizedAlias)) {
+                columnIndexMap[config.key] = headerIndexMap[normalizedAlias];
+                break;
             }
         }
-    });
+    }
 
-    // Check for missing headers that are expected by the app and issue warnings.
-    headerMapConfig.forEach(config => {
-        if (columnIndexMap[config.key] === undefined) {
-            console.warn(`Expected header "${config.key}" (or its aliases: ${config.aliases.join(', ')}) not found in sheet. Data for this column will be missing.`);
-        }
-    });
-
-    const dataRows = values.slice(1);
     const idKeyIndex = columnIndexMap[idKey];
-
     if (idKeyIndex === undefined) {
-        console.error(`CRITICAL: The unique ID key "${idKey}" was not found in the sheet headers. Cannot process data. Headers found:`, actualHeaders);
+        console.error(`CRITICAL: ID key "${idKey}" not found in sheet headers. Processing aborted. Headers found:`, actualHeaders);
         return [];
     }
 
-    const processedData = [];
-    dataRows.forEach((row, index) => {
-        const originalSheetRow = index + 2; // +1 for slice, +1 for 1-based index
-        // Ensure the row is not empty and has a value for the primary ID.
-        if (!row || row.length === 0 || !row[idKeyIndex]) {
-            return; // Skip empty or invalid rows.
+    return values.slice(1).map((row, index) => {
+        if (!row || row.length === 0 || !row[idKeyIndex]) return null;
+        const item = { rowIndex: index + 2 };
+        for (const config of headerMapConfig) {
+            const key = config.key;
+            const colIndex = columnIndexMap[key];
+            item[key] = (colIndex !== undefined && row[colIndex] !== undefined) ? row[colIndex] : '';
         }
-
-        const item = { rowIndex: originalSheetRow };
-        headerMapConfig.forEach(config => {
-            const headerKey = config.key;
-            const colIndex = columnIndexMap[headerKey];
-            let value = (colIndex !== undefined) ? row[colIndex] : undefined;
-
-            // Centralized data transformations
-            if (headerKey === "LoginInfo" && value) {
-                try {
-                    if (/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/.test(value)) {
-                        value = atob(value);
-                    }
-                } catch (e) {
-                    console.warn(`Could not decode login info for row ${originalSheetRow}, treating as plain text.`);
-                }
-            } else if (['GridWidth', 'GridHeight', 'PosX', 'PosY', 'Width', 'Height', 'ShelfRows', 'ShelfCols'].includes(headerKey)) {
-                const parsedValue = value ? parseInt(value, 10) : NaN;
-                if (isNaN(parsedValue)) {
-                    if (['Width', 'Height'].includes(headerKey)) value = 1;
-                    else if (['PosX', 'PosY'].includes(headerKey)) value = 0;
-                    else if (['GridWidth', 'GridHeight'].includes(headerKey)) value = 10;
-                    else value = null;
-                } else {
-                    value = parsedValue;
-                }
-            }
-            item[headerKey] = value === undefined ? '' : value; // Default to empty string if column is missing or value is undefined
-        });
-        processedData.push(item);
-    });
-
-    return processedData;
+        return item;
+    }).filter(Boolean);
 }
 
-
 // --- UI LOGIC & EVENT HANDLERS ---
-
-/**
- * Applies current search and filter values and re-renders the asset table.
- */
 function applyFiltersAndSearch() {
     const searchTerm = ui.dom.filterSearch.value.toLowerCase();
     const filters = {
@@ -311,13 +195,11 @@ function applyFiltersAndSearch() {
         ModelNumber: ui.dom.filterModelNumber.value,
     };
 
-    let filteredAssets = state.allAssets.filter(asset => {
+    const filteredAssets = state.allAssets.filter(asset => {
         const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
         const matchesFilters = Object.entries(filters).every(([key, value]) => {
             if (!value) return true;
             if (key === 'AssignedTo') {
-                // Here, value is an employee NAME from the filter dropdown.
-                // We need to find the ID for that name and match it against the asset's AssignedTo (which is an ID).
                 const employee = state.allEmployees.find(e => e.EmployeeName === value);
                 return employee ? asset[key] === employee.EmployeeID : false;
             }
@@ -329,9 +211,6 @@ function applyFiltersAndSearch() {
     ui.renderTable(filteredAssets);
 }
 
-/**
- * Filters and re-renders the employee list based on search and department selection.
- */
 function applyEmployeeFiltersAndSearch() {
     const searchTerm = ui.dom.employeeSearch.value.toLowerCase();
     const department = ui.dom.employeeDepartmentFilter.value;
@@ -342,9 +221,8 @@ function applyEmployeeFiltersAndSearch() {
         return matchesSearch && matchesDept;
     });
 
-    ui.renderEmployeeList(filteredEmployees, state.allAssets);
+    ui.renderEmployeeList(filteredEmployees);
 }
-
 
 function openEditModal(assetId) {
     const asset = state.allAssets.find(a => a.AssetID === assetId);
@@ -357,53 +235,48 @@ function openEditModal(assetId) {
 function openCloneModal(assetId) {
     const originalAsset = state.allAssets.find(a => a.AssetID === assetId);
     if (!originalAsset) return;
-    const clonedAsset = JSON.parse(JSON.stringify(originalAsset));
-    clonedAsset.AssetID = '';
-    clonedAsset.rowIndex = '';
-    clonedAsset.IDCode = '';
-    clonedAsset.SerialNumber = '';
+    const clonedAsset = { ...originalAsset, AssetID: '', rowIndex: '', IDCode: '', SerialNumber: '' };
     ui.dom.modalTitle.innerText = 'Clone Asset';
     ui.populateAssetForm(clonedAsset);
     ui.toggleModal(ui.dom.assetModal, true);
 }
 
-
-/**
- * Sets up all the primary event listeners for the application.
- */
 function setupEventListeners() {
-    ui.dom.authorizeButton.onclick = handleAuthClick;
-    ui.dom.signoutButton.onclick = handleSignoutClick;
-    ui.dom.refreshDataBtn.onclick = initializeAppData;
+    const d = ui.dom;
+    d.authorizeButton.onclick = handleAuthClick;
+    d.signoutButton.onclick = handleSignoutClick;
+    d.refreshDataBtn.onclick = initializeAppData;
 
-    window.addEventListener('datachanged', () => initializeAppData());
+    window.addEventListener('datachanged', initializeAppData);
 
-    ui.dom.addAssetBtn.onclick = () => {
-        ui.dom.assetForm.reset();
-        ui.dom.modalTitle.innerText = 'Add New Asset';
-        ui.dom.assetId.value = '';
-        ui.dom.rowIndex.value = '';
+    d.addAssetBtn.onclick = () => {
+        d.assetForm.reset();
+        d.modalTitle.innerText = 'Add New Asset';
+        d.assetId.value = '';
+        d.rowIndex.value = '';
         ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
-            document.getElementById(`${id}-new`)?.classList.add('hidden');
-            document.getElementById(`${id}-new`)?.value === '';
+            const newEl = document.getElementById(`${id}-new`);
+            if (newEl) {
+                newEl.classList.add('hidden');
+                newEl.value = '';
+            }
             document.getElementById(id).value = '';
         });
-        ui.toggleModal(ui.dom.assetModal, true);
+        ui.toggleModal(d.assetModal, true);
     };
 
-    ui.dom.cancelBtn.onclick = () => ui.toggleModal(ui.dom.assetModal, false);
-    ui.dom.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.assetModal, false);
+    d.cancelBtn.onclick = () => ui.toggleModal(d.assetModal, false);
+    d.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.assetModal, false);
 
-    ui.dom.inventoryTab.addEventListener('click', () => switchTab('inventory'));
-    ui.dom.overviewTab.addEventListener('click', () => switchTab('overview'));
-    ui.dom.employeesTab.addEventListener('click', () => switchTab('employees'));
-    ui.dom.visualInventoryTab.addEventListener('click', () => switchTab('visual-inventory'));
+    d.inventoryTab.addEventListener('click', () => switchTab('inventory'));
+    d.overviewTab.addEventListener('click', () => switchTab('overview'));
+    d.employeesTab.addEventListener('click', () => switchTab('employees'));
+    d.visualInventoryTab.addEventListener('click', () => switchTab('visual-inventory'));
 
-    ui.dom.site.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.site, document.getElementById('site-new')));
-    ui.dom.location.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.location, document.getElementById('location-new')));
-    ui.dom.container.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.container, document.getElementById('container-new')));
-    ui.dom.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(ui.dom.assetType, document.getElementById('asset-type-new')));
-    // assigned-to dropdown no longer has a "new" input, so no listener needed here.
+    d.site.addEventListener('change', () => ui.handleDynamicSelectChange(d.site, document.getElementById('site-new')));
+    d.location.addEventListener('change', () => ui.handleDynamicSelectChange(d.location, document.getElementById('location-new')));
+    d.container.addEventListener('change', () => ui.handleDynamicSelectChange(d.container, document.getElementById('container-new')));
+    d.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(d.assetType, document.getElementById('asset-type-new')));
 
     document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
         el.addEventListener('input', applyFiltersAndSearch);
@@ -411,57 +284,53 @@ function setupEventListeners() {
     
     document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', () => ui.renderOverviewCharts(handleChartClick)));
 
-    ui.dom.assetForm.onsubmit = handleAssetFormSubmit;
-    ui.dom.employeeForm.onsubmit = handleEmployeeFormSubmit;
+    d.assetForm.onsubmit = handleAssetFormSubmit;
+    d.employeeForm.onsubmit = handleEmployeeFormSubmit;
 
-    ui.dom.assetTableHead.addEventListener('click', handleSortClick);
-    ui.dom.assetTableBody.addEventListener('click', handleTableClick);
+    d.assetTableHead.addEventListener('click', handleSortClick);
+    d.assetTableBody.addEventListener('click', handleTableClick);
 
-    ui.dom.detailModalCloseBtn.onclick = () => ui.toggleModal(ui.dom.detailModal, false);
-    ui.dom.detailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.detailModal, false);
+    d.detailModalCloseBtn.onclick = () => ui.toggleModal(d.detailModal, false);
+    d.detailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.detailModal, false);
     
-    // Employee Panel Listeners
-    ui.dom.addEmployeeBtn.onclick = () => {
-        ui.dom.employeeForm.reset();
-        ui.dom.employeeModalTitle.textContent = 'Add New Employee';
-        ui.dom.employeeId.value = '';
-        ui.dom.employeeRowIndex.value = '';
-        ui.toggleModal(ui.dom.employeeModal, true);
+    // Employee Panel
+    d.addEmployeeBtn.onclick = () => {
+        d.employeeForm.reset();
+        d.employeeModalTitle.textContent = 'Add New Employee';
+        d.employeeId.value = '';
+        d.employeeRowIndex.value = '';
+        ui.toggleModal(d.employeeModal, true);
     };
-    ui.dom.employeeSearch.addEventListener('input', applyEmployeeFiltersAndSearch);
-    ui.dom.employeeDepartmentFilter.addEventListener('change', applyEmployeeFiltersAndSearch);
-    ui.dom.employeeListContainer.addEventListener('click', e => {
+    d.employeeSearch.addEventListener('input', applyEmployeeFiltersAndSearch);
+    d.employeeDepartmentFilter.addEventListener('change', applyEmployeeFiltersAndSearch);
+    d.employeeListContainer.addEventListener('click', e => {
         const card = e.target.closest('.employee-card');
-        if (card && card.dataset.id) {
-            ui.openEmployeeDetailModal(card.dataset.id);
-        }
+        if (card?.dataset.id) ui.openEmployeeDetailModal(card.dataset.id);
     });
-    ui.dom.employeeCancelBtn.onclick = () => ui.toggleModal(ui.dom.employeeModal, false);
-    ui.dom.employeeModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.employeeModal, false);
-    ui.dom.employeeDetailCloseBtn.onclick = () => ui.toggleModal(ui.dom.employeeDetailModal, false);
-    ui.dom.employeeDetailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.employeeDetailModal, false);
+    d.employeeCancelBtn.onclick = () => ui.toggleModal(d.employeeModal, false);
+    d.employeeModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.employeeModal, false);
+    d.employeeDetailCloseBtn.onclick = () => ui.toggleModal(d.employeeDetailModal, false);
+    d.employeeDetailModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.employeeDetailModal, false);
     
-    ui.dom.employeeDetailEditBtn.addEventListener('click', (e) => {
+    d.employeeDetailEditBtn.addEventListener('click', e => {
         const employeeId = e.target.dataset.employeeId;
-        if (employeeId) {
-            const employee = state.allEmployees.find(emp => emp.EmployeeID === employeeId);
-            if (employee) {
-                ui.toggleModal(ui.dom.employeeDetailModal, false);
-                ui.populateEmployeeForm(employee);
-                ui.toggleModal(ui.dom.employeeModal, true);
-            }
+        const employee = state.allEmployees.find(emp => emp.EmployeeID === employeeId);
+        if (employee) {
+            ui.toggleModal(d.employeeDetailModal, false);
+            ui.populateEmployeeForm(employee);
+            ui.toggleModal(d.employeeModal, true);
         }
     });
 
-    ui.dom.employeeDetailAssets.addEventListener('click', e => {
+    d.employeeDetailAssets.addEventListener('click', e => {
         const assetItem = e.target.closest('.employee-asset-item');
-        if (assetItem && assetItem.dataset.assetId) {
-            ui.toggleModal(ui.dom.employeeDetailModal, false); // Close employee modal first
-            ui.openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
+        if (assetItem?.dataset.assetId) {
+            ui.toggleModal(d.employeeDetailModal, false);
+            ui.openDetailModal(assetItem.dataset.assetId, openEditModal);
         }
     });
 
-    window.addEventListener('click', (e) => {
+    window.addEventListener('click', e => {
         if (!e.target.closest('.actions-menu')) {
             document.querySelectorAll('.actions-dropdown.show').forEach(d => d.classList.remove('show'));
         }
@@ -471,27 +340,18 @@ function setupEventListeners() {
     setupColumnSelectorListeners();
 }
 
-
-/**
- * Handles form submission for adding or editing an asset.
- * @param {Event} e - The form submission event.
- */
 async function handleAssetFormSubmit(e) {
     e.preventDefault();
     ui.setLoading(true);
     try {
         const getSelectValue = (id) => {
             const select = document.getElementById(id);
-            // The 'assigned-to' select does not have a '--new--' text input.
-            if (id !== 'assigned-to') {
-                const newInp = document.getElementById(`${id}-new`);
-                return select.value === '--new--' ? newInp.value : select.value;
-            }
-            return select.value;
+            const newInp = document.getElementById(`${id}-new`);
+            return select.value === '--new--' && newInp ? newInp.value : select.value;
         };
 
         const assetData = {
-            AssetID: ui.dom.assetId.value,
+            AssetID: ui.dom.assetId.value || `ASSET-${Date.now()}`,
             rowIndex: ui.dom.rowIndex.value,
             AssetName: ui.dom.assetName.value,
             Quantity: ui.dom.quantity.value,
@@ -504,23 +364,15 @@ async function handleAssetFormSubmit(e) {
             IDCode: ui.dom.idCode.value,
             SerialNumber: ui.dom.serialNumber.value,
             ModelNumber: ui.dom.modelNumber.value,
-            AssignedTo: getSelectValue('assigned-to'), // This will be an EmployeeID
+            AssignedTo: getSelectValue('assigned-to'),
             DateIssued: ui.dom.dateIssued.value,
             PurchaseDate: ui.dom.purchaseDate.value,
             Specs: ui.dom.specs.value,
-            LoginInfo: ui.dom.loginInfo.value,
+            LoginInfo: ui.dom.loginInfo.value ? btoa(ui.dom.loginInfo.value) : '',
             Notes: ui.dom.notes.value,
         };
 
-        if (assetData.LoginInfo) {
-            assetData.LoginInfo = btoa(assetData.LoginInfo);
-        }
-
         const isUpdate = !!assetData.rowIndex;
-        if (!assetData.AssetID) {
-            assetData.AssetID = `ASSET-${Date.now()}`;
-        }
-        
         const rowData = ASSET_HEADERS.map(header => assetData[header] || '');
 
         if (isUpdate) {
@@ -530,24 +382,20 @@ async function handleAssetFormSubmit(e) {
         }
         await initializeAppData();
     } catch (err) {
-        console.error(err);
-        ui.showMessage(`Error saving asset: ${err.result.error.message}`);
+        console.error("Error saving asset:", err);
+        ui.showMessage(`Error saving asset: ${err.result?.error?.message || err.message}`);
     } finally {
         ui.toggleModal(ui.dom.assetModal, false);
         ui.setLoading(false);
     }
 }
 
-/**
- * Handles form submission for adding or editing an employee.
- * @param {Event} e - The form submission event.
- */
 async function handleEmployeeFormSubmit(e) {
     e.preventDefault();
     ui.setLoading(true);
     try {
         const employeeData = {
-            EmployeeID: ui.dom.employeeId.value,
+            EmployeeID: ui.dom.employeeId.value || `EMP-${Date.now()}`,
             rowIndex: ui.dom.employeeRowIndex.value,
             EmployeeName: document.getElementById('employee-name').value,
             Title: document.getElementById('employee-title').value,
@@ -557,10 +405,6 @@ async function handleEmployeeFormSubmit(e) {
         };
 
         const isUpdate = !!employeeData.rowIndex;
-        if (!isUpdate && !employeeData.EmployeeID) {
-            employeeData.EmployeeID = `EMP-${Date.now()}`;
-        }
-
         const rowData = EMPLOYEE_HEADERS.map(header => employeeData[header] || '');
 
         if (isUpdate) {
@@ -569,54 +413,43 @@ async function handleEmployeeFormSubmit(e) {
             await api.appendSheetValues(EMPLOYEES_SHEET, [rowData]);
         }
         await initializeAppData();
-
     } catch (err) {
-        console.error(err);
-        ui.showMessage(`Error saving employee: ${err.result.error.message}`);
+        console.error("Error saving employee:", err);
+        ui.showMessage(`Error saving employee: ${err.result?.error?.message || err.message}`);
     } finally {
         ui.toggleModal(ui.dom.employeeModal, false);
         ui.setLoading(false);
     }
 }
 
-
-/**
- * Handles clicks within the asset table body (for actions, details, etc.).
- * @param {Event} e - The click event.
- */
 function handleTableClick(e) {
     const target = e.target;
+    const assetId = target.closest('tr')?.dataset.id;
     if (target.classList.contains('asset-checkbox')) {
         ui.updateBulkEditButtonVisibility();
         return;
     }
-    const assetId = target.closest('tr')?.dataset.id;
-
     if (target.closest('.actions-btn')) {
         const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
         document.querySelectorAll('.actions-dropdown.show').forEach(d => d !== dropdown && d.classList.remove('show'));
         dropdown.classList.toggle('show');
         return;
     }
-    if (target.closest('.actions-dropdown')) {
-        const dropdown = target.closest('.actions-dropdown');
-        if (target.classList.contains('edit-btn')) openEditModal(target.dataset.id);
-        else if (target.classList.contains('clone-btn')) openCloneModal(target.dataset.id);
-        else if (target.classList.contains('delete-btn')) {
+    const action = target.closest('a');
+    if (action) {
+        if (action.classList.contains('edit-btn')) openEditModal(action.dataset.id);
+        else if (action.classList.contains('clone-btn')) openCloneModal(action.dataset.id);
+        else if (action.classList.contains('delete-btn')) {
             if (confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
-                handleDeleteRow(ASSET_SHEET, target.dataset.rowIndex);
+                handleDeleteRow(ASSET_SHEET, action.dataset.rowIndex);
             }
         }
-        dropdown.classList.remove('show');
+        action.closest('.actions-dropdown').classList.remove('show');
         return;
     }
     if (assetId) ui.openDetailModal(assetId, openEditModal);
 }
 
-/**
- * Handles clicks on the table header for sorting columns.
- * @param {Event} e - The click event.
- */
 function handleSortClick(e) {
     const th = e.target.closest('th[data-column]');
     if (!th) return;
@@ -631,38 +464,33 @@ function handleSortClick(e) {
     applyFiltersAndSearch();
 }
 
-/**
- * Sets up event listeners for the bulk edit modal.
- */
 function setupBulkEditListeners() {
     ui.dom.bulkEditBtn.addEventListener('click', () => {
         document.getElementById('bulk-edit-form').reset();
-        document.querySelectorAll('#bulk-edit-form [disabled]').forEach(el => el.disabled = true);
+        document.querySelectorAll('#bulk-edit-form select').forEach(el => el.disabled = true);
         ui.toggleModal(ui.dom.bulkEditModal, true);
     });
     document.getElementById('bulk-cancel-btn').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
     ui.dom.bulkEditModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
-    document.querySelectorAll('[id^="bulk-update-"]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
+    
+    document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', e => {
             const fieldName = e.target.id.replace('bulk-update-', '').replace('-check', '');
-            const inputEl = document.getElementById(`bulk-${fieldName}`) || document.getElementById(`bulk-${fieldName}-type`);
+            const inputEl = document.getElementById(`bulk-${fieldName.replace(/-(.)/g, (m, g) => g.toUpperCase())}`);
             if (inputEl) inputEl.disabled = !e.target.checked;
         });
     });
+
     document.getElementById('bulk-site').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-site'), document.getElementById('bulk-site-new')));
     document.getElementById('bulk-location').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-location'), document.getElementById('bulk-location-new')));
     document.getElementById('bulk-container').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-container'), document.getElementById('bulk-container-new')));
-    document.getElementById('bulk-assigned-to').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-assigned-to'), document.getElementById('bulk-assigned-to-new')));
-    document.getElementById('bulk-edit-form').onsubmit = (e) => {
+    
+    document.getElementById('bulk-edit-form').onsubmit = e => {
         e.preventDefault();
         handleBulkUpdate();
     };
 }
 
-
-/**
- * Sets up event listeners for the column selector modal.
- */
 function setupColumnSelectorListeners() {
     ui.dom.customizeColsBtn.addEventListener('click', () => {
         ui.populateColumnSelector();
@@ -672,8 +500,7 @@ function setupColumnSelectorListeners() {
     ui.dom.columnModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.columnModal, false);
     ui.dom.columnSaveBtn.addEventListener('click', () => {
         const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
-        const newVisibleColumns = new Set(["AssetName", ...selectedCols]);
-        state.visibleColumns = Array.from(newVisibleColumns);
+        state.visibleColumns = ["AssetName", ...selectedCols];
         localStorage.setItem('visibleColumns', JSON.stringify(state.visibleColumns));
         applyFiltersAndSearch();
         ui.renderFilters();
@@ -681,84 +508,62 @@ function setupColumnSelectorListeners() {
     });
 }
 
-
-/**
- * Handles the logic for a bulk update operation.
- */
 async function handleBulkUpdate() {
     ui.setLoading(true);
     try {
         const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
-        if (selectedAssetIds.length === 0) {
-            return;
-        }
+        if (selectedAssetIds.length === 0) return;
 
         const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${ASSET_SHEET}!1:1` });
-        const sheetHeaders = response.result.values ? response.result.values[0] : [];
+        const sheetHeaders = response.result.values?.[0] || [];
         const headerMap = {};
         sheetHeaders.forEach((header, i) => {
             const foundHeader = ASSET_HEADER_MAP.find(h => h.aliases.includes(header));
-            if(foundHeader) {
-                headerMap[foundHeader.key] = String.fromCharCode(65 + i);
-            }
+            if(foundHeader) headerMap[foundHeader.key] = String.fromCharCode(65 + i);
         });
 
         const getSelectValue = (id) => {
             const select = document.getElementById(id);
             const newInp = document.getElementById(`${id}-new`);
-            if (newInp) {
-                return select.value === '--new--' ? newInp.value : select.value;
-            }
-            return select.value;
+            return select.value === '--new--' && newInp ? newInp.value : select.value;
         };
 
         const fields = [
-            { checkId: 'bulk-update-site-check', fieldName: 'Site', getValue: () => getSelectValue('bulk-site') },
-            { checkId: 'bulk-update-location-check', fieldName: 'Location', getValue: () => getSelectValue('bulk-location') },
-            { checkId: 'bulk-update-container-check', fieldName: 'Container', getValue: () => getSelectValue('bulk-container') },
-            { checkId: 'bulk-update-intended-user-check', fieldName: 'IntendedUserType', getValue: () => document.getElementById('bulk-intended-user-type').value },
-            { checkId: 'bulk-update-condition-check', fieldName: 'Condition', getValue: () => document.getElementById('bulk-condition').value },
-            { checkId: 'bulk-update-assigned-to-check', fieldName: 'AssignedTo', getValue: () => document.getElementById('bulk-assigned-to').value } // Value is now EmployeeID
+            { check: 'bulk-update-site-check', key: 'Site', value: () => getSelectValue('bulk-site') },
+            { check: 'bulk-update-location-check', key: 'Location', value: () => getSelectValue('bulk-location') },
+            { check: 'bulk-update-container-check', key: 'Container', value: () => getSelectValue('bulk-container') },
+            { check: 'bulk-update-intended-user-check', key: 'IntendedUserType', value: () => ui.dom.bulkIntendedUserType.value },
+            { check: 'bulk-update-condition-check', key: 'Condition', value: () => ui.dom.bulkCondition.value },
+            { check: 'bulk-update-assigned-to-check', key: 'AssignedTo', value: () => ui.dom.bulkAssignedTo.value }
         ];
 
         const data = [];
-        fields.forEach(field => {
-            if (document.getElementById(field.checkId).checked) {
-                const value = field.getValue();
-                const colLetter = headerMap[field.fieldName];
+        for (const field of fields) {
+            if (document.getElementById(field.check).checked) {
+                const value = field.value();
+                const colLetter = headerMap[field.key];
                 if (colLetter) {
-                    selectedAssetIds.forEach(id => {
+                    for (const id of selectedAssetIds) {
                         const asset = state.allAssets.find(a => a.AssetID === id);
-                        if (asset) {
-                            data.push({
-                                range: `${ASSET_SHEET}!${colLetter}${asset.rowIndex}`,
-                                values: [[value]]
-                            });
-                        }
-                    });
+                        if (asset) data.push({ range: `${ASSET_SHEET}!${colLetter}${asset.rowIndex}`, values: [[value]] });
+                    }
                 }
             }
-        });
+        }
 
         if (data.length > 0) {
             await api.batchUpdateSheetValues(data);
             await initializeAppData();
         }
     } catch (err) {
-        console.error(err);
-        ui.showMessage(`Error with bulk update: ${err.result.error.message}`);
+        console.error("Error during bulk update:", err);
+        ui.showMessage(`Bulk update failed: ${err.result?.error?.message || err.message}`);
     } finally {
         ui.toggleModal(ui.dom.bulkEditModal, false);
         ui.setLoading(false);
     }
 }
 
-
-/**
- * Handles deleting a row from a specified sheet.
- * @param {string} sheetName - The name of the sheet.
- * @param {number} rowIndex - The 1-based index of the row to delete.
- */
 async function handleDeleteRow(sheetName, rowIndex) {
     const sheetId = state.sheetIds[sheetName];
     if (!sheetId) {
@@ -768,30 +573,17 @@ async function handleDeleteRow(sheetName, rowIndex) {
     ui.setLoading(true);
     try {
         await api.batchUpdateSheet({
-            requests: [{
-                deleteDimension: {
-                    range: {
-                        sheetId: sheetId,
-                        dimension: "ROWS",
-                        startIndex: rowIndex - 1,
-                        endIndex: rowIndex
-                    }
-                }
-            }]
+            requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowIndex - 1, endIndex: rowIndex } } }]
         });
         await initializeAppData();
     } catch (err) {
-        console.error(err);
-        ui.showMessage(`Error deleting from ${sheetName}: ${err.result.error.message}`);
+        console.error(`Error deleting from ${sheetName}:`, err);
+        ui.showMessage(`Error deleting row: ${err.result?.error?.message || err.message}`);
     } finally {
         ui.setLoading(false);
     }
 }
 
-/**
- * Handles navigation between the main tabs.
- * @param {string} tabName - The name of the tab to switch to.
- */
 function switchTab(tabName) {
     const tabs = {
         inventory: { panel: ui.dom.inventoryPanel, button: ui.dom.inventoryTab },
@@ -805,42 +597,21 @@ function switchTab(tabName) {
     });
     tabs[tabName].panel.classList.remove('hidden');
     tabs[tabName].button.classList.add('active');
+
     if (tabName === 'overview') ui.renderOverviewCharts(handleChartClick);
-    if (tabName === 'visual-inventory') {
-        initVisualInventory();
-    }
+    if (tabName === 'visual-inventory') initVisualInventory();
 }
 
-
-/**
- * Handles clicks on chart elements to filter the main inventory view.
- * @param {Event} event - The click event.
- * @param {Array} elements - The chart elements that were clicked.
- * @param {string} filterId - The ID of the filter dropdown to update.
- */
 function handleChartClick(event, elements, filterId) {
-    if (!elements || elements.length === 0) {
-        return;
-    }
+    if (!elements || elements.length === 0) return;
     const chart = elements[0].element.$context.chart;
     const label = chart.data.labels[elements[0].index];
 
-    // Clear all existing filters before applying the new one.
-    ui.dom.filterSearch.value = '';
-    ['filter-site', 'filter-asset-type', 'filter-condition', 'filter-assigned-to', 'filter-model-number'].forEach(id => {
-        const filterEl = document.getElementById(id);
-        if (filterEl) {
-            filterEl.value = '';
-        }
-    });
-
-    // Apply the new filter from the chart click.
-    const targetFilterEl = document.getElementById(filterId);
-    if (targetFilterEl) {
-        targetFilterEl.value = label;
-    }
+    document.querySelectorAll('#filter-section select, #filter-section input[type="text"]').forEach(el => el.value = '');
     
-    // Switch to the inventory tab to show the results and apply the filter.
+    const targetFilterEl = document.getElementById(filterId);
+    if (targetFilterEl) targetFilterEl.value = label;
+    
     switchTab('inventory');
     applyFiltersAndSearch();
 }

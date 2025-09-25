@@ -2,12 +2,10 @@
 import { state, ASSET_HEADERS, CHART_COLORS } from './state.js';
 
 // --- DOM ELEMENT REFERENCES ---
-// We use a single object to hold all DOM references for cleaner access.
 export const dom = {};
 
 /**
  * Queries the DOM and populates the `dom` object with element references.
- * Should be called once the DOM is fully loaded.
  */
 export function initUI() {
     const ids = [
@@ -31,15 +29,14 @@ export function initUI() {
         'employee-detail-modal', 'employee-detail-name', 'employee-detail-title-dept',
         'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn',
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
-        'employee-id', 'employee-row-index'
+        'employee-id', 'employee-row-index', 'bulk-site', 'bulk-location', 'bulk-container',
+        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to'
     ];
     ids.forEach(id => {
-        // Convert snake_case and kebab-case to camelCase for property names
         const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
         dom[key] = document.getElementById(id);
     });
 }
-
 
 /**
  * Toggles the visibility of authentication and dashboard sections.
@@ -49,7 +46,6 @@ export function updateSigninStatus(isSignedIn) {
     dom.authSection.classList.toggle('hidden', isSignedIn);
     dom.dashboardSection.classList.toggle('hidden', !isSignedIn);
 }
-
 
 /**
  * Toggles the loading indicator visibility.
@@ -68,6 +64,7 @@ export function setLoading(isLoading) {
 export function showMessage(text, type = 'error') {
     const box = document.getElementById('message-box');
     const textEl = document.getElementById('message-text');
+    if (!box || !textEl) return;
     textEl.innerText = text;
     box.className = 'fixed top-5 right-5 text-white py-3 px-5 rounded-lg shadow-lg z-50';
     box.classList.add(type === 'error' ? 'bg-red-500' : 'bg-green-500');
@@ -82,111 +79,97 @@ export function showMessage(text, type = 'error') {
  */
 export function toggleModal(modal, show) {
     if (!modal) return;
+    const backdrop = modal.querySelector('.modal-backdrop');
+    const content = modal.querySelector('.modal-content');
+
     if (show) {
         modal.classList.remove('hidden');
         setTimeout(() => {
-            modal.querySelector('.modal-backdrop')?.classList.remove('opacity-0');
-            modal.querySelector('.modal-content')?.classList.remove('scale-95');
+            backdrop?.classList.remove('opacity-0');
+            content?.classList.remove('scale-95');
         }, 10);
     } else {
-        modal.querySelector('.modal-backdrop')?.classList.add('opacity-0');
-        modal.querySelector('.modal-content')?.classList.add('scale-95');
+        backdrop?.classList.add('opacity-0');
+        content?.classList.add('scale-95');
         setTimeout(() => modal.classList.add('hidden'), 300);
     }
 }
 
 /**
- * Converts a camelCase string to kebab-case.
- * e.g., 'AssetType' -> 'asset-type'
- * @param {string} str - The string to convert.
- * @returns {string} The kebab-cased string.
+ * Centralized helper to populate a <select> element.
+ * @param {HTMLSelectElement} selectEl - The dropdown element to populate.
+ * @param {Array<Object>} data - The source data array (e.g., state.allAssets).
+ * @param {string} valueKey - The property to use for the option's value.
+ * @param {string} [textKey=valueKey] - The property to use for the option's text.
+ * @param {Object} [options={}] - Configuration options.
+ * @param {string} [options.initialOptionText] - Text for the first, default option (e.g., "All").
+ * @param {boolean} [options.addNew=false] - Whether to add an "Add New..." option.
  */
-const camelToKebab = (str) => str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
+    if (!selectEl) return;
+    textKey = textKey || valueKey;
+    const { initialOptionText, addNew } = options;
+    
+    const uniqueItems = Array.from(new Map(data.map(item => [item[valueKey], item])).values());
+    const currentValue = selectEl.value;
+    selectEl.innerHTML = initialOptionText ? `<option value="">${initialOptionText}</option>` : '';
 
-/**
- * Populates dropdowns in the main asset form and bulk edit form.
- */
-export function populateModalDropdowns() {
-    const fields = ['Site', 'Location', 'Container', 'AssetType'];
-    const bulkFields = ['Site', 'Location', 'Container'];
-
-    const populate = (key, prefix = '') => {
-        const selectId = `${prefix}${camelToKebab(key)}`;
-        const select = document.getElementById(selectId);
-        if (!select) {
-            console.warn(`Could not find select element with ID: ${selectId}`);
-            return;
-        }
-        const uniqueValues = [...new Set(state.allAssets.map(asset => asset[key]).filter(Boolean))].sort();
-        select.innerHTML = '<option value="">-- Select --</option>';
-        uniqueValues.forEach(value => {
+    uniqueItems
+        .filter(item => item && item[valueKey])
+        .sort((a, b) => String(a[textKey]).localeCompare(String(b[textKey])))
+        .forEach(item => {
             const option = document.createElement('option');
-            option.value = value;
-            option.textContent = value;
-            select.appendChild(option);
+            option.value = item[valueKey];
+            option.textContent = item[textKey];
+            selectEl.appendChild(option);
         });
+
+    if (addNew) {
         const addNewOption = document.createElement('option');
         addNewOption.value = '--new--';
         addNewOption.textContent = 'Add New...';
-        select.appendChild(addNewOption);
+        selectEl.appendChild(addNewOption);
     }
     
-    // Populate standard fields from asset data
-    fields.forEach(key => populate(key, ''));
-    bulkFields.forEach(key => populate(key, 'bulk-'));
+    // Restore previous value if it still exists
+    if ([...selectEl.options].some(opt => opt.value === currentValue)) {
+        selectEl.value = currentValue;
+    }
+}
 
-    // Populate "Assigned To" from employee data
-    const assignedToSelects = [document.getElementById('assigned-to'), document.getElementById('bulk-assigned-to')];
-    assignedToSelects.forEach(select => {
-        if (!select) return;
-        select.innerHTML = '<option value="">-- Unassigned --</option>';
-        state.allEmployees
-            .sort((a,b) => a.EmployeeName.localeCompare(b.EmployeeName))
-            .forEach(emp => {
-                const option = document.createElement('option');
-                option.value = emp.EmployeeID; // Use EmployeeID as value
-                option.textContent = emp.EmployeeName;
-                select.appendChild(option);
-        });
+/**
+ * Populates all dropdowns in the main asset form and bulk edit form.
+ */
+export function populateModalDropdowns() {
+    // Asset-based dropdowns
+    const assetFields = ['Site', 'Location', 'Container', 'AssetType'];
+    assetFields.forEach(field => {
+        const key = field.charAt(0).toLowerCase() + field.slice(1);
+        populateSelect(dom[key], state.allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
+        populateSelect(dom[`bulk${field}`], state.allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
     });
+
+    // Employee-based dropdowns
+    populateSelect(dom.assignedTo, state.allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
+    populateSelect(dom.bulkAssignedTo, state.allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
 }
 
 
 /**
- * Populates the main filter dropdowns based on available asset data.
+ * Populates the main inventory filter dropdowns based on available data.
  */
 export function populateFilterDropdowns() {
-    const filters = ['Site', 'AssetType', 'Condition', 'AssignedTo', 'ModelNumber', 'Location', 'IntendedUserType'];
-
-    filters.forEach(key => {
-        const selectId = `filter-${camelToKebab(key)}`;
-        const select = document.getElementById(selectId);
-
-        if (!select) {
-             console.warn(`Could not find filter select element with ID: ${selectId}`);
-            return;
-        }
-        
-        let uniqueValues;
-        if (key === 'AssignedTo') {
-            // For the 'AssignedTo' filter, we want to show names, not IDs.
-            uniqueValues = [...new Set(state.allEmployees.map(emp => emp.EmployeeName))].sort();
-        } else {
-            uniqueValues = [...new Set(state.allAssets.map(asset => asset[key]).filter(Boolean))].sort();
-        }
-
-        const currentValue = select.value;
-        select.innerHTML = `<option value="">All</option>`;
-        uniqueValues.forEach(value => {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = value;
-            select.appendChild(option);
-        });
-        if ([...select.options].some(opt => opt.value === currentValue)) {
-            select.value = currentValue;
-        }
-    });
+    populateSelect(dom.filterSite, state.allAssets, 'Site', 'Site', { initialOptionText: 'All' });
+    populateSelect(dom.filterAssetType, state.allAssets, 'AssetType', 'AssetType', { initialOptionText: 'All' });
+    populateSelect(dom.filterCondition, state.allAssets, 'Condition', 'Condition', { initialOptionText: 'All' });
+    populateSelect(dom.filterModelNumber, state.allAssets, 'ModelNumber', 'ModelNumber', { initialOptionText: 'All' });
+    populateSelect(dom.filterLocation, state.allAssets, 'Location', 'Location', { initialOptionText: 'All' });
+    populateSelect(dom.filterIntendedUserType, state.allAssets, 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
+    
+    // The AssignedTo filter shows employee names but filters by them.
+    const assignedToData = state.allEmployees.map(e => ({ EmployeeName: e.EmployeeName }));
+    populateSelect(dom.filterAssignedTo, assignedToData, 'EmployeeName', 'EmployeeName', { initialOptionText: 'All' });
+    
     renderFilters();
 }
 
@@ -195,6 +178,7 @@ export function populateFilterDropdowns() {
  * @param {Array<Object>} assetsToRender - The array of asset objects to display.
  */
 export function renderTable(assetsToRender) {
+    if (!dom.assetTableHead || !dom.assetTableBody) return;
     dom.assetTableHead.innerHTML = '';
     dom.assetTableBody.innerHTML = '';
 
@@ -211,7 +195,6 @@ export function renderTable(assetsToRender) {
     headerRow.innerHTML = headerHTML;
     dom.assetTableHead.appendChild(headerRow);
 
-    // Re-attach the 'select-all' checkbox listener after rendering
     const selectAllCheckbox = dom.assetTableHead.querySelector('#select-all-assets');
     if (selectAllCheckbox) {
         selectAllCheckbox.addEventListener('change', (e) => {
@@ -238,7 +221,6 @@ export function renderTable(assetsToRender) {
         let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>`;
         state.visibleColumns.forEach(colName => {
             let value = asset[colName] || '';
-            // If column is AssignedTo, display the employee name instead of the ID
             if (colName === 'AssignedTo') {
                 const employee = state.allEmployees.find(e => e.EmployeeID === value);
                 value = employee ? employee.EmployeeName : (value || '');
@@ -335,14 +317,14 @@ export function populateAssetForm(asset) {
         if (value && optionExists) {
             select.value = value;
             if(newInp) newInp.classList.add('hidden');
-        } else if (value && field.id !== 'assigned-to') { // assigned-to doesn't have a 'new' text input
+        } else if (value && field.id !== 'assigned-to') {
             select.value = '--new--';
             if(newInp) {
                 newInp.value = value;
                 newInp.classList.remove('hidden');
             }
         } else {
-            select.value = '';
+            select.value = value || ''; // Set to value if it exists, otherwise empty string
             if(newInp) {
                 newInp.classList.add('hidden');
                 newInp.value = '';
@@ -354,9 +336,8 @@ export function populateAssetForm(asset) {
 /**
  * Renders the list of employees as cards in the Employees tab.
  * @param {Array<Object>} employeesToRender - The list of employee objects to display.
- * @param {Array<Object>} allAssets - The list of all asset objects.
  */
-export function renderEmployeeList(employeesToRender, allAssets) {
+export function renderEmployeeList(employeesToRender) {
     if (!dom.employeeListContainer) return;
     dom.employeeListContainer.innerHTML = '';
 
@@ -368,7 +349,7 @@ export function renderEmployeeList(employeesToRender, allAssets) {
     const sortedEmployees = [...employeesToRender].sort((a, b) => a.EmployeeName.localeCompare(b.EmployeeName));
 
     sortedEmployees.forEach(emp => {
-        const assignedAssets = allAssets.filter(asset => asset.AssignedTo === emp.EmployeeID);
+        const assignedAssets = state.allAssets.filter(asset => asset.AssignedTo === emp.EmployeeID);
         const card = document.createElement('div');
         card.className = 'employee-card bg-white p-5 rounded-lg shadow-md cursor-pointer border border-gray-200';
         card.dataset.id = emp.EmployeeID;
@@ -452,17 +433,7 @@ export function populateEmployeeForm(employee) {
  * Populates the department filter dropdown on the Employees tab.
  */
 export function populateEmployeeFilterDropdowns() {
-    if (!dom.employeeDepartmentFilter) return;
-    const departments = [...new Set(state.allEmployees.map(e => e.Department).filter(Boolean))].sort();
-    const currentVal = dom.employeeDepartmentFilter.value;
-    dom.employeeDepartmentFilter.innerHTML = '<option value="">All Departments</option>';
-    departments.forEach(dept => {
-        const option = document.createElement('option');
-        option.value = dept;
-        option.textContent = dept;
-        dom.employeeDepartmentFilter.appendChild(option);
-    });
-    dom.employeeDepartmentFilter.value = currentVal;
+    populateSelect(dom.employeeDepartmentFilter, state.allEmployees, 'Department', 'Department', { initialOptionText: 'All Departments' });
 }
 
 
@@ -472,6 +443,7 @@ export function populateEmployeeFilterDropdowns() {
  * @param {HTMLInputElement} newElement - The text input element.
  */
 export function handleDynamicSelectChange(selectElement, newElement) {
+    if (!newElement) return;
     if (selectElement.value === '--new--') {
         newElement.classList.remove('hidden');
         newElement.focus();
