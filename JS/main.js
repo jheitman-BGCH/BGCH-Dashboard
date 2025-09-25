@@ -457,7 +457,7 @@ function setupEventListeners() {
         const assetItem = e.target.closest('.employee-asset-item');
         if (assetItem && assetItem.dataset.assetId) {
             ui.toggleModal(ui.dom.employeeDetailModal, false); // Close employee modal first
-            openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
+            ui.openDetailModal(assetItem.dataset.assetId, openEditModal); // Open asset modal
         }
     });
 
@@ -844,5 +844,3 @@ function handleChartClick(event, elements, filterId) {
     switchTab('inventory');
     applyFiltersAndSearch();
 }
-
-
