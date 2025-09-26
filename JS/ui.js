@@ -124,11 +124,11 @@ export function toggleModal(modal, show) {
         modal.classList.remove('hidden');
         setTimeout(() => {
             backdrop?.classList.remove('opacity-0');
-            content?.classList.remove('scale-95');
+            content?.classList.remove('opacity-0', 'scale-95');
         }, 10);
     } else {
         backdrop?.classList.add('opacity-0');
-        content?.classList.add('scale-95');
+        content?.classList.add('opacity-0', 'scale-95');
         setTimeout(() => modal.classList.add('hidden'), 300);
     }
 }
@@ -332,7 +332,8 @@ export function openDetailModal(assetId, openEditCallback) {
     const asset = selectors.selectAssetsById(state.allAssets).get(assetId);
     if (!asset) return;
 
-    const locationPath = selectors.selectFullLocationPathString(state, asset.ParentObjectID);
+    const parentId = selectors.selectResolvedAssetParentId(asset, state);
+    const locationPath = selectors.selectFullLocationPathString(state, parentId);
 
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
     const detailHeaders = ASSET_HEADER_MAP.map(h => h.key).filter(h => !['Site', 'Location', 'Container', 'LoginInfo', 'ParentObjectID', 'AssetID'].includes(h));
@@ -380,7 +381,9 @@ export function populateAssetForm(asset = {}) {
     dom.assignedTo.value = asset.AssignedTo || '';
 
     // Handle hierarchical location dropdowns
-    const path = selectors.selectFullLocationPath(getState(), asset.ParentObjectID);
+    const state = getState();
+    const parentId = selectors.selectResolvedAssetParentId(asset, state);
+    const path = selectors.selectFullLocationPath(state, parentId);
     const site = path.find(p => p.SiteID);
     const room = path.find(p => p.RoomID);
     const container = path.find(p => p.ContainerID);

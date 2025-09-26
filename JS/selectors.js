@@ -197,6 +197,36 @@ export const selectContainersByParentId = memoize((state, parentId) => {
     return state.allContainers.filter(container => container.ParentID === parentId);
 });
 
+/**
+ * Tries to find the ParentObjectID from old deprecated fields (Site, Location, Container).
+ */
+const findIdFromOldData = memoize((asset, allSites, allRooms, allContainers) => {
+    if (!asset.Site) return null;
+    const site = allSites.find(s => s.SiteName === asset.Site);
+    if (!site) return null;
+
+    if (!asset.Location) return null;
+    const room = allRooms.find(r => r.RoomName === asset.Location && r.SiteID === site.SiteID);
+    if (!room) return null;
+
+    if (asset.Container) {
+        const container = allContainers.find(c => c.ContainerName === asset.Container && c.ParentID === room.RoomID);
+        return container ? container.ContainerID : room.RoomID; // Fallback to room ID if container not found
+    }
+
+    return room.RoomID;
+});
+
+/**
+ * Gets the definitive ParentObjectID for an asset, using the new field first and falling back to old ones.
+ */
+export const selectResolvedAssetParentId = (asset, state) => {
+    return asset.ParentObjectID || findIdFromOldData(asset, state.allSites, state.allRooms, state.allContainers);
+};
+
+/**
+ * Builds the full hierarchical location path for a given parent ID.
+ */
 export const selectFullLocationPath = memoize((state, parentId) => {
     const path = [];
     if (!parentId) return path;
@@ -205,25 +235,27 @@ export const selectFullLocationPath = memoize((state, parentId) => {
     const roomsById = selectRoomsById(state.allRooms);
     const containersById = selectContainersById(state.allContainers);
 
-    let currentId = parentId;
-    let currentItem = roomsById.get(currentId) || containersById.get(currentId);
+    let currentItem = roomsById.get(parentId) || containersById.get(parentId);
 
     while (currentItem) {
         path.unshift(currentItem);
-        currentId = currentItem.ParentID;
-        if (currentId) {
-             currentItem = roomsById.get(currentId) || containersById.get(currentId);
-        } else {
-             // If the current item was a room, get its site and finish
-             if (currentItem.RoomID) {
-                const site = sitesById.get(currentItem.SiteID);
-                if (site) path.unshift(site);
-             }
-             currentItem = null;
+        let nextParentId = null;
+
+        if (currentItem.ContainerID) { // If the item is a container, its parent is a room or another container
+            nextParentId = currentItem.ParentID;
+        } else if (currentItem.RoomID) { // If the item is a room, its parent is a site
+            const site = sitesById.get(currentItem.SiteID);
+            if (site) {
+                path.unshift(site);
+            }
+            break; // Rooms are the top of the ParentID hierarchy, so we can stop.
         }
+        // Move to the next parent
+        currentItem = nextParentId ? (roomsById.get(nextParentId) || containersById.get(nextParentId)) : null;
     }
     return path;
 });
+
 
 export const selectFullLocationPathString = (state, parentId) => {
     const path = selectFullLocationPath(state, parentId);
