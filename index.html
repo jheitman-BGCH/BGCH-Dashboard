@@ -118,7 +118,7 @@
                         </div>
                         <div class="ml-auto">
                             <button id="customize-cols-btn" class="w-full h-10 flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
+                                <svg xmlns="http://www.w.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
                                 <span>View</span>
                             </button>
                         </div>
@@ -139,8 +139,68 @@
                 </div>
             </div>
 
-            <div id="overview-panel" class="hidden"><!-- ... unchanged ... --></div>
-            <div id="employees-panel" class="hidden"><!-- ... unchanged ... --></div>
+            <div id="overview-panel" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Site</h3>
+                            <select id="site-chart-type" class="chart-type-select form-select text-sm py-1">
+                                <option value="pie">Pie</option>
+                                <option value="bar">Bar</option>
+                                <option value="doughnut">Doughnut</option>
+                            </select>
+                        </div>
+                        <div class="chart-container"><canvas id="site-chart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Condition</h3>
+                            <select id="condition-chart-type" class="chart-type-select form-select text-sm py-1">
+                                <option value="bar">Bar</option>
+                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
+                            </select>
+                        </div>
+                        <div class="chart-container"><canvas id="condition-chart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Type</h3>
+                             <select id="type-chart-type" class="chart-type-select form-select text-sm py-1">
+                                <option value="bar">Bar</option>
+                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
+                            </select>
+                        </div>
+                        <div class="chart-container"><canvas id="type-chart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                         <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Assets by Employee</h3>
+                             <select id="employee-chart-type" class="chart-type-select form-select text-sm py-1">
+                                <option value="bar">Bar</option>
+                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
+                            </select>
+                        </div>
+                        <div class="chart-container"><canvas id="employee-chart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="employees-panel" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center gap-4">
+                            <input type="text" id="employee-search" placeholder="Search employees..." class="form-input">
+                            <select id="employee-department-filter" class="form-select"></select>
+                        </div>
+                        <button id="add-employee-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700">Add Employee</button>
+                    </div>
+                    <div id="employee-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    </div>
+                 </div>
+            </div>
 
             <div id="visual-inventory-panel" class="hidden">
                 <div class="bg-white p-6 rounded-lg shadow-md">
@@ -342,15 +402,146 @@
         </div>
     </div>
 
-    <!-- Other Modals (Detail, Column, Contents, Room, Employee) are unchanged -->
-    <div id="detail-modal" class="modal-container hidden"><!-- ... --></div>
-    <div id="column-modal" class="modal-container hidden"><!-- ... --></div>
-    <div id="contents-modal" class="modal-container hidden"><!-- ... --></div>
-    <div id="room-modal" class="modal-container hidden"><!-- ... --></div>
-    <div id="employee-modal" class="modal-container hidden"><!-- ... --></div>
-    <div id="employee-detail-modal" class="modal-container hidden"><!-- ... --></div>
+    <!-- Restored Modals -->
+    <div id="detail-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-2xl">
+            <div class="p-8">
+                 <div class="flex justify-between items-start mb-6">
+                    <h2 id="detail-modal-title" class="text-2xl font-bold">Asset Details</h2>
+                    <button id="detail-modal-close-btn" class="text-gray-500 hover:text-gray-800">&times;</button>
+                </div>
+                <div id="detail-modal-content" class="text-sm"></div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button id="detail-modal-edit-btn" class="btn-primary">Edit Asset</button>
+                </div>
+            </div>
+        </div>
+    </div>
     
-    <div id="message-box" class="hidden fixed top-5 right-5 z-50"></div>
+    <div id="column-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-md">
+            <div class="p-8">
+                <h2 class="text-2xl font-bold mb-6">Customize Columns</h2>
+                <div id="column-checkboxes" class="grid grid-cols-2 gap-4"></div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="column-cancel-btn" class="btn-secondary">Cancel</button>
+                    <button type="button" id="column-save-btn" class="btn-primary">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="contents-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-xl">
+             <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="contents-modal-title" class="text-xl font-bold">Container Contents</h2>
+                    <button class="modal-close-btn text-gray-500 hover:text-gray-800">&times;</button>
+                </div>
+                <div id="contents-modal-body"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="room-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-lg">
+            <form id="room-form" class="p-8">
+                <h2 class="text-2xl font-bold mb-6">Add/Edit Room</h2>
+                <input type="hidden" id="room-id-hidden">
+                <div class="space-y-4">
+                    <div>
+                        <label for="room-name" class="form-label">Room Name</label>
+                        <input type="text" id="room-name" required class="form-input">
+                    </div>
+                    <div>
+                        <label for="grid-width" class="form-label">Grid Width (cells)</label>
+                        <input type="number" id="grid-width" value="20" required class="form-input">
+                    </div>
+                     <div>
+                        <label for="grid-height" class="form-label">Grid Height (cells)</label>
+                        <input type="number" id="grid-height" value="15" required class="form-input">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="cancel-room-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Room</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="employee-modal" class="modal-container hidden">
+         <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-lg">
+            <form id="employee-form" class="p-8">
+                 <h2 id="employee-modal-title" class="text-2xl font-bold mb-6">Add New Employee</h2>
+                 <input type="hidden" id="employee-id">
+                 <input type="hidden" id="employee-row-index">
+                 <div class="space-y-4">
+                     <div>
+                         <label for="employee-name" class="form-label">Full Name</label>
+                         <input type="text" id="employee-name" required class="form-input">
+                     </div>
+                     <div>
+                         <label for="employee-title" class="form-label">Title</label>
+                         <input type="text" id="employee-title" class="form-input">
+                     </div>
+                     <div>
+                         <label for="employee-department" class="form-label">Department</label>
+                         <input type="text" id="employee-department" class="form-input">
+                     </div>
+                     <div>
+                         <label for="employee-email" class="form-label">Email</label>
+                         <input type="email" id="employee-email" class="form-input">
+                     </div>
+                     <div>
+                         <label for="employee-phone" class="form-label">Phone</label>
+                         <input type="tel" id="employee-phone" class="form-input">
+                     </div>
+                 </div>
+                 <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="employee-cancel-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="employee-detail-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-xl">
+            <div class="p-8">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 id="employee-detail-name" class="text-2xl font-bold"></h2>
+                        <p id="employee-detail-title-dept" class="text-gray-600"></p>
+                    </div>
+                    <button id="employee-detail-close-btn" class="text-gray-500 hover:text-gray-800">&times;</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div>
+                        <h4 class="font-bold mb-2">Contact Info</h4>
+                        <dl id="employee-detail-info" class="space-y-2 text-sm"></dl>
+                    </div>
+                    <div>
+                        <h4 class="font-bold mb-2">Assigned Assets</h4>
+                        <div id="employee-detail-assets" class="max-h-60 overflow-y-auto pr-2"></div>
+                    </div>
+                </div>
+                 <div class="flex justify-end gap-4 mt-8">
+                    <button id="employee-detail-edit-btn" class="btn-primary">Edit Employee</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="message-box" class="hidden fixed top-5 right-5 z-50 p-4 rounded-lg shadow-lg text-white">
+        <p id="message-text"></p>
+    </div>
 
     <script type="module" src="JS/main.js"></script>
 </body>
