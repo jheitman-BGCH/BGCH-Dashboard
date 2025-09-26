@@ -12,8 +12,6 @@ window.addEventListener('DOMContentLoaded', () => {
     loadVisibleColumns();
     setupEventListeners();
     loadGoogleApiScripts();
-    // Subscribe the main render function to the store.
-    // Now, any state change will automatically trigger a UI update.
     subscribe(renderApp);
 });
 
@@ -136,7 +134,6 @@ async function initializeAppData() {
 
         dispatch({ type: actionTypes.SET_APP_DATA, payload: appData });
         
-        // Initial population of dropdowns after data is fetched
         ui.populateFilterDropdowns();
         ui.populateEmployeeFilterDropdowns();
         ui.populateModalDropdowns();
@@ -181,28 +178,15 @@ function processSheetData(values, headerMapConfig, idKey) {
         }
     }
     
-    // --- DEBUGGING START ---
-    // This will only log for the 'Asset' sheet to avoid clutter.
-    if (idKey === 'AssetID') {
-        console.log("--- Debugging processSheetData for Assets ---");
-        console.log("1. Headers found in sheet:", actualHeaders);
-        console.log("2. Column mapping result (what the app uses):", columnIndexMap);
-        if (columnIndexMap.ParentObjectID === undefined) {
-            console.error("CRITICAL: 'ParentObjectID' could not be found in the sheet headers. Please check that the column name in your sheet is one of the following (case-insensitive): ParentObjectID, Parent Object ID, ParentID");
-        }
-        console.log("-------------------------------------------");
-    }
-    // --- DEBUGGING END ---
-
     const idKeyIndex = columnIndexMap[idKey];
-    if (idKeyIndex === undefined && idKey) { // idKey might be null for sheets without one
+    if (idKeyIndex === undefined && idKey) {
         console.error(`CRITICAL: ID key "${idKey}" not found in sheet headers. Processing aborted. Headers found:`, actualHeaders);
         return [];
     }
 
-    return values.slice(1).map((row, index) => {
+    const processedData = values.slice(1).map((row, index) => {
         if (!row || row.length === 0 || (idKey && !row[idKeyIndex])) return null;
-        const item = { rowIndex: index + 2 }; // rowIndex is 1-based for sheets, and we slice(1), so it's index + 2
+        const item = { rowIndex: index + 2 };
         for (const config of headerMapConfig) {
             const key = config.key;
             const colIndex = columnIndexMap[key];
@@ -210,62 +194,49 @@ function processSheetData(values, headerMapConfig, idKey) {
         }
         return item;
     }).filter(Boolean);
+
+    // --- NEW DEBUGGING START ---
+    if (idKey === 'AssetID' && processedData.length > 0) {
+        console.log("--- Debugging Asset Object Creation ---");
+        console.log("This is the first asset object created directly from the sheet data. Please check its properties:", processedData[0]);
+        console.log("---------------------------------------");
+    }
+    // --- NEW DEBUGGING END ---
+
+    return processedData;
 }
 
 
 // --- UI LOGIC & EVENT HANDLERS ---
 function renderApp() {
-    // This function is now the single point of entry for all UI updates.
-    // It's called by the subscription whenever the state changes.
     const state = getState();
-
-    // --- Compute derived data using memoized selectors ---
     const employeesById = selectors.selectEmployeesById(state.allEmployees);
     const employeesByName = selectors.selectEmployeesByName(state.allEmployees);
     const enrichedAssets = selectors.selectEnrichedAssets(state.allAssets, employeesById);
-    
-    // Add employeesByName to state object for filterService
     const stateForFiltering = { ...state, employeesByName };
-
-    // Assets Tab
     const filteredAssets = selectors.selectFilteredAssets(enrichedAssets, state.filters, state.filters.searchTerm, stateForFiltering);
     const sortedAssets = selectors.selectSortedAssets(filteredAssets, state.sortState);
     const { paginatedItems, totalPages } = selectors.selectPaginatedAssets(sortedAssets, state.pagination.currentPage);
     ui.renderTable(paginatedItems, totalPages, state.pagination.currentPage, state.visibleColumns, state.sortState);
-
-    // Employees Tab
     const filteredEmployees = selectors.selectFilteredEmployees(state.allEmployees, state.employeeFilters, state.employeeFilters.searchTerm);
     const sortedEmployees = selectors.selectSortedEmployees(filteredEmployees);
     ui.renderEmployeeList(sortedEmployees);
-
-    // Overview Tab
     const chartData = selectors.selectChartData(enrichedAssets, state.allEmployees);
     ui.renderOverviewCharts(chartData, handleChartClick);
-    
-    // This doesn't need to run on every render, but it's harmless.
     ui.populateColumnSelector();
 }
 
 function handleSortClick(e) {
     const th = e.target.closest('th[data-column]');
     if (!th) return;
-
     const colName = th.dataset.column;
     const { sortState } = getState();
-
-    let newDirection;
-    if (sortState.column === colName) {
-        newDirection = sortState.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        newDirection = 'asc';
-    }
-    
+    let newDirection = (sortState.column === colName && sortState.direction === 'asc') ? 'desc' : 'asc';
     dispatch({ type: actionTypes.SET_SORT_STATE, payload: { column: colName, direction: newDirection } });
 }
 
 function openEditModal(assetId) {
-    const assetsById = selectors.selectAssetsById(getState().allAssets);
-    const asset = assetsById.get(assetId);
+    const asset = selectors.selectAssetsById(getState().allAssets).get(assetId);
     if (!asset) return;
     ui.dom.modalTitle.innerText = 'Edit Asset';
     ui.populateAssetForm(asset);
@@ -273,8 +244,7 @@ function openEditModal(assetId) {
 }
 
 function openCloneModal(assetId) {
-    const assetsById = selectors.selectAssetsById(getState().allAssets);
-    const originalAsset = assetsById.get(assetId);
+    const originalAsset = selectors.selectAssetsById(getState().allAssets).get(assetId);
     if (!originalAsset) return;
     const clonedAsset = { ...originalAsset, AssetID: '', rowIndex: '', IDCode: '', SerialNumber: '' };
     ui.dom.modalTitle.innerText = 'Clone Asset';
@@ -287,7 +257,6 @@ function setupEventListeners() {
     d.authorize_button.onclick = handleAuthClick;
     d.signout_button.onclick = handleSignoutClick;
     d.refreshDataBtn.onclick = initializeAppData;
-
     window.addEventListener('datachanged', initializeAppData);
 
     d.addAssetBtn.onclick = () => {
@@ -295,13 +264,10 @@ function setupEventListeners() {
         d.modalTitle.innerText = 'Add New Asset';
         d.assetId.value = '';
         d.rowIndex.value = '';
-        ui.populateAssetForm({}); // Populate with empty object to reset hierarchical dropdowns
+        ui.populateAssetForm({});
         ['asset-type', 'assigned-to'].forEach(id => {
             const newEl = document.getElementById(`${id}-new`);
-            if (newEl) {
-                newEl.classList.add('hidden');
-                newEl.value = '';
-            }
+            if (newEl) newEl.classList.add('hidden');
             document.getElementById(id).value = '';
         });
         ui.toggleModal(d.assetModal, true);
@@ -310,15 +276,14 @@ function setupEventListeners() {
     d.cancelBtn.onclick = () => ui.toggleModal(d.assetModal, false);
     d.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.assetModal, false);
 
-    d.inventoryTab.addEventListener('click', () => switchTab('inventory'));
-    d.overviewTab.addEventListener('click', () => switchTab('overview'));
-    d.employeesTab.addEventListener('click', () => switchTab('employees'));
-    d.visualInventoryTab.addEventListener('click', () => switchTab('visual-inventory'));
+    ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(tabName => {
+        const tab = d[`${tabName.replace('-', '')}Tab`];
+        if(tab) tab.addEventListener('click', () => switchTab(tabName));
+    });
 
     d.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(d.assetType, document.getElementById('asset-type-new')));
 
-    // --- Filter Event Listeners ---
-    // Asset filters now dispatch actions to update state
+    // Filter Listeners
     d.filterSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { searchTerm: e.target.value } }));
     d.filterSite.addEventListener('change', e => {
         dispatch({ type: actionTypes.SET_FILTERS, payload: { site: e.target.value, room: '', container: '' } });
@@ -329,22 +294,17 @@ function setupEventListeners() {
         ui.populateChainedFilters();
     });
     d.filterContainer.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { container: e.target.value } }));
+    ['AssetType', 'Condition', 'IntendedUserType', 'AssignedTo', 'ModelNumber'].forEach(key => {
+        const el = d[`filter${key}`];
+        if (el) el.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { [key]: e.target.value } }));
+    });
     
-    d.filterAssetType.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { AssetType: e.target.value } }));
-    d.filterCondition.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { Condition: e.target.value } }));
-    d.filterIntendedUserType.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { IntendedUserType: e.target.value } }));
-    d.filterAssignedTo.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { AssignedTo: e.target.value } }));
-    d.filterModelNumber.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { ModelNumber: e.target.value } }));
-    
-    // Employee filters dispatch actions
     d.employeeSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_EMPLOYEE_FILTERS, payload: { searchTerm: e.target.value } }));
     d.employeeDepartmentFilter.addEventListener('change', e => dispatch({ type: actionTypes.SET_EMPLOYEE_FILTERS, payload: { Department: e.target.value } }));
 
     document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', renderApp));
-
     d.assetForm.onsubmit = handleAssetFormSubmit;
     d.employeeForm.onsubmit = handleEmployeeFormSubmit;
-
     d.assetTableHead.addEventListener('click', handleSortClick);
     d.assetTableBody.addEventListener('click', handleTableClick);
 
@@ -371,8 +331,7 @@ function setupEventListeners() {
     
     d.employeeDetailEditBtn.addEventListener('click', e => {
         const employeeId = e.target.dataset.employeeId;
-        const employeesById = selectors.selectEmployeesById(getState().allEmployees);
-        const employee = employeesById.get(employeeId);
+        const employee = selectors.selectEmployeesById(getState().allEmployees).get(employeeId);
         if (employee) {
             ui.toggleModal(d.employeeDetailModal, false);
             ui.populateEmployeeForm(employee);
@@ -402,12 +361,7 @@ async function handleAssetFormSubmit(e) {
     e.preventDefault();
     ui.setLoading(true);
     try {
-        const getSelectValue = (id) => {
-            const select = document.getElementById(id);
-            const newInp = document.getElementById(`${id}-new`);
-            return select.value === '--new--' && newInp ? newInp.value : select.value;
-        };
-
+        const getSelectValue = id => (document.getElementById(id).value === '--new--' ? document.getElementById(`${id}-new`).value : document.getElementById(id).value);
         const parentId = ui.dom.modalContainer.value || ui.dom.modalRoom.value || '';
 
         const assetData = {
@@ -415,10 +369,8 @@ async function handleAssetFormSubmit(e) {
             rowIndex: ui.dom.rowIndex.value,
             AssetName: ui.dom.assetName.value,
             Quantity: ui.dom.quantity.value,
-            ParentObjectID: parentId, // New hierarchical parent
-            Site: '', // Deprecated - clear it
-            Location: '', // Deprecated - clear it
-            Container: '', // Deprecated - clear it
+            ParentObjectID: parentId,
+            Site: '', Location: '', Container: '', // Deprecated
             IntendedUserType: ui.dom.intendedUserType.value,
             Condition: ui.dom.condition.value,
             AssetType: getSelectValue('asset-type'),
@@ -435,15 +387,13 @@ async function handleAssetFormSubmit(e) {
 
         const isUpdate = !!assetData.rowIndex;
         const headers = ASSET_HEADER_MAP.map(h => h.key);
-        const rowData = headers.map(header => assetData[header] !== undefined ? assetData[header] : '');
-
+        const rowData = headers.map(header => assetData[header] || '');
 
         if (isUpdate) {
             await api.updateSheetValues(`${ASSET_SHEET}!A${assetData.rowIndex}`, [rowData]);
         } else {
             await api.appendSheetValues(ASSET_SHEET, [rowData]);
         }
-
         window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error("Error saving asset:", err);
@@ -468,12 +418,9 @@ async function handleEmployeeFormSubmit(e) {
             Email: document.getElementById('employee-email').value,
             Phone: document.getElementById('employee-phone').value,
         };
-
         const isUpdate = !!employeeData.rowIndex;
         const headers = EMPLOYEE_HEADER_MAP.map(h => h.key);
         const rowData = headers.map(header => employeeData[header] || '');
-
-
         if (isUpdate) {
             await api.updateSheetValues(`${EMPLOYEES_SHEET}!A${employeeData.rowIndex}`, [rowData]);
         } else {
@@ -496,8 +443,9 @@ function handleTableClick(e) {
         ui.updateBulkEditButtonVisibility();
         return;
     }
-    if (target.closest('.actions-btn')) {
-        const dropdown = target.closest('.actions-menu').querySelector('.actions-dropdown');
+    const actionsBtn = target.closest('.actions-btn');
+    if (actionsBtn) {
+        const dropdown = actionsBtn.nextElementSibling;
         document.querySelectorAll('.actions-dropdown.show').forEach(d => d !== dropdown && d.classList.remove('show'));
         dropdown.classList.toggle('show');
         return;
@@ -505,14 +453,18 @@ function handleTableClick(e) {
     const action = target.closest('a');
     if (action) {
         e.preventDefault();
-        if (action.classList.contains('edit-btn')) openEditModal(action.dataset.id);
-        else if (action.classList.contains('clone-btn')) openCloneModal(action.dataset.id);
+        const id = action.dataset.id || action.closest('tr')?.dataset.id;
+        const rowIndex = action.dataset.rowIndex || action.closest('tr')?.dataset.rowIndex;
+        if (action.classList.contains('edit-btn')) openEditModal(id);
+        else if (action.classList.contains('clone-btn')) openCloneModal(id);
         else if (action.classList.contains('delete-btn')) {
             if (confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
-                handleDeleteRow(ASSET_SHEET, action.dataset.rowIndex);
+                handleDeleteRow(ASSET_SHEET, rowIndex);
             }
         }
-        action.closest('.actions-dropdown').classList.remove('show');
+        if (action.closest('.actions-dropdown')) {
+            action.closest('.actions-dropdown').classList.remove('show');
+        }
         return;
     }
     if (assetId) ui.openDetailModal(assetId, openEditModal);
@@ -522,13 +474,10 @@ function setupBulkEditListeners() {
     ui.dom.bulkEditBtn.addEventListener('click', () => {
         const form = document.getElementById('bulk-edit-form');
         form.reset();
-        document.querySelectorAll('#bulk-edit-form select').forEach(el => el.disabled = true);
+        document.querySelectorAll('#bulk-edit-form select, #bulk-edit-form input').forEach(el => el.disabled = true);
+        document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(cb => cb.disabled = false);
         ui.toggleModal(ui.dom.bulkEditModal, true);
-        ui.setupModalHierarchy('bulk-site', 'bulk-room', 'bulk-container'); // Pass IDs for bulk edit modal
-        // Manually re-disable after setup
-        ui.dom.bulkSite.disabled = true;
-        ui.dom.bulkRoom.disabled = true;
-        ui.dom.bulkContainer.disabled = true;
+        ui.setupModalHierarchy('bulk-site', 'bulk-room', 'bulk-container');
     });
     document.getElementById('bulk-cancel-btn').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
     ui.dom.bulkEditModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
@@ -537,23 +486,16 @@ function setupBulkEditListeners() {
         checkbox.addEventListener('change', e => {
             const fieldName = e.target.id.replace('bulk-update-', '').replace('-check', '');
             const isChecked = e.target.checked;
-
             if (fieldName === 'location') {
-                ui.dom.bulkSite.disabled = !isChecked;
-                // Only enable sub-dropdowns if their parent is selected AND the box is checked
-                ui.dom.bulkRoom.disabled = !isChecked || !ui.dom.bulkSite.value;
-                ui.dom.bulkContainer.disabled = !isChecked || !ui.dom.bulkRoom.value;
+                ['bulk-site', 'bulk-room', 'bulk-container'].forEach(id => document.getElementById(id).disabled = !isChecked);
             } else {
-                const inputEl = document.getElementById(`bulk-${fieldName.replace(/-(.)/g, (m, g) => g.toUpperCase())}`);
+                const inputEl = document.getElementById(e.target.dataset.target);
                 if (inputEl) inputEl.disabled = !isChecked;
             }
         });
     });
 
-    document.getElementById('bulk-edit-form').onsubmit = e => {
-        e.preventDefault();
-        handleBulkUpdate();
-    };
+    document.getElementById('bulk-edit-form').onsubmit = e => { e.preventDefault(); handleBulkUpdate(); };
 }
 
 function setupColumnSelectorListeners() {
@@ -564,9 +506,7 @@ function setupColumnSelectorListeners() {
     ui.dom.columnCancelBtn.onclick = () => ui.toggleModal(ui.dom.columnModal, false);
     ui.dom.columnModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.columnModal, false);
     ui.dom.columnSaveBtn.addEventListener('click', () => {
-        const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
-        // "AssetName" is always visible and not in the checkbox list, so we prepend it.
-        const visibleColumns = ["AssetName", ...selectedCols]; 
+        const visibleColumns = ["AssetName", ...[...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value)];
         dispatch({ type: actionTypes.SET_VISIBLE_COLUMNS, payload: visibleColumns });
         localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
         ui.renderFilters();
@@ -578,51 +518,22 @@ async function handleBulkUpdate() {
     ui.setLoading(true);
     try {
         const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
-        if (selectedAssetIds.length === 0) {
-            ui.toggleModal(ui.dom.bulkEditModal, false);
-            ui.setLoading(false);
-            return;
-        }
+        if (selectedAssetIds.length === 0) return;
 
-        const assetsById = selectors.selectAssetsById(getState().allAssets);
-        const assetsToUpdate = selectedAssetIds.map(id => assetsById.get(id)).filter(Boolean);
-        
-        const parentId = ui.dom.bulkContainer.value || ui.dom.bulkRoom.value || '';
-        
-        const isLocationChecked = document.getElementById('bulk-update-location-check').checked;
-        const isUserTypeChecked = document.getElementById('bulk-update-intended-user-check').checked;
-        const isConditionChecked = document.getElementById('bulk-update-condition-check').checked;
-        const isAssignedToChecked = document.getElementById('bulk-update-assigned-to-check').checked;
+        const assetsToUpdate = selectedAssetIds.map(id => selectors.selectAssetsById(getState().allAssets).get(id)).filter(Boolean);
+        const updates = {};
+        if (document.getElementById('bulk-update-location-check').checked) updates.ParentObjectID = document.getElementById('bulk-container').value || document.getElementById('bulk-room').value || '';
+        if (document.getElementById('bulk-update-intended-user-check').checked) updates.IntendedUserType = document.getElementById('bulk-intended-user-type').value;
+        if (document.getElementById('bulk-update-condition-check').checked) updates.Condition = document.getElementById('bulk-condition').value;
+        if (document.getElementById('bulk-update-assigned-to-check').checked) updates.AssignedTo = document.getElementById('bulk-assigned-to').value;
 
-        const updateRequests = [];
-
-        for (const asset of assetsToUpdate) {
-            const updatedAsset = { ...asset };
-
-            if (isLocationChecked && parentId) {
-                updatedAsset.ParentObjectID = parentId;
-                updatedAsset.Site = '';
-                updatedAsset.Location = '';
-                updatedAsset.Container = '';
-            }
-            if (isUserTypeChecked) {
-                updatedAsset.IntendedUserType = ui.dom.bulkIntendedUserType.value;
-            }
-            if (isConditionChecked) {
-                updatedAsset.Condition = ui.dom.bulkCondition.value;
-            }
-            if (isAssignedToChecked) {
-                updatedAsset.AssignedTo = ui.dom.bulkAssignedTo.value;
-            }
-
-            const headers = ASSET_HEADER_MAP.map(h => h.key);
-            const rowData = headers.map(header => updatedAsset[header] !== undefined ? updatedAsset[header] : '');
-            
-            updateRequests.push({
-                range: `${ASSET_SHEET}!A${asset.rowIndex}`,
-                values: [rowData]
-            });
-        }
+        const headers = ASSET_HEADER_MAP.map(h => h.key);
+        const updateRequests = assetsToUpdate.map(asset => {
+            const updatedAsset = { ...asset, ...updates };
+            if(updates.ParentObjectID) { updatedAsset.Site = ''; updatedAsset.Location = ''; updatedAsset.Container = ''; }
+            const rowData = headers.map(header => updatedAsset[header] || '');
+            return { range: `${ASSET_SHEET}!A${asset.rowIndex}`, values: [rowData] };
+        });
 
         if (updateRequests.length > 0) {
             await api.batchUpdateSheetValues(updateRequests);
@@ -637,19 +548,13 @@ async function handleBulkUpdate() {
     }
 }
 
-
 async function handleDeleteRow(sheetName, rowIndex) {
     const { sheetIds } = getState();
     const sheetId = sheetIds[sheetName];
-    if (!sheetId || !rowIndex) {
-        ui.showMessage(`Error: Could not find sheet ID or row index for deletion.`);
-        return;
-    }
+    if (!sheetId || !rowIndex) return;
     ui.setLoading(true);
     try {
-        await api.batchUpdateSheet({
-            requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: parseInt(rowIndex) - 1, endIndex: parseInt(rowIndex) } } }]
-        });
+        await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: parseInt(rowIndex) - 1, endIndex: parseInt(rowIndex) } } }] });
         window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error(`Error deleting from ${sheetName}:`, err);
@@ -660,25 +565,16 @@ async function handleDeleteRow(sheetName, rowIndex) {
 }
 
 function switchTab(tabName) {
-    const tabs = {
-        inventory: { panel: ui.dom.inventoryPanel, button: ui.dom.inventoryTab },
-        overview: { panel: ui.dom.overviewPanel, button: ui.dom.overviewTab },
-        employees: { panel: ui.dom.employeesPanel, button: ui.dom.employeesTab },
-        'visual-inventory': { panel: ui.dom.visualInventoryPanel, button: ui.dom.visualInventoryTab }
-    };
-    Object.values(tabs).forEach(tab => {
-        tab.panel.classList.add('hidden');
-        tab.button.classList.remove('active');
+    ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(name => {
+        const panel = document.getElementById(`${name}-panel`);
+        const button = document.getElementById(`${name}-tab`);
+        const isActive = name === tabName;
+        panel.classList.toggle('hidden', !isActive);
+        button.classList.toggle('active', isActive);
     });
-    tabs[tabName].panel.classList.remove('hidden');
-    tabs[tabName].button.classList.add('active');
 
-    if (tabName === 'overview') {
-        renderApp(); 
-    }
-    if (tabName === 'visual-inventory') {
-        initVisualInventory();
-    }
+    if (tabName === 'overview') renderApp();
+    if (tabName === 'visual-inventory') initVisualInventory();
 }
 
 function handleChartClick(event, elements, filterId) {
@@ -686,41 +582,22 @@ function handleChartClick(event, elements, filterId) {
     const chart = elements[0].element.$context.chart;
     const label = chart.data.labels[elements[0].index];
     
-    // Dispatch an action to set the filter and reset others
-    const newFilters = {
-        searchTerm: '', site: '', room: '', container: '',
-        AssetType: '', Condition: '', IntendedUserType: '', AssignedTo: '', ModelNumber: '',
-    };
-    
-    const { allSites } = getState();
-    
-    // Map filterId to the correct key in the state
-    const filterKeyMap = {
-        'filter-site': 'site',
-        'filter-condition': 'Condition',
-        'filter-asset-type': 'AssetType',
-        'filter-assigned-to': 'AssignedTo',
-    };
+    const newFilters = { searchTerm: '', site: '', room: '', container: '', AssetType: '', Condition: '', IntendedUserType: '', AssignedTo: '', ModelNumber: '' };
+    const filterKeyMap = { 'filter-site': 'site', 'filter-condition': 'Condition', 'filter-asset-type': 'AssetType', 'filter-assigned-to': 'AssignedTo' };
     const stateKey = filterKeyMap[filterId];
+    
     if (stateKey) {
-        if (stateKey === 'site') {
-            const siteObj = allSites.find(s => s.SiteName === label);
-            if (siteObj) newFilters[stateKey] = siteObj.SiteID;
-        } else {
-            newFilters[stateKey] = label;
-        }
+        const value = (stateKey === 'site') ? getState().allSites.find(s => s.SiteName === label)?.SiteID : label;
+        if (value) newFilters[stateKey] = value;
     }
     
     dispatch({ type: actionTypes.SET_FILTERS, payload: newFilters });
 
-    // Update the UI dropdown to reflect the change
     const targetFilterEl = document.getElementById(filterId);
     if(targetFilterEl) {
         targetFilterEl.value = newFilters[stateKey] || label;
-        // Manually trigger change to update dependent dropdowns
         targetFilterEl.dispatchEvent(new Event('change'));
     }
-
     switchTab('inventory');
 }
 
