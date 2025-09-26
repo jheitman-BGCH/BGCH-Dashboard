@@ -42,6 +42,18 @@ export const selectAssetsById = memoize((allAssets) =>
     new Map(allAssets.map(asset => [asset.AssetID, asset]))
 );
 
+export const selectSitesById = memoize((allSites) =>
+    new Map(allSites.map(site => [site.SiteID, site]))
+);
+
+export const selectRoomsById = memoize((allRooms) =>
+    new Map(allRooms.map(room => [room.RoomID, room]))
+);
+
+export const selectContainersById = memoize((allContainers) =>
+    new Map(allContainers.map(container => [container.ContainerID, container]))
+);
+
 /**
  * Creates a map of employees by their ID for fast O(1) lookups.
  * @param {Array<Object>} allEmployees - The array of all employees.
@@ -172,3 +184,48 @@ export const selectChartData = memoize((enrichedAssets, allEmployees) => {
         employeeData: createChartConfig(processData('AssignedTo'), 'Assignments per Employee'),
     };
 });
+
+// --- Hierarchical Data Selectors ---
+
+export const selectRoomsBySiteId = memoize((state, siteId) => {
+    if (!siteId) return [];
+    return state.allRooms.filter(room => room.SiteID === siteId);
+});
+
+export const selectContainersByParentId = memoize((state, parentId) => {
+    if (!parentId) return [];
+    return state.allContainers.filter(container => container.ParentID === parentId);
+});
+
+export const selectFullLocationPath = memoize((state, parentId) => {
+    const path = [];
+    if (!parentId) return path;
+
+    const sitesById = selectSitesById(state.allSites);
+    const roomsById = selectRoomsById(state.allRooms);
+    const containersById = selectContainersById(state.allContainers);
+
+    let currentId = parentId;
+    let currentItem = roomsById.get(currentId) || containersById.get(currentId);
+
+    while (currentItem) {
+        path.unshift(currentItem);
+        currentId = currentItem.ParentID;
+        if (currentId) {
+             currentItem = roomsById.get(currentId) || containersById.get(currentId);
+        } else {
+             // If the current item was a room, get its site and finish
+             if (currentItem.RoomID) {
+                const site = sitesById.get(currentItem.SiteID);
+                if (site) path.unshift(site);
+             }
+             currentItem = null;
+        }
+    }
+    return path;
+});
+
+export const selectFullLocationPathString = (state, parentId) => {
+    const path = selectFullLocationPath(state, parentId);
+    return path.map(p => p.SiteName || p.RoomName || p.ContainerName).join(' > ');
+};

@@ -176,14 +176,20 @@
                             <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
                             <input type="text" id="filter-search" placeholder="Search..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                         </div>
-                        <div id="filter-site-wrapper" class="hidden">
+                        <!-- New Hierarchical Filters -->
+                        <div id="filter-site-wrapper">
                             <label for="filter-site" class="block text-sm font-medium text-gray-700">Site</label>
                             <select id="filter-site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
                         </div>
-                        <div id="filter-location-wrapper" class="hidden">
-                            <label for="filter-location" class="block text-sm font-medium text-gray-700">Location</label>
-                            <select id="filter-location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                        <div id="filter-room-wrapper">
+                            <label for="filter-room" class="block text-sm font-medium text-gray-700">Room</label>
+                            <select id="filter-room" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" disabled></select>
                         </div>
+                        <div id="filter-container-wrapper">
+                            <label for="filter-container" class="block text-sm font-medium text-gray-700">Container</label>
+                            <select id="filter-container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" disabled></select>
+                        </div>
+                        <!-- End New Hierarchical Filters -->
                         <div id="filter-asset-type-wrapper" class="hidden">
                             <label for="filter-asset-type" class="block text-sm font-medium text-gray-700">Asset Type</label>
                             <select id="filter-asset-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
@@ -336,6 +342,8 @@
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
                         <div class="flex items-center gap-4">
+                            <label for="vi-site-selector" class="font-medium">Site:</label>
+                            <select id="vi-site-selector" class="rounded-md border-gray-300 shadow-sm"></select>
                             <label for="room-selector" class="font-medium">Room:</label>
                             <select id="room-selector" class="rounded-md border-gray-300 shadow-sm"></select>
                             <button id="create-room-btn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700">

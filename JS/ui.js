@@ -19,8 +19,10 @@ export function initUI() {
         'detail-modal', 'bulk-edit-modal', 'column-modal', 'inventory-tab',
         'overview-tab', 'employees-tab', 'visual-inventory-tab', 'inventory-panel',
         'overview-panel', 'employees-panel', 'visual-inventory-panel',
-        'asset-table-head', 'asset-table-body', 'filter-search', 'filter-site',
-        'filter-location', 'filter-asset-type', 'filter-condition',
+        'asset-table-head', 'asset-table-body', 'filter-search',
+        'filter-site-wrapper', 'filter-site', 'filter-room-wrapper', 'filter-room',
+        'filter-container-wrapper', 'filter-container',
+        'filter-asset-type', 'filter-condition',
         'filter-intended-user-type', 'filter-assigned-to', 'filter-model-number',
         'detail-modal-title', 'detail-modal-content', 'detail-modal-edit-btn',
         'modal-title', 'asset-id', 'row-index', 'asset-name', 'quantity',
@@ -35,7 +37,7 @@ export function initUI() {
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
         'employee-id', 'employee-row-index', 'bulk-site', 'bulk-location', 'bulk-container',
         'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to',
-        'pagination-controls-top', 'pagination-controls-bottom'
+        'pagination-controls-top', 'pagination-controls-bottom', 'vi-site-selector'
     ];
     ids.forEach(id => {
         const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
@@ -193,12 +195,14 @@ export function populateModalDropdowns() {
  * Populates the main inventory filter dropdowns based on available data.
  */
 export function populateFilterDropdowns() {
+    // This function is now a proxy for the new chained filter logic.
+    populateChainedFilters();
+    
+    // The other, non-hierarchical filters can still be populated as before.
     const { allAssets, allEmployees } = getState();
-    populateSelect(dom.filterSite, allAssets, 'Site', 'Site', { initialOptionText: 'All' });
     populateSelect(dom.filterAssetType, allAssets, 'AssetType', 'AssetType', { initialOptionText: 'All' });
     populateSelect(dom.filterCondition, allAssets, 'Condition', 'Condition', { initialOptionText: 'All' });
     populateSelect(dom.filterModelNumber, allAssets, 'ModelNumber', 'ModelNumber', { initialOptionText: 'All' });
-    populateSelect(dom.filterLocation, allAssets, 'Location', 'Location', { initialOptionText: 'All' });
     populateSelect(dom.filterIntendedUserType, allAssets, 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
 
     const assignedToData = allEmployees.map(e => ({ EmployeeName: e.EmployeeName }));
@@ -206,6 +210,39 @@ export function populateFilterDropdowns() {
 
     renderFilters();
 }
+
+/**
+ * Manages the new chained hierarchical location filters.
+ */
+export function populateChainedFilters() {
+    const state = getState();
+    
+    // 1. Populate Sites
+    populateSelect(dom.filterSite, state.allSites, 'SiteID', 'SiteName', { initialOptionText: 'All Sites' });
+
+    // 2. Handle Site selection change
+    dom.filterSite.addEventListener('change', () => {
+        const siteId = dom.filterSite.value;
+        const roomsForSite = selectors.selectRoomsBySiteId(state, siteId);
+        
+        populateSelect(dom.filterRoom, roomsForSite, 'RoomID', 'RoomName', { initialOptionText: 'All Rooms' });
+        dom.filterRoom.disabled = !siteId;
+        
+        // Clear and disable container dropdown
+        dom.filterContainer.innerHTML = '<option value="">All Containers</option>';
+        dom.filterContainer.disabled = true;
+    });
+
+    // 3. Handle Room selection change
+    dom.filterRoom.addEventListener('change', () => {
+        const roomId = dom.filterRoom.value;
+        const containersForRoom = selectors.selectContainersByParentId(state, roomId);
+        
+        populateSelect(dom.filterContainer, containersForRoom, 'ContainerID', 'ContainerName', { initialOptionText: 'All Containers' });
+        dom.filterContainer.disabled = !roomId;
+    });
+}
+
 
 /**
  * Renders the main asset data table.
@@ -341,13 +378,22 @@ export function openDetailModal(assetId, openEditCallback) {
     const assetsById = selectors.selectAssetsById(state.allAssets);
     const asset = assetsById.get(assetId);
     if (!asset) return;
-    
+
     const employeesById = selectors.selectEmployeesById(state.allEmployees);
+    const locationPath = selectors.selectFullLocationPathString(state, asset.ParentID);
 
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
+    
+    // Create a new list of headers for display, excluding the old location fields and adding the new path.
+    const detailHeaders = ASSET_HEADERS.filter(h => !['Site', 'Location', 'Container', 'LoginInfo', 'ParentID'].includes(h));
+
     dom.detailModalContent.innerHTML = `
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
-            ${ASSET_HEADERS.filter(h => h !== "LoginInfo").map(key => {
+            <div>
+                <dt>Location Path:</dt>
+                <dd>${locationPath || 'N/A'}</dd>
+            </div>
+            ${detailHeaders.map(key => {
                 let displayValue = asset[key] || 'N/A';
                 if (key === 'AssignedTo') {
                     const employee = employeesById.get(asset[key]);
@@ -355,7 +401,7 @@ export function openDetailModal(assetId, openEditCallback) {
                 }
                 return `
                 <div>
-                    <dt>${key}:</dt>
+                    <dt>${key.replace(/([A-Z])/g, ' $1')}:</dt>
                     <dd>${displayValue}</dd>
                 </div>
             `}).join('')}
@@ -538,18 +584,25 @@ export function renderFilters() {
     const filterMap = {
         "Site": "filter-site-wrapper", "AssetType": "filter-asset-type-wrapper",
         "Condition": "filter-condition-wrapper", "AssignedTo": "filter-assigned-to-wrapper",
-        "ModelNumber": "filter-model-number-wrapper", "Location": "filter-location-wrapper",
+        "ModelNumber": "filter-model-number-wrapper",
         "IntendedUserType": "filter-intended-user-type-wrapper"
     };
-    Object.values(filterMap).forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    // Hide all optional filters first
+    Object.values(filterMap).forEach(id => {
+        if(id !== "filter-site-wrapper") document.getElementById(id)?.classList.add('hidden')
+    });
+
     const { visibleColumns } = getState();
+    // Show only the selected optional filters
     visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
+    
+    // The new hierarchical filters are always visible, so no special logic is needed for them here.
 }
 
 export function populateColumnSelector() {
     dom.columnCheckboxes.innerHTML = '';
     const { visibleColumns } = getState();
-    const selectableColumns = ASSET_HEADERS.filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName"].includes(h));
+    const selectableColumns = ASSET_HEADERS.filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName", "ParentID", "Site", "Location", "Container"].includes(h));
     selectableColumns.forEach(colName => {
         const isChecked = visibleColumns.includes(colName);
         dom.columnCheckboxes.innerHTML += `
