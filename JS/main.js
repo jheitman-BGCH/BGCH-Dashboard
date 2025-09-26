@@ -3,6 +3,7 @@ import { state, CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SP
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
+import { filterData } from './filterService.js';
 
 // --- INITIALIZATION ---
 window.addEventListener('DOMContentLoaded', () => {
@@ -184,7 +185,6 @@ function processSheetData(values, headerMapConfig, idKey) {
 
 // --- UI LOGIC & EVENT HANDLERS ---
 function applyFiltersAndSearch() {
-    const searchTerm = ui.dom.filterSearch.value.toLowerCase();
     const filters = {
         Site: ui.dom.filterSite.value,
         Location: ui.dom.filterLocation.value,
@@ -194,33 +194,21 @@ function applyFiltersAndSearch() {
         AssignedTo: ui.dom.filterAssignedTo.value,
         ModelNumber: ui.dom.filterModelNumber.value,
     };
-
-    const filteredAssets = state.allAssets.filter(asset => {
-        const matchesSearch = searchTerm ? Object.values(asset).some(val => String(val).toLowerCase().includes(searchTerm)) : true;
-        const matchesFilters = Object.entries(filters).every(([key, value]) => {
-            if (!value) return true;
-            if (key === 'AssignedTo') {
-                const employee = state.allEmployees.find(e => e.EmployeeName === value);
-                return employee ? asset[key] === employee.EmployeeID : false;
-            }
-            return asset[key] === value;
-        });
-        return matchesSearch && matchesFilters;
-    });
-
+    
+    // Use the unified filter service. For assets, search all fields by passing null.
+    const filteredAssets = filterData(state.allAssets, ui.dom.filterSearch.value, null, filters, state);
     ui.renderTable(filteredAssets);
 }
 
 function applyEmployeeFiltersAndSearch() {
-    const searchTerm = ui.dom.employeeSearch.value.toLowerCase();
-    const department = ui.dom.employeeDepartmentFilter.value;
-
-    const filteredEmployees = state.allEmployees.filter(emp => {
-        const matchesSearch = searchTerm ? emp.EmployeeName.toLowerCase().includes(searchTerm) : true;
-        const matchesDept = department ? emp.Department === department : true;
-        return matchesSearch && matchesDept;
-    });
-
+    const filters = {
+        Department: ui.dom.employeeDepartmentFilter.value,
+    };
+    // Define which fields the employee search bar should check.
+    const searchFields = ['EmployeeName', 'Title', 'Email', 'Department'];
+    
+    // Use the unified filter service for employees.
+    const filteredEmployees = filterData(state.allEmployees, ui.dom.employeeSearch.value, searchFields, filters);
     ui.renderEmployeeList(filteredEmployees);
 }
 

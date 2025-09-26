@@ -2,6 +2,7 @@
 import { state, ROOMS_SHEET, ROOMS_HEADERS, ASSET_SHEET, ASSET_HEADERS, SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS } from './state.js';
 import * as api from './sheetsService.js';
 import { toggleModal, showMessage } from './ui.js';
+import { filterData } from './filterService.js';
 
 // --- STATE ---
 let viState = {
@@ -39,8 +40,10 @@ function setupAndBindVisualInventory() {
     vi.radialResize = document.getElementById('radial-resize-use');
     vi.radialOpen = document.getElementById('radial-open-use');
     vi.radialDelete = document.getElementById('radial-delete-use');
+    vi.unplacedAssetSearch = document.getElementById('unplaced-asset-search');
+    vi.unplacedAssetsList = document.getElementById('unplaced-assets-list');
 
-    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal, vi.radialMenu];
+    const criticalElements = [vi.gridContainer, vi.roomSelector, vi.createRoomBtn, vi.roomModal, vi.roomForm, vi.contentsModal, vi.radialMenu, vi.unplacedAssetSearch, vi.unplacedAssetsList];
     if (criticalElements.some(el => !el)) {
         console.error("Fatal Error: A critical VI DOM element is missing.");
         return false;
@@ -67,6 +70,8 @@ function setupAndBindVisualInventory() {
 
     vi.roomForm.addEventListener('submit', handleRoomFormSubmit);
     vi.roomSelector.addEventListener('change', handleRoomSelection);
+    vi.unplacedAssetSearch.addEventListener('input', () => renderUnplacedAssets());
+
 
     document.querySelectorAll('.toolbar-item').forEach(item => {
         item.addEventListener('dragstart', handleToolbarDragStart);
@@ -105,6 +110,7 @@ export function initVisualInventory() {
     if (!setupAndBindVisualInventory()) return;
 
     populateRoomSelector();
+    renderUnplacedAssets();
     const lastRoom = localStorage.getItem('lastActiveRoomId');
     if (lastRoom && state.allRooms.some(r => r.RoomID === lastRoom)) {
         vi.roomSelector.value = lastRoom;
@@ -117,6 +123,47 @@ export function initVisualInventory() {
         renderGrid();
     }
 }
+
+function renderUnplacedAssets() {
+    if (!vi.unplacedAssetsList) return;
+
+    const placedAssetReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
+    const unplacedAssets = state.allAssets.filter(asset => !placedAssetReferenceIDs.has(asset.AssetID));
+    
+    const searchTerm = vi.unplacedAssetSearch.value;
+    const searchFields = ['AssetName', 'AssetType', 'IDCode'];
+    
+    const filteredAssets = filterData(unplacedAssets, searchTerm, searchFields);
+
+    vi.unplacedAssetsList.innerHTML = ''; // Clear current list
+
+    if (filteredAssets.length === 0) {
+        vi.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced assets found.</p>`;
+        return;
+    }
+
+    filteredAssets.forEach(asset => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'toolbar-item bg-white border text-sm p-2';
+        itemEl.setAttribute('draggable', 'true');
+        itemEl.textContent = asset.AssetName || 'Unnamed Asset';
+        
+        itemEl.addEventListener('dragstart', (e) => {
+             const data = {
+                type: 'new-object',
+                assetType: asset.AssetType || 'Container',
+                name: asset.AssetName,
+                width: 1, // Default width
+                height: 1, // Default height
+                referenceId: asset.AssetID // IMPORTANT: Reference the existing asset
+            };
+            e.dataTransfer.setData('application/json', JSON.stringify(data));
+        });
+        
+        vi.unplacedAssetsList.appendChild(itemEl);
+    });
+}
+
 
 // --- DRAG AND DROP HANDLERS ---
 function handleObjectDragStart(e, objectData) {
@@ -251,16 +298,27 @@ async function handleToolbarDrop(data, gridX, gridY) {
         showMessage("Cannot add an object without a selected room or container.");
         return;
     }
-    const newAsset = {
-        AssetID: `ASSET-${Date.now()}`,
-        AssetName: data.name,
-        AssetType: data.assetType,
-        Condition: "New",
-    };
     
+    let assetIdToUse = data.referenceId;
+
+    // If the item doesn't have a referenceId, it's a new asset from the top toolbar.
+    // We need to create a new entry for it in the 'Asset' sheet.
+    if (!assetIdToUse) {
+        const newAsset = {
+            AssetID: `ASSET-${Date.now()}`,
+            AssetName: data.name,
+            AssetType: data.assetType,
+            Condition: "New",
+        };
+        assetIdToUse = newAsset.AssetID;
+        const newAssetRow = ASSET_HEADERS.map(h => newAsset[h] || '');
+        await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
+    }
+    
+    // Create the new instance in the spatial layout sheet, referencing the asset.
     const newInstance = {
         InstanceID: `INST-${Date.now()}`,
-        ReferenceID: newAsset.AssetID,
+        ReferenceID: assetIdToUse,
         ParentID: viState.activeParentId,
         PosX: gridX,
         PosY: gridY,
@@ -271,11 +329,7 @@ async function handleToolbarDrop(data, gridX, gridY) {
         ShelfCols: data.shelfCols,
     };
     
-    // Write both new asset and new instance, then trigger a full refresh
-    const newAssetRow = ASSET_HEADERS.map(h => newAsset[h] || '');
     const newInstanceRow = SPATIAL_LAYOUT_HEADERS.map(h => newInstance[h] || '');
-    
-    await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
     await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, [newInstanceRow]);
     
     window.dispatchEvent(new CustomEvent('datachanged'));
@@ -675,3 +729,4 @@ function initResize(e, instanceId, direction) {
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
 }
+
