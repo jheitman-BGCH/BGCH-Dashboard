@@ -215,18 +215,18 @@ function renderApp() {
     const stateForFiltering = { ...state, employeesByName };
 
     // Assets Tab
-    const filteredAssets = selectors.selectFilteredAssets(enrichedAssets, state.filters, stateForFiltering);
+    const filteredAssets = selectors.selectFilteredAssets(enrichedAssets, state.filters, state.filters.searchTerm, stateForFiltering);
     const sortedAssets = selectors.selectSortedAssets(filteredAssets, state.sortState);
     const { paginatedItems, totalPages } = selectors.selectPaginatedAssets(sortedAssets, state.pagination.currentPage);
     ui.renderTable(paginatedItems, totalPages, state.pagination.currentPage, state.visibleColumns, state.sortState);
 
     // Employees Tab
-    const filteredEmployees = selectors.selectFilteredEmployees(state.allEmployees, state.employeeFilters);
+    const filteredEmployees = selectors.selectFilteredEmployees(state.allEmployees, state.employeeFilters, state.employeeFilters.searchTerm);
     const sortedEmployees = selectors.selectSortedEmployees(filteredEmployees);
     ui.renderEmployeeList(sortedEmployees);
 
     // Overview Tab
-    const chartData = selectors.selectChartData(enrichedAssets);
+    const chartData = selectors.selectChartData(enrichedAssets, state.allEmployees);
     ui.renderOverviewCharts(chartData, handleChartClick);
     
     // This doesn't need to run on every render, but it's harmless.
@@ -271,8 +271,8 @@ function openCloneModal(assetId) {
 
 function setupEventListeners() {
     const d = ui.dom;
-    d.authorizeButton.onclick = handleAuthClick;
-    d.signoutButton.onclick = handleSignoutClick;
+    d.authorize_button.onclick = handleAuthClick;
+    d.signout_button.onclick = handleSignoutClick;
     d.refreshDataBtn.onclick = initializeAppData;
 
     window.addEventListener('datachanged', initializeAppData);
@@ -307,8 +307,14 @@ function setupEventListeners() {
     // --- Filter Event Listeners ---
     // Asset filters now dispatch actions to update state
     d.filterSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { searchTerm: e.target.value } }));
-    d.filterSite.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { site: e.target.value, room: '', container: '' } }));
-    d.filterRoom.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { room: e.target.value, container: '' } }));
+    d.filterSite.addEventListener('change', e => {
+        dispatch({ type: actionTypes.SET_FILTERS, payload: { site: e.target.value, room: '', container: '' } });
+        ui.populateChainedFilters();
+    });
+    d.filterRoom.addEventListener('change', e => {
+        dispatch({ type: actionTypes.SET_FILTERS, payload: { room: e.target.value, container: '' } });
+        ui.populateChainedFilters();
+    });
     d.filterContainer.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { container: e.target.value } }));
     
     d.filterAssetType.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { AssetType: e.target.value } }));
@@ -505,7 +511,7 @@ function setupBulkEditListeners() {
         form.reset();
         document.querySelectorAll('#bulk-edit-form select').forEach(el => el.disabled = true);
         ui.toggleModal(ui.dom.bulkEditModal, true);
-        ui.setupBulkEditModalHierarchy(); // Setup dropdowns
+        ui.setupModalHierarchy('bulk-site', 'bulk-room', 'bulk-container'); // Pass IDs for bulk edit modal
         // Manually re-disable after setup
         ui.dom.bulkSite.disabled = true;
         ui.dom.bulkRoom.disabled = true;
@@ -546,7 +552,8 @@ function setupColumnSelectorListeners() {
     ui.dom.columnModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.columnModal, false);
     ui.dom.columnSaveBtn.addEventListener('click', () => {
         const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
-        const visibleColumns = ["AssetName", ...selectedCols];
+        // "AssetName" is always visible and not in the checkbox list, so we prepend it.
+        const visibleColumns = ["AssetName", ...selectedCols]; 
         dispatch({ type: actionTypes.SET_VISIBLE_COLUMNS, payload: visibleColumns });
         localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
         ui.renderFilters();
