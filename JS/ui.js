@@ -1,5 +1,5 @@
 // JS/ui.js
-import { ASSET_HEADERS } from './state.js';
+import { ASSET_HEADER_MAP } from './state.js';
 import { getState, dispatch, actionTypes } from './store.js';
 import * as selectors from './selectors.js';
 
@@ -28,19 +28,19 @@ export function initUI() {
         'modal-title', 'asset-id', 'row-index', 'asset-name', 'quantity',
         'intended-user-type', 'condition', 'id-code', 'serial-number',
         'model-number', 'date-issued', 'purchase-date', 'specs', 'login-info',
-        'notes', 'site', 'location', 'container', 'asset-type', 'assigned-to',
+        'notes', 'modal-site', 'modal-room', 'modal-container', 'asset-type', 'assigned-to',
         'detail-modal-close-btn', 'customize-cols-btn', 'column-checkboxes',
         'column-cancel-btn', 'column-save-btn', 'add-employee-btn', 'employee-list-container',
         'employee-modal', 'employee-form', 'employee-cancel-btn', 'employee-modal-title',
         'employee-detail-modal', 'employee-detail-name', 'employee-detail-title-dept',
         'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn',
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
-        'employee-id', 'employee-row-index', 'bulk-site', 'bulk-location', 'bulk-container',
+        'employee-id', 'employee-row-index', 'bulk-location',
         'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to',
         'pagination-controls-top', 'pagination-controls-bottom', 'vi-site-selector'
     ];
     ids.forEach(id => {
-        const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
+        const key = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
         dom[key] = document.getElementById(id);
     });
 
@@ -136,39 +136,34 @@ export function toggleModal(modal, show) {
 /**
  * Centralized helper to populate a <select> element.
  * @param {HTMLSelectElement} selectEl - The dropdown element to populate.
- * @param {Array<Object>} data - The source data array (e.g., state.allAssets).
+ * @param {Array<Object>} data - The source data array.
  * @param {string} valueKey - The property to use for the option's value.
  * @param {string} [textKey=valueKey] - The property to use for the option's text.
  * @param {Object} [options={}] - Configuration options.
- * @param {string} [options.initialOptionText] - Text for the first, default option (e.g., "All").
- * @param {boolean} [options.addNew=false] - Whether to add an "Add New..." option.
  */
 function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
     if (!selectEl) return;
     textKey = textKey || valueKey;
     const { initialOptionText, addNew } = options;
+    const sortedData = [...data].sort((a, b) => String(a[textKey]).localeCompare(String(b[textKey])));
 
-    const uniqueItems = Array.from(new Map(data.map(item => [item[valueKey], item])).values());
     const currentValue = selectEl.value;
     selectEl.innerHTML = initialOptionText ? `<option value="">${initialOptionText}</option>` : '';
 
-    uniqueItems
-        .filter(item => item && item[valueKey])
-        .sort((a, b) => String(a[textKey]).localeCompare(String(b[textKey])))
-        .forEach(item => {
+    sortedData.forEach(item => {
+        if (item && item[valueKey]) {
             const option = document.createElement('option');
             option.value = item[valueKey];
             option.textContent = item[textKey];
             selectEl.appendChild(option);
-        });
+        }
+    });
 
     if (addNew) {
-        const addNewOption = document.createElement('option');
-        addNewOption.value = '--new--';
-        addNewOption.textContent = 'Add New...';
-        selectEl.appendChild(addNewOption);
+        selectEl.innerHTML += `<option value="--new--">Add New...</option>`;
     }
-
+    
+    // Restore previous value if it still exists
     if ([...selectEl.options].some(opt => opt.value === currentValue)) {
         selectEl.value = currentValue;
     }
@@ -179,78 +174,51 @@ function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
  */
 export function populateModalDropdowns() {
     const { allAssets, allEmployees } = getState();
-    const assetFields = ['Site', 'Location', 'Container', 'AssetType'];
-    assetFields.forEach(field => {
-        const key = field.charAt(0).toLowerCase() + field.slice(1);
-        populateSelect(dom[key], allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
-        populateSelect(dom[`bulk${field}`], allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
-    });
-
+    populateSelect(dom.assetType, [...new Map(allAssets.map(item => [item.AssetType, item])).values()], 'AssetType', 'AssetType', { initialOptionText: '-- Select --', addNew: true });
     populateSelect(dom.assignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
     populateSelect(dom.bulkAssignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
 }
 
+/**
+ * Manages the new chained hierarchical location filters for the main inventory view.
+ */
+export function populateChainedFilters() {
+    const state = getState();
+    
+    populateSelect(dom.filterSite, state.allSites, 'SiteID', 'SiteName', { initialOptionText: 'All Sites' });
+    dom.filterSite.value = state.filters.site;
+    
+    const roomsForSite = selectors.selectRoomsBySiteId(state, state.filters.site);
+    populateSelect(dom.filterRoom, roomsForSite, 'RoomID', 'RoomName', { initialOptionText: 'All Rooms' });
+    dom.filterRoom.disabled = !state.filters.site;
+    dom.filterRoom.value = state.filters.room;
+
+    const containersForRoom = selectors.selectContainersByParentId(state, state.filters.room);
+    populateSelect(dom.filterContainer, containersForRoom, 'ContainerID', 'ContainerName', { initialOptionText: 'All Containers' });
+    dom.filterContainer.disabled = !state.filters.room;
+    dom.filterContainer.value = state.filters.container;
+}
 
 /**
  * Populates the main inventory filter dropdowns based on available data.
  */
 export function populateFilterDropdowns() {
-    // This function is now a proxy for the new chained filter logic.
     populateChainedFilters();
     
-    // The other, non-hierarchical filters can still be populated as before.
     const { allAssets, allEmployees } = getState();
-    populateSelect(dom.filterAssetType, allAssets, 'AssetType', 'AssetType', { initialOptionText: 'All' });
-    populateSelect(dom.filterCondition, allAssets, 'Condition', 'Condition', { initialOptionText: 'All' });
-    populateSelect(dom.filterModelNumber, allAssets, 'ModelNumber', 'ModelNumber', { initialOptionText: 'All' });
-    populateSelect(dom.filterIntendedUserType, allAssets, 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
-
-    const assignedToData = allEmployees.map(e => ({ EmployeeName: e.EmployeeName }));
-    populateSelect(dom.filterAssignedTo, assignedToData, 'EmployeeName', 'EmployeeName', { initialOptionText: 'All' });
+    const uniqueAssets = (key) => [...new Map(allAssets.map(item => [item[key], item])).values()];
+    
+    populateSelect(dom.filterAssetType, uniqueAssets('AssetType'), 'AssetType', 'AssetType', { initialOptionText: 'All' });
+    populateSelect(dom.filterCondition, uniqueAssets('Condition'), 'Condition', 'Condition', { initialOptionText: 'All' });
+    populateSelect(dom.filterModelNumber, uniqueAssets('ModelNumber'), 'ModelNumber', 'ModelNumber', { initialOptionText: 'All' });
+    populateSelect(dom.filterIntendedUserType, uniqueAssets('IntendedUserType'), 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
+    populateSelect(dom.filterAssignedTo, allEmployees, 'EmployeeName', 'EmployeeName', { initialOptionText: 'All' });
 
     renderFilters();
 }
 
 /**
- * Manages the new chained hierarchical location filters.
- */
-export function populateChainedFilters() {
-    const state = getState();
-    
-    // 1. Populate Sites
-    populateSelect(dom.filterSite, state.allSites, 'SiteID', 'SiteName', { initialOptionText: 'All Sites' });
-
-    // 2. Handle Site selection change
-    dom.filterSite.addEventListener('change', () => {
-        const siteId = dom.filterSite.value;
-        const roomsForSite = selectors.selectRoomsBySiteId(state, siteId);
-        
-        populateSelect(dom.filterRoom, roomsForSite, 'RoomID', 'RoomName', { initialOptionText: 'All Rooms' });
-        dom.filterRoom.disabled = !siteId;
-        
-        // Clear and disable container dropdown
-        dom.filterContainer.innerHTML = '<option value="">All Containers</option>';
-        dom.filterContainer.disabled = true;
-    });
-
-    // 3. Handle Room selection change
-    dom.filterRoom.addEventListener('change', () => {
-        const roomId = dom.filterRoom.value;
-        const containersForRoom = selectors.selectContainersByParentId(state, roomId);
-        
-        populateSelect(dom.filterContainer, containersForRoom, 'ContainerID', 'ContainerName', { initialOptionText: 'All Containers' });
-        dom.filterContainer.disabled = !roomId;
-    });
-}
-
-
-/**
  * Renders the main asset data table.
- * @param {Array<Object>} paginatedAssets - The assets for the current page.
- * @param {number} totalPages - The total number of pages.
- * @param {number} currentPage - The current page number.
- * @param {Array<string>} visibleColumns - The columns to display.
- * @param {Object} sortState - The current sort state.
  */
 export function renderTable(paginatedAssets, totalPages, currentPage, visibleColumns, sortState) {
     if (!dom.assetTableHead || !dom.assetTableBody) return;
@@ -286,7 +254,6 @@ export function renderTable(paginatedAssets, totalPages, currentPage, visibleCol
     paginatedAssets.forEach(asset => {
         const tr = document.createElement('tr');
         tr.dataset.id = asset.AssetID;
-        // Use the pre-enriched AssignedToName property
         const displayColumns = visibleColumns.map(colName => {
             const value = colName === 'AssignedTo' ? asset.AssignedToName : asset[colName];
             return `<td class="px-6 py-4 whitespace-nowrap text-sm">${value || ''}</td>`;
@@ -314,16 +281,10 @@ export function renderTable(paginatedAssets, totalPages, currentPage, visibleCol
     updateBulkEditButtonVisibility();
 }
 
-/**
- * Renders pagination controls.
- * @param {number} totalPages - Total number of pages.
- * @param {number} currentPage - The current active page.
- */
 function renderPagination(totalPages, currentPage) {
     const containers = [dom.paginationControlsTop, dom.paginationControlsBottom];
-    if (containers.some(c => !c)) return;
-
     containers.forEach(container => {
+        if (!container) return;
         container.innerHTML = '';
         container.className = 'flex justify-center items-center mt-6';
 
@@ -336,9 +297,8 @@ function renderPagination(totalPages, currentPage) {
         const prevButton = document.createElement('div');
         prevButton.className = 'pagination-arrow';
         prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-        if (currentPage === 1) {
-            prevButton.classList.add('disabled');
-        } else {
+        prevButton.classList.toggle('disabled', currentPage === 1);
+        if (currentPage > 1) {
             prevButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage - 1 }));
         }
         container.appendChild(prevButton);
@@ -358,9 +318,8 @@ function renderPagination(totalPages, currentPage) {
         const nextButton = document.createElement('div');
         nextButton.className = 'pagination-arrow';
         nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
-        if (currentPage === totalPages) {
-            nextButton.classList.add('disabled');
-        } else {
+        nextButton.classList.toggle('disabled', currentPage === totalPages);
+        if (currentPage < totalPages) {
             nextButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage + 1 }));
         }
         container.appendChild(nextButton);
@@ -368,45 +327,29 @@ function renderPagination(totalPages, currentPage) {
 }
 
 
-/**
- * Opens the detail modal and populates it with asset information.
- * @param {string} assetId - The ID of the asset to display.
- * @param {function} openEditCallback - A callback function to open the edit modal.
- */
 export function openDetailModal(assetId, openEditCallback) {
     const state = getState();
-    const assetsById = selectors.selectAssetsById(state.allAssets);
-    const asset = assetsById.get(assetId);
+    const asset = selectors.selectAssetsById(state.allAssets).get(assetId);
     if (!asset) return;
 
-    const employeesById = selectors.selectEmployeesById(state.allEmployees);
-    const locationPath = selectors.selectFullLocationPathString(state, asset.ParentID);
+    const locationPath = selectors.selectFullLocationPathString(state, asset.ParentObjectID);
 
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
-    
-    // Create a new list of headers for display, excluding the old location fields and adding the new path.
-    const detailHeaders = ASSET_HEADERS.filter(h => !['Site', 'Location', 'Container', 'LoginInfo', 'ParentID'].includes(h));
+    const detailHeaders = ASSET_HEADER_MAP.map(h => h.key).filter(h => !['Site', 'Location', 'Container', 'LoginInfo', 'ParentObjectID', 'AssetID'].includes(h));
 
     dom.detailModalContent.innerHTML = `
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
-            <div>
-                <dt>Location Path:</dt>
-                <dd>${locationPath || 'N/A'}</dd>
-            </div>
+            <div><dt>Location Path:</dt><dd>${locationPath || 'N/A'}</dd></div>
             ${detailHeaders.map(key => {
                 let displayValue = asset[key] || 'N/A';
                 if (key === 'AssignedTo') {
-                    const employee = employeesById.get(asset[key]);
-                    displayValue = employee ? employee.EmployeeName : 'Unassigned';
+                    displayValue = selectors.selectEmployeesById(state.allEmployees).get(asset[key])?.EmployeeName || 'Unassigned';
                 }
-                return `
-                <div>
-                    <dt>${key.replace(/([A-Z])/g, ' $1')}:</dt>
-                    <dd>${displayValue}</dd>
-                </div>
-            `}).join('')}
+                return `<div><dt>${key.replace(/([A-Z])/g, ' $1')}:</dt><dd>${displayValue}</dd></div>`
+            }).join('')}
         </dl>
     `;
+
     const newEditBtn = dom.detailModalEditBtn.cloneNode(true);
     dom.detailModalEditBtn.parentNode.replaceChild(newEditBtn, dom.detailModalEditBtn);
     dom.detailModalEditBtn = newEditBtn;
@@ -417,12 +360,7 @@ export function openDetailModal(assetId, openEditCallback) {
     toggleModal(dom.detailModal, true);
 }
 
-
-/**
- * Fills the asset form with data from an asset object.
- * @param {Object} asset - The asset object.
- */
-export function populateAssetForm(asset) {
+export function populateAssetForm(asset = {}) {
     dom.assetForm.reset();
     dom.assetId.value = asset.AssetID || '';
     dom.rowIndex.value = asset.rowIndex || '';
@@ -438,41 +376,22 @@ export function populateAssetForm(asset) {
     dom.specs.value = asset.Specs || '';
     dom.loginInfo.value = asset.LoginInfo ? atob(asset.LoginInfo) : '';
     dom.notes.value = asset.Notes || '';
+    dom.assetType.value = asset.AssetType || '';
+    dom.assignedTo.value = asset.AssignedTo || '';
 
-    const dynamicFields = [
-        { id: 'site', key: 'Site' }, { id: 'location', key: 'Location' },
-        { id: 'container', key: 'Container' }, { id: 'asset-type', key: 'AssetType' },
-        { id: 'assigned-to', key: 'AssignedTo' }
-    ];
-    dynamicFields.forEach(field => {
-        const select = document.getElementById(field.id);
-        const newInp = document.getElementById(`${field.id}-new`);
-        const value = asset[field.key];
-        const optionExists = [...select.options].some(opt => opt.value === value);
+    // Handle hierarchical location dropdowns
+    const path = selectors.selectFullLocationPath(getState(), asset.ParentObjectID);
+    const site = path.find(p => p.SiteID);
+    const room = path.find(p => p.RoomID);
+    const container = path.find(p => p.ContainerID);
 
-        if (value && optionExists) {
-            select.value = value;
-            if(newInp) newInp.classList.add('hidden');
-        } else if (value && field.id !== 'assigned-to') { // Can't add new employees this way
-            select.value = '--new--';
-            if(newInp) {
-                newInp.value = value;
-                newInp.classList.remove('hidden');
-            }
-        } else {
-            select.value = value || '';
-            if(newInp) {
-                newInp.classList.add('hidden');
-                newInp.value = '';
-            }
-        }
-    });
+    dom.modalSite.value = site ? site.SiteID : '';
+    populateRoomDropdownForSite(site ? site.SiteID : null); // Populate rooms based on site
+    dom.modalRoom.value = room ? room.RoomID : '';
+    populateContainerDropdownForRoom(room ? room.RoomID : null); // Populate containers based on room
+    dom.modalContainer.value = container ? container.ContainerID : '';
 }
 
-/**
- * Renders the list of employees as cards in the Employees tab.
- * @param {Array<Object>} sortedEmployees - The sorted list of employee objects to display.
- */
 export function renderEmployeeList(sortedEmployees) {
     if (!dom.employeeListContainer) return;
     dom.employeeListContainer.innerHTML = '';
@@ -491,7 +410,6 @@ export function renderEmployeeList(sortedEmployees) {
     }, {});
 
     sortedEmployees.forEach(emp => {
-        const assignedCount = assetCounts[emp.EmployeeID] || 0;
         const card = document.createElement('div');
         card.className = 'employee-card bg-white p-5 rounded-lg shadow-md cursor-pointer border border-gray-200';
         card.dataset.id = emp.EmployeeID;
@@ -500,7 +418,7 @@ export function renderEmployeeList(sortedEmployees) {
             <p class="text-sm text-gray-600">${emp.Title || 'N/A'}</p>
             <div class="mt-4 pt-4 border-t border-gray-200">
                 <p class="text-sm text-gray-500">
-                    <span class="font-semibold text-gray-700">${assignedCount}</span>
+                    <span class="font-semibold text-gray-700">${assetCounts[emp.EmployeeID] || 0}</span>
                     assets assigned
                 </p>
             </div>
@@ -509,47 +427,27 @@ export function renderEmployeeList(sortedEmployees) {
     });
 }
 
-/**
- * Opens and populates the employee detail modal.
- * @param {string} employeeId - The ID of the employee to show.
- */
 export function openEmployeeDetailModal(employeeId) {
     const state = getState();
-    const employeesById = selectors.selectEmployeesById(state.allEmployees);
-    const employee = employeesById.get(employeeId);
-    if (!employee) {
-        showMessage('Employee not found.');
-        return;
-    }
+    const employee = selectors.selectEmployeesById(state.allEmployees).get(employeeId);
+    if (!employee) return;
 
     dom.employeeDetailName.textContent = employee.EmployeeName;
     dom.employeeDetailTitleDept.textContent = `${employee.Title || 'No Title'} | ${employee.Department || 'No Department'}`;
-
     dom.employeeDetailInfo.innerHTML = `
         <div><dt class="font-semibold text-gray-600">Email:</dt><dd class="text-gray-800">${employee.Email || 'N/A'}</dd></div>
         <div><dt class="font-semibold text-gray-600">Phone:</dt><dd class="text-gray-800">${employee.Phone || 'N/A'}</dd></div>
     `;
-
     const assignedAssets = state.allAssets.filter(a => a.AssignedTo === employee.EmployeeID);
     dom.employeeDetailAssets.innerHTML = assignedAssets.length > 0 ? `
         <ul class="divide-y divide-gray-200">
-            ${assignedAssets.map(a => `
-                <li class="py-2 cursor-pointer hover:bg-gray-100 rounded-md p-2 employee-asset-item" data-asset-id="${a.AssetID}">
-                    <p class="text-sm font-medium text-gray-900 pointer-events-none">${a.AssetName}</p>
-                    <p class="text-xs text-gray-500 pointer-events-none">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
-                </li>
-            `).join('')}
-        </ul>` : `<p class="text-sm text-gray-500">No assets currently assigned.</p>`;
+            ${assignedAssets.map(a => `<li class="py-2 cursor-pointer hover:bg-gray-100 rounded-md p-2 employee-asset-item" data-asset-id="${a.AssetID}"><p class="text-sm font-medium text-gray-900">${a.AssetName}</p><p class="text-xs text-gray-500">${a.AssetType || ''}</p></li>`).join('')}
+        </ul>` : `<p class="text-sm text-gray-500">No assets assigned.</p>`;
 
     dom.employeeDetailEditBtn.dataset.employeeId = employeeId;
     toggleModal(dom.employeeDetailModal, true);
 }
 
-
-/**
- * Populates the employee form for editing.
- * @param {object} employee - The employee object to edit.
- */
 export function populateEmployeeForm(employee) {
     dom.employeeForm.reset();
     dom.employeeId.value = employee.EmployeeID || '';
@@ -564,7 +462,7 @@ export function populateEmployeeForm(employee) {
 
 export function populateEmployeeFilterDropdowns() {
     const { allEmployees } = getState();
-    populateSelect(dom.employeeDepartmentFilter, allEmployees, 'Department', 'Department', { initialOptionText: 'All Departments' });
+    populateSelect(dom.employeeDepartmentFilter, [...new Map(allEmployees.map(e => [e.Department, e])).values()], 'Department', 'Department', { initialOptionText: 'All Departments' });
 }
 
 export function handleDynamicSelectChange(selectElement, newElement) {
@@ -582,43 +480,29 @@ export function updateBulkEditButtonVisibility() {
 
 export function renderFilters() {
     const filterMap = {
-        "Site": "filter-site-wrapper", "AssetType": "filter-asset-type-wrapper",
-        "Condition": "filter-condition-wrapper", "AssignedTo": "filter-assigned-to-wrapper",
-        "ModelNumber": "filter-model-number-wrapper",
+        "AssetType": "filter-asset-type-wrapper", "Condition": "filter-condition-wrapper",
+        "AssignedTo": "filter-assigned-to-wrapper", "ModelNumber": "filter-model-number-wrapper",
         "IntendedUserType": "filter-intended-user-type-wrapper"
     };
-    // Hide all optional filters first
-    Object.values(filterMap).forEach(id => {
-        if(id !== "filter-site-wrapper") document.getElementById(id)?.classList.add('hidden')
-    });
-
-    const { visibleColumns } = getState();
-    // Show only the selected optional filters
-    visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
-    
-    // The new hierarchical filters are always visible, so no special logic is needed for them here.
+    Object.values(filterMap).forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    getState().visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
 }
 
 export function populateColumnSelector() {
     dom.columnCheckboxes.innerHTML = '';
     const { visibleColumns } = getState();
-    const selectableColumns = ASSET_HEADERS.filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName", "ParentID", "Site", "Location", "Container"].includes(h));
+    const selectableColumns = ASSET_HEADER_MAP.map(h => h.key).filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName", "ParentObjectID", "Site", "Location", "Container"].includes(h));
     selectableColumns.forEach(colName => {
         const isChecked = visibleColumns.includes(colName);
         dom.columnCheckboxes.innerHTML += `
             <div class="flex items-center">
                 <input id="col-${colName}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} class="h-4 w-4 rounded">
-                <label for="col-${colName}" class="ml-2 block text-sm">${colName}</label>
+                <label for="col-${colName}" class="ml-2 block text-sm">${colName.replace(/([A-Z])/g, ' $1')}</label>
             </div>
         `;
     });
 }
 
-/**
- * Renders or updates all charts on the overview panel.
- * @param {Object} chartData - An object containing data for all charts from selectors.
- * @param {function} clickCallback - The callback function for chart clicks.
- */
 export function renderOverviewCharts(chartData, clickCallback) {
     const chartConfigs = {
         siteChart: { data: chartData.siteData, el: 'site-chart', typeEl: 'site-chart-type', filterId: 'filter-site' },
@@ -631,11 +515,9 @@ export function renderOverviewCharts(chartData, clickCallback) {
         const canvas = document.getElementById(config.el);
         const type = document.getElementById(config.typeEl).value;
         if (charts[key] && charts[key].config.type === type) {
-            // Update existing chart
             charts[key].data = config.data;
             charts[key].update();
         } else {
-            // Create new chart
             if (charts[key]) charts[key].destroy();
             charts[key] = new Chart(canvas, {
                 type: type,
@@ -648,4 +530,33 @@ export function renderOverviewCharts(chartData, clickCallback) {
             });
         }
     }
+}
+
+// --- HIERARCHICAL MODAL DROPDOWNS ---
+function populateRoomDropdownForSite(siteId) {
+    const rooms = siteId ? selectors.selectRoomsBySiteId(getState(), siteId) : [];
+    populateSelect(dom.modalRoom, rooms, 'RoomID', 'RoomName', { initialOptionText: '-- Select Room --' });
+    dom.modalRoom.disabled = !siteId;
+    // Also reset and disable container
+    dom.modalContainer.innerHTML = '<option value="">-- Select Container --</option>';
+    dom.modalContainer.disabled = true;
+}
+
+function populateContainerDropdownForRoom(roomId) {
+    const containers = roomId ? selectors.selectContainersByParentId(getState(), roomId) : [];
+    populateSelect(dom.modalContainer, containers, 'ContainerID', 'ContainerName', { initialOptionText: '-- Select Container --' });
+    dom.modalContainer.disabled = !roomId;
+}
+
+export function setupModalHierarchy() {
+    // Populate top-level sites initially
+    populateSelect(dom.modalSite, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select Site --' });
+
+    dom.modalSite.addEventListener('change', () => {
+        populateRoomDropdownForSite(dom.modalSite.value);
+    });
+
+    dom.modalRoom.addEventListener('change', () => {
+        populateContainerDropdownForRoom(dom.modalRoom.value);
+    });
 }

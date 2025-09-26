@@ -1,5 +1,5 @@
 // JS/main.js
-import { CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
+import { CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, SITES_SHEET, ROOMS_SHEET, CONTAINERS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, SITES_HEADER_MAP, ROOMS_HEADER_MAP, CONTAINERS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
 import { getState, dispatch, actionTypes, subscribe } from './store.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
@@ -111,7 +111,10 @@ function handleSigninStatusChange(isSignedIn) {
 async function initializeAppData() {
     ui.setLoading(true);
     try {
-        const ranges = [`${ASSET_SHEET}!A:Z`, `${ROOMS_SHEET}!A:Z`, `${SPATIAL_LAYOUT_SHEET}!A:Z`, `${EMPLOYEES_SHEET}!A:Z`];
+        const ranges = [
+            `${ASSET_SHEET}!A:Z`, `${EMPLOYEES_SHEET}!A:Z`, `${SITES_SHEET}!A:Z`,
+            `${ROOMS_SHEET}!A:Z`, `${CONTAINERS_SHEET}!A:Z`, `${SPATIAL_LAYOUT_SHEET}!A:Z`
+        ];
         const { meta, data } = await api.fetchSheetMetadataAndData(ranges);
         
         const sheetIds = meta.sheets.reduce((acc, sheet) => {
@@ -119,13 +122,15 @@ async function initializeAppData() {
             return acc;
         }, {});
         
-        const [assetValues, roomValues, layoutValues, employeeValues] = data.map(range => range.values || []);
+        const [assetValues, employeeValues, siteValues, roomValues, containerValues, layoutValues] = data.map(range => range.values || []);
 
         const appData = {
             allAssets: processSheetData(assetValues, ASSET_HEADER_MAP, 'AssetID'),
-            allRooms: processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID'),
-            spatialLayoutData: processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID'),
             allEmployees: processSheetData(employeeValues, EMPLOYEE_HEADER_MAP, 'EmployeeID'),
+            allSites: processSheetData(siteValues, SITES_HEADER_MAP, 'SiteID'),
+            allRooms: processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID'),
+            allContainers: processSheetData(containerValues, CONTAINERS_HEADER_MAP, 'ContainerID'),
+            spatialLayoutData: processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID'),
             sheetIds: sheetIds
         };
 
@@ -135,6 +140,7 @@ async function initializeAppData() {
         ui.populateFilterDropdowns();
         ui.populateEmployeeFilterDropdowns();
         ui.populateModalDropdowns();
+        ui.setupModalHierarchy();
 
         if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
             initVisualInventory();
@@ -143,7 +149,7 @@ async function initializeAppData() {
         console.error("Error during data load:", err);
         const errorMessage = err.result?.error?.message || err.message || 'An unknown error occurred';
         if (errorMessage.includes("Unable to parse range")) {
-            ui.showMessage(`Error: A required sheet is missing. Ensure 'Asset', 'Rooms', 'Spatial Layout', and 'Employees' sheets exist.`);
+            ui.showMessage(`Error: A required sheet is missing. Ensure all required sheets exist.`);
         } else {
             ui.showMessage(`Error loading data: ${errorMessage}`);
         }
@@ -176,13 +182,13 @@ function processSheetData(values, headerMapConfig, idKey) {
     }
 
     const idKeyIndex = columnIndexMap[idKey];
-    if (idKeyIndex === undefined) {
+    if (idKeyIndex === undefined && idKey) { // idKey might be null for sheets without one
         console.error(`CRITICAL: ID key "${idKey}" not found in sheet headers. Processing aborted. Headers found:`, actualHeaders);
         return [];
     }
 
     return values.slice(1).map((row, index) => {
-        if (!row || row.length === 0 || !row[idKeyIndex]) return null;
+        if (!row || row.length === 0 || (idKey && !row[idKeyIndex])) return null;
         const item = { rowIndex: index + 2 }; // rowIndex is 1-based for sheets, and we slice(1), so it's index + 2
         for (const config of headerMapConfig) {
             const key = config.key;
@@ -193,11 +199,11 @@ function processSheetData(values, headerMapConfig, idKey) {
     }).filter(Boolean);
 }
 
+
 // --- UI LOGIC & EVENT HANDLERS ---
 function renderApp() {
     // This function is now the single point of entry for all UI updates.
     // It's called by the subscription whenever the state changes.
-    console.log("Re-rendering the application UI...");
     const state = getState();
 
     // --- Compute derived data using memoized selectors ---
@@ -209,18 +215,18 @@ function renderApp() {
     const stateForFiltering = { ...state, employeesByName };
 
     // Assets Tab
-    const filteredAssets = selectors.selectFilteredAssets(enrichedAssets, state.filters, state.filters.searchTerm, stateForFiltering);
+    const filteredAssets = selectors.selectFilteredAssets(enrichedAssets, state.filters, stateForFiltering);
     const sortedAssets = selectors.selectSortedAssets(filteredAssets, state.sortState);
     const { paginatedItems, totalPages } = selectors.selectPaginatedAssets(sortedAssets, state.pagination.currentPage);
     ui.renderTable(paginatedItems, totalPages, state.pagination.currentPage, state.visibleColumns, state.sortState);
 
     // Employees Tab
-    const filteredEmployees = selectors.selectFilteredEmployees(state.allEmployees, state.employeeFilters, state.employeeFilters.searchTerm);
+    const filteredEmployees = selectors.selectFilteredEmployees(state.allEmployees, state.employeeFilters);
     const sortedEmployees = selectors.selectSortedEmployees(filteredEmployees);
     ui.renderEmployeeList(sortedEmployees);
 
     // Overview Tab
-    const chartData = selectors.selectChartData(enrichedAssets, state.allEmployees);
+    const chartData = selectors.selectChartData(enrichedAssets);
     ui.renderOverviewCharts(chartData, handleChartClick);
     
     // This doesn't need to run on every render, but it's harmless.
@@ -276,7 +282,8 @@ function setupEventListeners() {
         d.modalTitle.innerText = 'Add New Asset';
         d.assetId.value = '';
         d.rowIndex.value = '';
-        ['site', 'location', 'container', 'asset-type', 'assigned-to'].forEach(id => {
+        ui.populateAssetForm({}); // Populate with empty object to reset hierarchical dropdowns
+        ['asset-type', 'assigned-to'].forEach(id => {
             const newEl = document.getElementById(`${id}-new`);
             if (newEl) {
                 newEl.classList.add('hidden');
@@ -295,16 +302,15 @@ function setupEventListeners() {
     d.employeesTab.addEventListener('click', () => switchTab('employees'));
     d.visualInventoryTab.addEventListener('click', () => switchTab('visual-inventory'));
 
-    d.site.addEventListener('change', () => ui.handleDynamicSelectChange(d.site, document.getElementById('site-new')));
-    d.location.addEventListener('change', () => ui.handleDynamicSelectChange(d.location, document.getElementById('location-new')));
-    d.container.addEventListener('change', () => ui.handleDynamicSelectChange(d.container, document.getElementById('container-new')));
     d.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(d.assetType, document.getElementById('asset-type-new')));
 
     // --- Filter Event Listeners ---
     // Asset filters now dispatch actions to update state
     d.filterSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { searchTerm: e.target.value } }));
-    d.filterSite.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { Site: e.target.value } }));
-    d.filterLocation.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { Location: e.target.value } }));
+    d.filterSite.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { site: e.target.value, room: '', container: '' } }));
+    d.filterRoom.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { room: e.target.value, container: '' } }));
+    d.filterContainer.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { container: e.target.value } }));
+    
     d.filterAssetType.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { AssetType: e.target.value } }));
     d.filterCondition.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { Condition: e.target.value } }));
     d.filterIntendedUserType.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { IntendedUserType: e.target.value } }));
@@ -383,14 +389,17 @@ async function handleAssetFormSubmit(e) {
             return select.value === '--new--' && newInp ? newInp.value : select.value;
         };
 
+        const parentId = ui.dom.modalContainer.value || ui.dom.modalRoom.value || '';
+
         const assetData = {
             AssetID: ui.dom.assetId.value || `ASSET-${Date.now()}`,
             rowIndex: ui.dom.rowIndex.value,
             AssetName: ui.dom.assetName.value,
             Quantity: ui.dom.quantity.value,
-            Site: getSelectValue('site'),
-            Location: getSelectValue('location'),
-            Container: getSelectValue('container'),
+            ParentObjectID: parentId, // New hierarchical parent
+            Site: '', // Deprecated - clear it
+            Location: '', // Deprecated - clear it
+            Container: '', // Deprecated - clear it
             IntendedUserType: ui.dom.intendedUserType.value,
             Condition: ui.dom.condition.value,
             AssetType: getSelectValue('asset-type'),
@@ -406,7 +415,9 @@ async function handleAssetFormSubmit(e) {
         };
 
         const isUpdate = !!assetData.rowIndex;
-        const rowData = ASSET_HEADERS.map(header => assetData[header] || '');
+        const headers = ASSET_HEADER_MAP.map(h => h.key);
+        const rowData = headers.map(header => assetData[header] !== undefined ? assetData[header] : '');
+
 
         if (isUpdate) {
             await api.updateSheetValues(`${ASSET_SHEET}!A${assetData.rowIndex}`, [rowData]);
@@ -424,6 +435,7 @@ async function handleAssetFormSubmit(e) {
     }
 }
 
+
 async function handleEmployeeFormSubmit(e) {
     e.preventDefault();
     ui.setLoading(true);
@@ -439,7 +451,9 @@ async function handleEmployeeFormSubmit(e) {
         };
 
         const isUpdate = !!employeeData.rowIndex;
-        const rowData = EMPLOYEE_HEADERS.map(header => employeeData[header] || '');
+        const headers = EMPLOYEE_HEADER_MAP.map(h => h.key);
+        const rowData = headers.map(header => employeeData[header] || '');
+
 
         if (isUpdate) {
             await api.updateSheetValues(`${EMPLOYEES_SHEET}!A${employeeData.rowIndex}`, [rowData]);
@@ -487,9 +501,15 @@ function handleTableClick(e) {
 
 function setupBulkEditListeners() {
     ui.dom.bulkEditBtn.addEventListener('click', () => {
-        document.getElementById('bulk-edit-form').reset();
-        document.querySelectorAll('#bulk-edit-form select, #bulk-edit-form input[type="text"]').forEach(el => el.disabled = true);
+        const form = document.getElementById('bulk-edit-form');
+        form.reset();
+        document.querySelectorAll('#bulk-edit-form select').forEach(el => el.disabled = true);
         ui.toggleModal(ui.dom.bulkEditModal, true);
+        ui.setupBulkEditModalHierarchy(); // Setup dropdowns
+        // Manually re-disable after setup
+        ui.dom.bulkSite.disabled = true;
+        ui.dom.bulkRoom.disabled = true;
+        ui.dom.bulkContainer.disabled = true;
     });
     document.getElementById('bulk-cancel-btn').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
     ui.dom.bulkEditModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
@@ -497,15 +517,20 @@ function setupBulkEditListeners() {
     document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(checkbox => {
         checkbox.addEventListener('change', e => {
             const fieldName = e.target.id.replace('bulk-update-', '').replace('-check', '');
-            const inputEl = document.getElementById(`bulk-${fieldName.replace(/-(.)/g, (m, g) => g.toUpperCase())}`);
-            if (inputEl) inputEl.disabled = !e.target.checked;
+            const isChecked = e.target.checked;
+
+            if (fieldName === 'location') {
+                ui.dom.bulkSite.disabled = !isChecked;
+                // Only enable sub-dropdowns if their parent is selected AND the box is checked
+                ui.dom.bulkRoom.disabled = !isChecked || !ui.dom.bulkSite.value;
+                ui.dom.bulkContainer.disabled = !isChecked || !ui.dom.bulkRoom.value;
+            } else {
+                const inputEl = document.getElementById(`bulk-${fieldName.replace(/-(.)/g, (m, g) => g.toUpperCase())}`);
+                if (inputEl) inputEl.disabled = !isChecked;
+            }
         });
     });
 
-    document.getElementById('bulk-site').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-site'), document.getElementById('bulk-site-new')));
-    document.getElementById('bulk-location').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-location'), document.getElementById('bulk-location-new')));
-    document.getElementById('bulk-container').addEventListener('change', () => ui.handleDynamicSelectChange(document.getElementById('bulk-container'), document.getElementById('bulk-container-new')));
-    
     document.getElementById('bulk-edit-form').onsubmit = e => {
         e.preventDefault();
         handleBulkUpdate();
@@ -533,48 +558,54 @@ async function handleBulkUpdate() {
     ui.setLoading(true);
     try {
         const selectedAssetIds = [...document.querySelectorAll('.asset-checkbox:checked')].map(cb => cb.dataset.id);
-        if (selectedAssetIds.length === 0) return;
-
-        const response = await api.getSheetValues(`${ASSET_SHEET}!1:1`);
-        const sheetHeaders = response.result.values?.[0] || [];
-        const headerMap = {};
-        sheetHeaders.forEach((header, i) => {
-            const foundHeader = ASSET_HEADER_MAP.find(h => h.aliases.includes(header));
-            if(foundHeader) headerMap[foundHeader.key] = String.fromCharCode(65 + i);
-        });
-
-        const getSelectValue = (id) => {
-            const select = document.getElementById(id);
-            const newInp = document.getElementById(`${id}-new`);
-            return select.value === '--new--' && newInp ? newInp.value : select.value;
-        };
-
-        const fields = [
-            { check: 'bulk-update-site-check', key: 'Site', value: () => getSelectValue('bulk-site') },
-            { check: 'bulk-update-location-check', key: 'Location', value: () => getSelectValue('bulk-location') },
-            { check: 'bulk-update-container-check', key: 'Container', value: () => getSelectValue('bulk-container') },
-            { check: 'bulk-update-intended-user-check', key: 'IntendedUserType', value: () => ui.dom.bulkIntendedUserType.value },
-            { check: 'bulk-update-condition-check', key: 'Condition', value: () => ui.dom.bulkCondition.value },
-            { check: 'bulk-update-assigned-to-check', key: 'AssignedTo', value: () => ui.dom.bulkAssignedTo.value }
-        ];
-
-        const data = [];
-        const assetsById = selectors.selectAssetsById(getState().allAssets);
-        for (const field of fields) {
-            if (document.getElementById(field.check).checked) {
-                const value = field.value();
-                const colLetter = headerMap[field.key];
-                if (colLetter) {
-                    for (const id of selectedAssetIds) {
-                        const asset = assetsById.get(id);
-                        if (asset) data.push({ range: `${ASSET_SHEET}!${colLetter}${asset.rowIndex}`, values: [[value]] });
-                    }
-                }
-            }
+        if (selectedAssetIds.length === 0) {
+            ui.toggleModal(ui.dom.bulkEditModal, false);
+            ui.setLoading(false);
+            return;
         }
 
-        if (data.length > 0) {
-            await api.batchUpdateSheetValues(data);
+        const assetsById = selectors.selectAssetsById(getState().allAssets);
+        const assetsToUpdate = selectedAssetIds.map(id => assetsById.get(id)).filter(Boolean);
+        
+        const parentId = ui.dom.bulkContainer.value || ui.dom.bulkRoom.value || '';
+        
+        const isLocationChecked = document.getElementById('bulk-update-location-check').checked;
+        const isUserTypeChecked = document.getElementById('bulk-update-intended-user-check').checked;
+        const isConditionChecked = document.getElementById('bulk-update-condition-check').checked;
+        const isAssignedToChecked = document.getElementById('bulk-update-assigned-to-check').checked;
+
+        const updateRequests = [];
+
+        for (const asset of assetsToUpdate) {
+            const updatedAsset = { ...asset };
+
+            if (isLocationChecked && parentId) {
+                updatedAsset.ParentObjectID = parentId;
+                updatedAsset.Site = '';
+                updatedAsset.Location = '';
+                updatedAsset.Container = '';
+            }
+            if (isUserTypeChecked) {
+                updatedAsset.IntendedUserType = ui.dom.bulkIntendedUserType.value;
+            }
+            if (isConditionChecked) {
+                updatedAsset.Condition = ui.dom.bulkCondition.value;
+            }
+            if (isAssignedToChecked) {
+                updatedAsset.AssignedTo = ui.dom.bulkAssignedTo.value;
+            }
+
+            const headers = ASSET_HEADER_MAP.map(h => h.key);
+            const rowData = headers.map(header => updatedAsset[header] !== undefined ? updatedAsset[header] : '');
+            
+            updateRequests.push({
+                range: `${ASSET_SHEET}!A${asset.rowIndex}`,
+                values: [rowData]
+            });
+        }
+
+        if (updateRequests.length > 0) {
+            await api.batchUpdateSheetValues(updateRequests);
             window.dispatchEvent(new CustomEvent('datachanged'));
         }
     } catch (err) {
@@ -585,6 +616,7 @@ async function handleBulkUpdate() {
         ui.setLoading(false);
     }
 }
+
 
 async function handleDeleteRow(sheetName, rowIndex) {
     const { sheetIds } = getState();
@@ -621,12 +653,11 @@ function switchTab(tabName) {
     tabs[tabName].panel.classList.remove('hidden');
     tabs[tabName].button.classList.add('active');
 
-    // Re-render is handled by subscription, but we might trigger it if needed
-    if (tabName === 'overview' || tabName === 'visual-inventory') {
+    if (tabName === 'overview') {
         renderApp(); 
-        if (tabName === 'visual-inventory') {
-            initVisualInventory();
-        }
+    }
+    if (tabName === 'visual-inventory') {
+        initVisualInventory();
     }
 }
 
@@ -637,20 +668,27 @@ function handleChartClick(event, elements, filterId) {
     
     // Dispatch an action to set the filter and reset others
     const newFilters = {
-        searchTerm: '', Site: '', Location: '', AssetType: '',
-        Condition: '', IntendedUserType: '', AssignedTo: '', ModelNumber: '',
+        searchTerm: '', site: '', room: '', container: '',
+        AssetType: '', Condition: '', IntendedUserType: '', AssignedTo: '', ModelNumber: '',
     };
-
+    
+    const { allSites } = getState();
+    
     // Map filterId to the correct key in the state
     const filterKeyMap = {
-        'filter-site': 'Site',
+        'filter-site': 'site',
         'filter-condition': 'Condition',
         'filter-asset-type': 'AssetType',
         'filter-assigned-to': 'AssignedTo',
     };
     const stateKey = filterKeyMap[filterId];
     if (stateKey) {
-        newFilters[stateKey] = label;
+        if (stateKey === 'site') {
+            const siteObj = allSites.find(s => s.SiteName === label);
+            if (siteObj) newFilters[stateKey] = siteObj.SiteID;
+        } else {
+            newFilters[stateKey] = label;
+        }
     }
     
     dispatch({ type: actionTypes.SET_FILTERS, payload: newFilters });
@@ -658,8 +696,11 @@ function handleChartClick(event, elements, filterId) {
     // Update the UI dropdown to reflect the change
     const targetFilterEl = document.getElementById(filterId);
     if(targetFilterEl) {
-        targetFilterEl.value = label;
+        targetFilterEl.value = newFilters[stateKey] || label;
+        // Manually trigger change to update dependent dropdowns
+        targetFilterEl.dispatchEvent(new Event('change'));
     }
 
     switchTab('inventory');
 }
+
