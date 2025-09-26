@@ -1,8 +1,11 @@
 // JS/ui.js
-import { state, ASSET_HEADERS, CHART_COLORS, ITEMS_PER_PAGE } from './state.js';
+import { ASSET_HEADERS, CHART_COLORS, ITEMS_PER_PAGE } from './state.js';
+import { getState, dispatch, actionTypes } from './store.js';
 
 // --- DOM ELEMENT REFERENCES ---
 export const dom = {};
+// This holds Chart.js instances. It's UI state, not application data, so it lives here.
+let charts = {};
 
 /**
  * Queries the DOM and populates the `dom` object with element references.
@@ -12,25 +15,25 @@ export function initUI() {
         'auth-section', 'dashboard-section', 'authorize_button', 'signout_button',
         'add-asset-btn', 'bulk-edit-btn', 'refresh-data-btn', 'asset-modal',
         'asset-form', 'cancel-btn', 'loading-indicator', 'no-data-message',
-        'detail-modal', 'bulk-edit-modal', 'column-modal', 'inventory-tab', 
+        'detail-modal', 'bulk-edit-modal', 'column-modal', 'inventory-tab',
         'overview-tab', 'employees-tab', 'visual-inventory-tab', 'inventory-panel',
-        'overview-panel', 'employees-panel', 'visual-inventory-panel', 
-        'asset-table-head', 'asset-table-body', 'filter-search', 'filter-site', 
-        'filter-location', 'filter-asset-type', 'filter-condition', 
-        'filter-intended-user-type', 'filter-assigned-to', 'filter-model-number', 
-        'detail-modal-title', 'detail-modal-content', 'detail-modal-edit-btn', 
-        'modal-title', 'asset-id', 'row-index', 'asset-name', 'quantity', 
-        'intended-user-type', 'condition', 'id-code', 'serial-number', 
-        'model-number', 'date-issued', 'purchase-date', 'specs', 'login-info', 
-        'notes', 'site', 'location', 'container', 'asset-type', 'assigned-to', 
-        'detail-modal-close-btn', 'customize-cols-btn', 'column-checkboxes', 
+        'overview-panel', 'employees-panel', 'visual-inventory-panel',
+        'asset-table-head', 'asset-table-body', 'filter-search', 'filter-site',
+        'filter-location', 'filter-asset-type', 'filter-condition',
+        'filter-intended-user-type', 'filter-assigned-to', 'filter-model-number',
+        'detail-modal-title', 'detail-modal-content', 'detail-modal-edit-btn',
+        'modal-title', 'asset-id', 'row-index', 'asset-name', 'quantity',
+        'intended-user-type', 'condition', 'id-code', 'serial-number',
+        'model-number', 'date-issued', 'purchase-date', 'specs', 'login-info',
+        'notes', 'site', 'location', 'container', 'asset-type', 'assigned-to',
+        'detail-modal-close-btn', 'customize-cols-btn', 'column-checkboxes',
         'column-cancel-btn', 'column-save-btn', 'add-employee-btn', 'employee-list-container',
         'employee-modal', 'employee-form', 'employee-cancel-btn', 'employee-modal-title',
         'employee-detail-modal', 'employee-detail-name', 'employee-detail-title-dept',
         'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn',
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
         'employee-id', 'employee-row-index', 'bulk-site', 'bulk-location', 'bulk-container',
-        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to', 
+        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to',
         'pagination-controls-top', 'pagination-controls-bottom'
     ];
     ids.forEach(id => {
@@ -44,21 +47,20 @@ export function initUI() {
     const swipeThreshold = 50; // Minimum distance for a swipe
 
     function handleSwipe() {
-        const totalPages = Math.ceil(state.allAssets.length / ITEMS_PER_PAGE);
+        const { allAssets, pagination } = getState();
+        const totalPages = Math.ceil(allAssets.length / ITEMS_PER_PAGE);
         if (touchendX < touchstartX - swipeThreshold) { // Swiped left
-            if (state.pagination.currentPage < totalPages) {
-                state.pagination.currentPage++;
-                window.dispatchEvent(new CustomEvent('paginationchange'));
+            if (pagination.currentPage < totalPages) {
+                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage + 1 });
             }
         }
         if (touchendX > touchstartX + swipeThreshold) { // Swiped right
-             if (state.pagination.currentPage > 1) {
-                state.pagination.currentPage--;
-                window.dispatchEvent(new CustomEvent('paginationchange'));
+             if (pagination.currentPage > 1) {
+                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage - 1 });
             }
         }
     }
-    
+
     if (dom.assetTableBody) {
         dom.assetTableBody.addEventListener('touchstart', e => {
             touchstartX = e.changedTouches[0].screenX;
@@ -142,7 +144,7 @@ function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
     if (!selectEl) return;
     textKey = textKey || valueKey;
     const { initialOptionText, addNew } = options;
-    
+
     const uniqueItems = Array.from(new Map(data.map(item => [item[valueKey], item])).values());
     const currentValue = selectEl.value;
     selectEl.innerHTML = initialOptionText ? `<option value="">${initialOptionText}</option>` : '';
@@ -163,7 +165,7 @@ function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
         addNewOption.textContent = 'Add New...';
         selectEl.appendChild(addNewOption);
     }
-    
+
     // Restore previous value if it still exists
     if ([...selectEl.options].some(opt => opt.value === currentValue)) {
         selectEl.value = currentValue;
@@ -174,17 +176,18 @@ function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
  * Populates all dropdowns in the main asset form and bulk edit form.
  */
 export function populateModalDropdowns() {
+    const { allAssets, allEmployees } = getState();
     // Asset-based dropdowns
     const assetFields = ['Site', 'Location', 'Container', 'AssetType'];
     assetFields.forEach(field => {
         const key = field.charAt(0).toLowerCase() + field.slice(1);
-        populateSelect(dom[key], state.allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
-        populateSelect(dom[`bulk${field}`], state.allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
+        populateSelect(dom[key], allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
+        populateSelect(dom[`bulk${field}`], allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
     });
 
     // Employee-based dropdowns
-    populateSelect(dom.assignedTo, state.allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
-    populateSelect(dom.bulkAssignedTo, state.allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
+    populateSelect(dom.assignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
+    populateSelect(dom.bulkAssignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
 }
 
 
@@ -192,17 +195,18 @@ export function populateModalDropdowns() {
  * Populates the main inventory filter dropdowns based on available data.
  */
 export function populateFilterDropdowns() {
-    populateSelect(dom.filterSite, state.allAssets, 'Site', 'Site', { initialOptionText: 'All' });
-    populateSelect(dom.filterAssetType, state.allAssets, 'AssetType', 'AssetType', { initialOptionText: 'All' });
-    populateSelect(dom.filterCondition, state.allAssets, 'Condition', 'Condition', { initialOptionText: 'All' });
-    populateSelect(dom.filterModelNumber, state.allAssets, 'ModelNumber', 'ModelNumber', { initialOptionText: 'All' });
-    populateSelect(dom.filterLocation, state.allAssets, 'Location', 'Location', { initialOptionText: 'All' });
-    populateSelect(dom.filterIntendedUserType, state.allAssets, 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
-    
+    const { allAssets, allEmployees } = getState();
+    populateSelect(dom.filterSite, allAssets, 'Site', 'Site', { initialOptionText: 'All' });
+    populateSelect(dom.filterAssetType, allAssets, 'AssetType', 'AssetType', { initialOptionText: 'All' });
+    populateSelect(dom.filterCondition, allAssets, 'Condition', 'Condition', { initialOptionText: 'All' });
+    populateSelect(dom.filterModelNumber, allAssets, 'ModelNumber', 'ModelNumber', { initialOptionText: 'All' });
+    populateSelect(dom.filterLocation, allAssets, 'Location', 'Location', { initialOptionText: 'All' });
+    populateSelect(dom.filterIntendedUserType, allAssets, 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
+
     // The AssignedTo filter shows employee names but filters by them.
-    const assignedToData = state.allEmployees.map(e => ({ EmployeeName: e.EmployeeName }));
+    const assignedToData = allEmployees.map(e => ({ EmployeeName: e.EmployeeName }));
     populateSelect(dom.filterAssignedTo, assignedToData, 'EmployeeName', 'EmployeeName', { initialOptionText: 'All' });
-    
+
     renderFilters();
 }
 
@@ -214,28 +218,29 @@ export function renderTable(assetsToRender) {
     if (!dom.assetTableHead || !dom.assetTableBody) return;
     dom.assetTableHead.innerHTML = '';
     dom.assetTableBody.innerHTML = '';
+    const { sortState, pagination, visibleColumns, allEmployees } = getState();
 
     // Sorting should be applied to the full list before pagination
     const sortedAssets = [...assetsToRender].sort((a, b) => {
-        const valA = a[state.sortState.column] || '';
-        const valB = b[state.sortState.column] || '';
-        if (valA < valB) return state.sortState.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return state.sortState.direction === 'asc' ? 1 : -1;
+        const valA = a[sortState.column] || '';
+        const valB = b[sortState.column] || '';
+        if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
         return 0;
     });
 
     // Pagination logic
-    const startIndex = (state.pagination.currentPage - 1) * ITEMS_PER_PAGE;
+    const startIndex = (pagination.currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     const paginatedAssets = sortedAssets.slice(startIndex, endIndex);
 
     // Render Table Header
     const headerRow = document.createElement('tr');
     let headerHTML = `<th scope="col" class="relative px-6 py-3"><input type="checkbox" id="select-all-assets" class="h-4 w-4 rounded"></th>`;
-    state.visibleColumns.forEach(colName => {
+    visibleColumns.forEach(colName => {
         let sortArrow = '';
-        if (state.sortState.column === colName) {
-            sortArrow = state.sortState.direction === 'asc' ? '▲' : '▼';
+        if (sortState.column === colName) {
+            sortArrow = sortState.direction === 'asc' ? '▲' : '▼';
         }
         headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" data-column="${colName}">${colName} <span class="sort-arrow">${sortArrow}</span></th>`;
     });
@@ -260,10 +265,10 @@ export function renderTable(assetsToRender) {
         const tr = document.createElement('tr');
         tr.dataset.id = asset.AssetID;
         let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>`;
-        state.visibleColumns.forEach(colName => {
+        visibleColumns.forEach(colName => {
             let value = asset[colName] || '';
             if (colName === 'AssignedTo') {
-                const employee = state.allEmployees.find(e => e.EmployeeID === value);
+                const employee = allEmployees.find(e => e.EmployeeID === value);
                 value = employee ? employee.EmployeeName : (value || '');
             }
             rowHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm">${value}</td>`;
@@ -284,7 +289,7 @@ export function renderTable(assetsToRender) {
         tr.innerHTML = rowHtml;
         dom.assetTableBody.appendChild(tr);
     });
-    
+
     // Render pagination controls
     renderPagination(assetsToRender.length);
 
@@ -301,6 +306,7 @@ function renderPagination(totalItems) {
     if (containers.some(c => !c)) return;
 
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    const { pagination } = getState();
 
     containers.forEach(container => {
         container.innerHTML = '';
@@ -309,19 +315,18 @@ function renderPagination(totalItems) {
         if (totalPages <= 1) {
             container.classList.add('hidden');
             return;
-        } 
+        }
         container.classList.remove('hidden');
 
         // Previous Button
         const prevButton = document.createElement('div');
         prevButton.className = 'pagination-arrow';
         prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-        if (state.pagination.currentPage === 1) {
+        if (pagination.currentPage === 1) {
             prevButton.classList.add('disabled');
         } else {
             prevButton.addEventListener('click', () => {
-                state.pagination.currentPage--;
-                window.dispatchEvent(new CustomEvent('paginationchange'));
+                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage - 1 });
             });
         }
         container.appendChild(prevButton);
@@ -332,13 +337,12 @@ function renderPagination(totalItems) {
         for (let i = 1; i <= totalPages; i++) {
             const dot = document.createElement('span');
             dot.className = 'pagination-dot';
-            if (i === state.pagination.currentPage) {
+            if (i === pagination.currentPage) {
                 dot.classList.add('active');
             }
             dot.dataset.page = i;
             dot.addEventListener('click', (e) => {
-                state.pagination.currentPage = parseInt(e.target.dataset.page, 10);
-                window.dispatchEvent(new CustomEvent('paginationchange'));
+                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: parseInt(e.target.dataset.page, 10) });
             });
             dotsContainer.appendChild(dot);
         }
@@ -348,12 +352,11 @@ function renderPagination(totalItems) {
         const nextButton = document.createElement('div');
         nextButton.className = 'pagination-arrow';
         nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
-        if (state.pagination.currentPage === totalPages) {
+        if (pagination.currentPage === totalPages) {
             nextButton.classList.add('disabled');
         } else {
             nextButton.addEventListener('click', () => {
-                state.pagination.currentPage++;
-                window.dispatchEvent(new CustomEvent('paginationchange'));
+                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage + 1 });
             });
         }
         container.appendChild(nextButton);
@@ -367,7 +370,8 @@ function renderPagination(totalItems) {
  * @param {function} openEditCallback - A callback function to open the edit modal.
  */
 export function openDetailModal(assetId, openEditCallback) {
-    const asset = state.allAssets.find(a => a.AssetID === assetId);
+    const { allAssets, allEmployees } = getState();
+    const asset = allAssets.find(a => a.AssetID === assetId);
     if (!asset) return;
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
     dom.detailModalContent.innerHTML = `
@@ -375,7 +379,7 @@ export function openDetailModal(assetId, openEditCallback) {
             ${ASSET_HEADERS.filter(h => h !== "LoginInfo").map(key => {
                 let displayValue = asset[key] || 'N/A';
                 if (key === 'AssignedTo') {
-                    const employee = state.allEmployees.find(e => e.EmployeeID === asset[key]);
+                    const employee = allEmployees.find(e => e.EmployeeID === asset[key]);
                     displayValue = employee ? employee.EmployeeName : 'Unassigned';
                 }
                 return `
@@ -462,9 +466,9 @@ export function renderEmployeeList(employeesToRender) {
     }
 
     const sortedEmployees = [...employeesToRender].sort((a, b) => a.EmployeeName.localeCompare(b.EmployeeName));
-
+    const { allAssets } = getState();
     sortedEmployees.forEach(emp => {
-        const assignedAssets = state.allAssets.filter(asset => asset.AssignedTo === emp.EmployeeID);
+        const assignedAssets = allAssets.filter(asset => asset.AssignedTo === emp.EmployeeID);
         const card = document.createElement('div');
         card.className = 'employee-card bg-white p-5 rounded-lg shadow-md cursor-pointer border border-gray-200';
         card.dataset.id = emp.EmployeeID;
@@ -487,7 +491,8 @@ export function renderEmployeeList(employeesToRender) {
  * @param {string} employeeId - The ID of the employee to show.
  */
 export function openEmployeeDetailModal(employeeId) {
-    const employee = state.allEmployees.find(e => e.EmployeeID === employeeId);
+    const { allEmployees, allAssets } = getState();
+    const employee = allEmployees.find(e => e.EmployeeID === employeeId);
     if (!employee) {
         showMessage('Employee not found.');
         return;
@@ -507,7 +512,7 @@ export function openEmployeeDetailModal(employeeId) {
         </div>
     `;
 
-    const assignedAssets = state.allAssets.filter(a => a.AssignedTo === employee.EmployeeID);
+    const assignedAssets = allAssets.filter(a => a.AssignedTo === employee.EmployeeID);
     if (assignedAssets.length > 0) {
         dom.employeeDetailAssets.innerHTML = `
             <ul class="divide-y divide-gray-200">
@@ -522,7 +527,7 @@ export function openEmployeeDetailModal(employeeId) {
     } else {
         dom.employeeDetailAssets.innerHTML = `<p class="text-sm text-gray-500">No assets currently assigned.</p>`;
     }
-    
+
     dom.employeeDetailEditBtn.dataset.employeeId = employeeId;
     toggleModal(dom.employeeDetailModal, true);
 }
@@ -548,7 +553,8 @@ export function populateEmployeeForm(employee) {
  * Populates the department filter dropdown on the Employees tab.
  */
 export function populateEmployeeFilterDropdowns() {
-    populateSelect(dom.employeeDepartmentFilter, state.allEmployees, 'Department', 'Department', { initialOptionText: 'All Departments' });
+    const { allEmployees } = getState();
+    populateSelect(dom.employeeDepartmentFilter, allEmployees, 'Department', 'Department', { initialOptionText: 'All Departments' });
 }
 
 
@@ -589,7 +595,8 @@ export function renderFilters() {
         "IntendedUserType": "filter-intended-user-type-wrapper"
     };
     Object.values(filterMap).forEach(id => document.getElementById(id)?.classList.add('hidden'));
-    state.visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
+    const { visibleColumns } = getState();
+    visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
 }
 
 
@@ -598,9 +605,10 @@ export function renderFilters() {
  */
 export function populateColumnSelector() {
     dom.columnCheckboxes.innerHTML = '';
+    const { visibleColumns } = getState();
     const selectableColumns = ASSET_HEADERS.filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName"].includes(h));
     selectableColumns.forEach(colName => {
-        const isChecked = state.visibleColumns.includes(colName);
+        const isChecked = visibleColumns.includes(colName);
         const div = document.createElement('div');
         div.className = "flex items-center";
         div.innerHTML = `
@@ -616,42 +624,43 @@ export function populateColumnSelector() {
  * @param {function} clickCallback - The callback function to execute when a chart segment is clicked.
  */
 export function renderOverviewCharts(clickCallback) {
-    Object.values(state.charts).forEach(chart => {
+    Object.values(charts).forEach(chart => {
         if(chart.destroy) chart.destroy();
     });
+    const { allAssets, allEmployees } = getState();
     const processData = (key) => {
-        const counts = state.allAssets.reduce((acc, asset) => {
+        const counts = allAssets.reduce((acc, asset) => {
             let value;
             if (key === 'AssignedTo') {
-                const employee = state.allEmployees.find(e => e.EmployeeID === asset.AssignedTo);
+                const employee = allEmployees.find(e => e.EmployeeID === asset.AssignedTo);
                 value = employee ? employee.EmployeeName : 'Unassigned';
             } else {
                 value = asset[key] || 'Uncategorized';
             }
-    
+
             if (key !== 'AssignedTo' && value === 'Uncategorized') {
                 return acc;
             }
-    
+
             acc[value] = (acc[value] || 0) + 1;
             return acc;
         }, {});
-    
+
         if (key === 'AssignedTo') {
-            delete counts.Unassigned; 
+            delete counts.Unassigned;
         }
         return { labels: Object.keys(counts), data: Object.values(counts) };
     };
-    
+
     const createChartConfig = (type, data, label, filterId) => ({
         type: type,
         data: { labels: data.labels, datasets: [{ label, data: data.data, backgroundColor: CHART_COLORS, borderWidth: 1 }] },
         options: { onClick: (e, el) => clickCallback(e, el, filterId), scales: (type === 'bar' || type === 'line') ? { y: { beginAtZero: true } } : {} }
     });
-    
-    state.charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(document.getElementById('site-chart-type').value, processData('Site'), 'Assets per Site', 'filter-site'));
-    state.charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(document.getElementById('condition-chart-type').value, processData('Condition'), 'Assets by Condition', 'filter-condition'));
-    state.charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
-    state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'filter-assigned-to'));
+
+    charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(document.getElementById('site-chart-type').value, processData('Site'), 'Assets per Site', 'filter-site'));
+    charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(document.getElementById('condition-chart-type').value, processData('Condition'), 'Assets by Condition', 'filter-condition'));
+    charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
+    charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'filter-assigned-to'));
 }
 

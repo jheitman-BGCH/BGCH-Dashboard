@@ -1,5 +1,6 @@
 // JS/main.js
-import { state, CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, SPREADSHEET_ID } from './state.js';
+import { CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, ROOMS_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADERS, EMPLOYEE_HEADERS, ROOMS_HEADERS, SPATIAL_LAYOUT_HEADERS, ASSET_HEADER_MAP, EMPLOYEE_HEADER_MAP, ROOMS_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, SPREADSHEET_ID } from './state.js';
+import { getState, dispatch, actionTypes, subscribe } from './store.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
 import { initVisualInventory } from './visual_inventory_logic.js';
@@ -11,6 +12,9 @@ window.addEventListener('DOMContentLoaded', () => {
     loadVisibleColumns();
     setupEventListeners();
     loadGoogleApiScripts();
+    // Subscribe the main render function to the store.
+    // Now, any state change will automatically trigger a UI update.
+    subscribe(renderApp);
 });
 
 function loadGoogleApiScripts() {
@@ -19,7 +23,7 @@ function loadGoogleApiScripts() {
     gapiScript.async = true;
     gapiScript.defer = true;
     gapiScript.onload = () => gapi.load('client', () => {
-        state.gapiInited = true;
+        dispatch({ type: actionTypes.SET_GAPI_STATUS, payload: true });
         checkAndInitialize();
     });
     document.body.appendChild(gapiScript);
@@ -29,7 +33,7 @@ function loadGoogleApiScripts() {
     gisScript.async = true;
     gisScript.defer = true;
     gisScript.onload = () => {
-        state.gisInited = true;
+        dispatch({ type: actionTypes.SET_GIS_STATUS, payload: true });
         checkAndInitialize();
     };
     document.body.appendChild(gisScript);
@@ -38,14 +42,17 @@ function loadGoogleApiScripts() {
 function loadVisibleColumns() {
     try {
         const savedCols = localStorage.getItem('visibleColumns');
-        state.visibleColumns = savedCols ? JSON.parse(savedCols) : ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
+        const visibleColumns = savedCols ? JSON.parse(savedCols) : ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
+        dispatch({ type: actionTypes.SET_VISIBLE_COLUMNS, payload: visibleColumns });
     } catch (e) {
-        state.visibleColumns = ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
+        const defaultColumns = ["AssetName", "AssetType", "IDCode", "AssignedTo", "Condition"];
+        dispatch({ type: actionTypes.SET_VISIBLE_COLUMNS, payload: defaultColumns });
     }
 }
 
 function checkAndInitialize() {
-    if (state.gapiInited && state.gisInited) {
+    const { gapiInited, gisInited } = getState();
+    if (gapiInited && gisInited) {
         initializeGoogleClients();
     }
 }
@@ -53,7 +60,7 @@ function checkAndInitialize() {
 async function initializeGoogleClients() {
     try {
         await gapi.client.init({ discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'] });
-        state.tokenClient = google.accounts.oauth2.initTokenClient({
+        const tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
             callback: (tokenResponse) => {
@@ -65,7 +72,8 @@ async function initializeGoogleClients() {
                 }
             },
         });
-        state.tokenClient.requestAccessToken({ prompt: 'none' });
+        dispatch({ type: actionTypes.SET_TOKEN_CLIENT, payload: tokenClient });
+        tokenClient.requestAccessToken({ prompt: 'none' });
     } catch (error) {
         console.error("Error initializing Google clients:", error);
         ui.showMessage("Failed to initialize Google services. Check Client ID & API permissions.");
@@ -74,8 +82,9 @@ async function initializeGoogleClients() {
 
 // --- AUTHENTICATION ---
 function handleAuthClick() {
-    if (state.tokenClient) {
-        state.tokenClient.requestAccessToken({ prompt: 'consent' });
+    const { tokenClient } = getState();
+    if (tokenClient) {
+        tokenClient.requestAccessToken({ prompt: 'consent' });
     } else {
         ui.showMessage("Authentication service is not ready. Please refresh.", "error");
     }
@@ -105,27 +114,24 @@ async function initializeAppData() {
         const ranges = [`${ASSET_SHEET}!A:Z`, `${ROOMS_SHEET}!A:Z`, `${SPATIAL_LAYOUT_SHEET}!A:Z`, `${EMPLOYEES_SHEET}!A:Z`];
         const { meta, data } = await api.fetchSheetMetadataAndData(ranges);
         
-        state.sheetIds = meta.sheets.reduce((acc, sheet) => {
+        const sheetIds = meta.sheets.reduce((acc, sheet) => {
             acc[sheet.properties.title] = sheet.properties.sheetId;
             return acc;
         }, {});
         
         const [assetValues, roomValues, layoutValues, employeeValues] = data.map(range => range.values || []);
 
-        state.allAssets = processSheetData(assetValues, ASSET_HEADER_MAP, 'AssetID');
-        state.allRooms = processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID');
-        state.spatialLayoutData = processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID');
-        state.allEmployees = processSheetData(employeeValues, EMPLOYEE_HEADER_MAP, 'EmployeeID');
+        const appData = {
+            allAssets: processSheetData(assetValues, ASSET_HEADER_MAP, 'AssetID'),
+            allRooms: processSheetData(roomValues, ROOMS_HEADER_MAP, 'RoomID'),
+            spatialLayoutData: processSheetData(layoutValues, SPATIAL_LAYOUT_HEADER_MAP, 'InstanceID'),
+            allEmployees: processSheetData(employeeValues, EMPLOYEE_HEADER_MAP, 'EmployeeID'),
+            sheetIds: sheetIds
+        };
+        // Dispatching this single action will trigger the 'subscribe' callback,
+        // which in turn calls renderApp() to update the entire UI.
+        dispatch({ type: actionTypes.SET_APP_DATA, payload: appData });
         
-        // Populate UI
-        applyFiltersAndSearch();
-        applyEmployeeFiltersAndSearch();
-        ui.populateFilterDropdowns();
-        ui.populateEmployeeFilterDropdowns();
-        ui.populateModalDropdowns();
-        ui.renderOverviewCharts(handleChartClick);
-        ui.populateColumnSelector();
-
         if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
             initVisualInventory();
         }
@@ -184,6 +190,24 @@ function processSheetData(values, headerMapConfig, idKey) {
 }
 
 // --- UI LOGIC & EVENT HANDLERS ---
+function renderApp() {
+    // This function is now the single point of entry for all UI updates.
+    // It's called by the subscription whenever the state changes.
+    console.log("Re-rendering the application UI...");
+    
+    // Update all parts of the UI that depend on the state.
+    ui.populateFilterDropdowns();
+    ui.populateEmployeeFilterDropdowns();
+    ui.populateModalDropdowns();
+    ui.renderOverviewCharts(handleChartClick);
+    ui.populateColumnSelector();
+    
+    // These functions render the main data views.
+    applyFiltersAndSearch();
+    applyEmployeeFiltersAndSearch();
+}
+
+
 function applyFiltersAndSearch() {
     const filters = {
         Site: ui.dom.filterSite.value,
@@ -196,7 +220,8 @@ function applyFiltersAndSearch() {
     };
     
     // Use the unified filter service. For assets, search all fields by passing null.
-    const filteredAssets = filterData(state.allAssets, ui.dom.filterSearch.value, null, filters, state);
+    const { allAssets } = getState();
+    const filteredAssets = filterData(allAssets, ui.dom.filterSearch.value, null, filters, getState());
     ui.renderTable(filteredAssets);
 }
 
@@ -208,7 +233,8 @@ function applyEmployeeFiltersAndSearch() {
     const searchFields = ['EmployeeName', 'Title', 'Email', 'Department'];
     
     // Use the unified filter service for employees.
-    const filteredEmployees = filterData(state.allEmployees, ui.dom.employeeSearch.value, searchFields, filters);
+    const { allEmployees } = getState();
+    const filteredEmployees = filterData(allEmployees, ui.dom.employeeSearch.value, searchFields, filters);
     ui.renderEmployeeList(filteredEmployees);
 }
 
@@ -217,18 +243,23 @@ function handleSortClick(e) {
     if (!th) return;
 
     const colName = th.dataset.column;
-    if (state.sortState.column === colName) {
-        state.sortState.direction = state.sortState.direction === 'asc' ? 'desc' : 'asc';
+    const { sortState } = getState();
+
+    let newDirection;
+    if (sortState.column === colName) {
+        newDirection = sortState.direction === 'asc' ? 'desc' : 'asc';
     } else {
-        state.sortState.column = colName;
-        state.sortState.direction = 'asc';
+        newDirection = 'asc';
     }
-    state.pagination.currentPage = 1; // Reset to page 1 on sort
-    applyFiltersAndSearch();
+    
+    dispatch({ type: actionTypes.SET_SORT_STATE, payload: { column: colName, direction: newDirection } });
+    dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: 1 }); // Reset to page 1 on sort
+    // No need to call applyFiltersAndSearch() here, the dispatch will trigger the subscription.
 }
 
 function openEditModal(assetId) {
-    const asset = state.allAssets.find(a => a.AssetID === assetId);
+    const { allAssets } = getState();
+    const asset = allAssets.find(a => a.AssetID === assetId);
     if (!asset) return;
     ui.dom.modalTitle.innerText = 'Edit Asset';
     ui.populateAssetForm(asset);
@@ -236,7 +267,8 @@ function openEditModal(assetId) {
 }
 
 function openCloneModal(assetId) {
-    const originalAsset = state.allAssets.find(a => a.AssetID === assetId);
+    const { allAssets } = getState();
+    const originalAsset = allAssets.find(a => a.AssetID === assetId);
     if (!originalAsset) return;
     const clonedAsset = { ...originalAsset, AssetID: '', rowIndex: '', IDCode: '', SerialNumber: '' };
     ui.dom.modalTitle.innerText = 'Clone Asset';
@@ -250,8 +282,15 @@ function setupEventListeners() {
     d.signoutButton.onclick = handleSignoutClick;
     d.refreshDataBtn.onclick = initializeAppData;
 
+    // This custom event is now the primary way to trigger a full data refresh.
     window.addEventListener('datachanged', initializeAppData);
-    window.addEventListener('paginationchange', applyFiltersAndSearch);
+    
+    // Pagination changes now dispatch an action instead of directly calling the render function.
+    window.addEventListener('paginationchange', () => {
+        const { pagination } = getState();
+        dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage });
+    });
+
 
     d.addAssetBtn.onclick = () => {
         d.assetForm.reset();
@@ -282,10 +321,10 @@ function setupEventListeners() {
     d.container.addEventListener('change', () => ui.handleDynamicSelectChange(d.container, document.getElementById('container-new')));
     d.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(d.assetType, document.getElementById('asset-type-new')));
 
+    // Filter inputs now trigger a re-render automatically via the store subscription.
     document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
         el.addEventListener('input', () => {
-            state.pagination.currentPage = 1; // Reset to page 1 on any filter change
-            applyFiltersAndSearch();
+            dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: 1 }); // Reset to page 1 on any filter change
         });
     });
     
@@ -321,7 +360,8 @@ function setupEventListeners() {
     
     d.employeeDetailEditBtn.addEventListener('click', e => {
         const employeeId = e.target.dataset.employeeId;
-        const employee = state.allEmployees.find(emp => emp.EmployeeID === employeeId);
+        const { allEmployees } = getState();
+        const employee = allEmployees.find(emp => emp.EmployeeID === employeeId);
         if (employee) {
             ui.toggleModal(d.employeeDetailModal, false);
             ui.populateEmployeeForm(employee);
@@ -387,7 +427,9 @@ async function handleAssetFormSubmit(e) {
         } else {
             await api.appendSheetValues(ASSET_SHEET, [rowData]);
         }
-        await initializeAppData();
+        // Instead of manually re-initializing, we dispatch an event that does.
+        // This keeps our concerns separate.
+        window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error("Error saving asset:", err);
         ui.showMessage(`Error saving asset: ${err.result?.error?.message || err.message}`);
@@ -419,7 +461,7 @@ async function handleEmployeeFormSubmit(e) {
         } else {
             await api.appendSheetValues(EMPLOYEES_SHEET, [rowData]);
         }
-        await initializeAppData();
+        window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error("Error saving employee:", err);
         ui.showMessage(`Error saving employee: ${err.result?.error?.message || err.message}`);
@@ -493,9 +535,10 @@ function setupColumnSelectorListeners() {
     ui.dom.columnModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.columnModal, false);
     ui.dom.columnSaveBtn.addEventListener('click', () => {
         const selectedCols = [...document.querySelectorAll('#column-checkboxes input:checked')].map(cb => cb.value);
-        state.visibleColumns = ["AssetName", ...selectedCols];
-        localStorage.setItem('visibleColumns', JSON.stringify(state.visibleColumns));
-        applyFiltersAndSearch();
+        const visibleColumns = ["AssetName", ...selectedCols];
+        dispatch({ type: actionTypes.SET_VISIBLE_COLUMNS, payload: visibleColumns });
+        localStorage.setItem('visibleColumns', JSON.stringify(visibleColumns));
+        // No manual render call needed.
         ui.renderFilters();
         ui.toggleModal(ui.dom.columnModal, false);
     });
@@ -537,7 +580,8 @@ async function handleBulkUpdate() {
                 const colLetter = headerMap[field.key];
                 if (colLetter) {
                     for (const id of selectedAssetIds) {
-                        const asset = state.allAssets.find(a => a.AssetID === id);
+                        const { allAssets } = getState();
+                        const asset = allAssets.find(a => a.AssetID === id);
                         if (asset) data.push({ range: `${ASSET_SHEET}!${colLetter}${asset.rowIndex}`, values: [[value]] });
                     }
                 }
@@ -546,7 +590,7 @@ async function handleBulkUpdate() {
 
         if (data.length > 0) {
             await api.batchUpdateSheetValues(data);
-            await initializeAppData();
+            window.dispatchEvent(new CustomEvent('datachanged'));
         }
     } catch (err) {
         console.error("Error during bulk update:", err);
@@ -558,7 +602,8 @@ async function handleBulkUpdate() {
 }
 
 async function handleDeleteRow(sheetName, rowIndex) {
-    const sheetId = state.sheetIds[sheetName];
+    const { sheetIds } = getState();
+    const sheetId = sheetIds[sheetName];
     if (!sheetId) {
         ui.showMessage(`Error: Could not find sheet ID for ${sheetName}`);
         return;
@@ -568,7 +613,7 @@ async function handleDeleteRow(sheetName, rowIndex) {
         await api.batchUpdateSheet({
             requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowIndex - 1, endIndex: rowIndex } } }]
         });
-        await initializeAppData();
+        window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error(`Error deleting from ${sheetName}:`, err);
         ui.showMessage(`Error deleting row: ${err.result?.error?.message || err.message}`);
@@ -603,8 +648,13 @@ function handleChartClick(event, elements, filterId) {
     document.querySelectorAll('#filter-section select, #filter-section input[type="text"]').forEach(el => el.value = '');
     
     const targetFilterEl = document.getElementById(filterId);
-    if (targetFilterEl) targetFilterEl.value = label;
+    if (targetFilterEl) {
+        targetFilterEl.value = label;
+        // Manually trigger the input event to ensure our filter listener catches it
+        targetFilterEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     
     switchTab('inventory');
-    applyFiltersAndSearch();
+    // The dispatch is now handled by the 'input' event listener on the filter element.
 }
+

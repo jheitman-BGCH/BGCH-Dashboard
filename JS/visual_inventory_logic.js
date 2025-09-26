@@ -1,5 +1,6 @@
 // JS/visual_inventory_logic.js
-import { state, ROOMS_SHEET, ROOMS_HEADERS, ASSET_SHEET, ASSET_HEADERS, SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS } from './state.js';
+import { ROOMS_SHEET, ROOMS_HEADERS, ASSET_SHEET, ASSET_HEADERS, SPATIAL_LAYOUT_SHEET, SPATIAL_LAYOUT_HEADERS } from './state.js';
+import { getState } from './store.js';
 import * as api from './sheetsService.js';
 import { toggleModal, showMessage } from './ui.js';
 import { filterData } from './filterService.js';
@@ -76,10 +77,10 @@ function setupAndBindVisualInventory() {
     document.querySelectorAll('.toolbar-item').forEach(item => {
         item.addEventListener('dragstart', handleToolbarDragStart);
     });
-    
+
     vi.gridContainer.addEventListener('dragover', handleGridDragOver);
     vi.gridContainer.addEventListener('drop', handleGridDrop);
-    
+
     vi.gridContainer.addEventListener('click', (e) => {
         if (e.target === vi.gridContainer || e.target.id === 'room-grid') {
             selectObject(null);
@@ -91,7 +92,7 @@ function setupAndBindVisualInventory() {
             hideRadialMenu();
         }
     });
-    
+
     vi.radialMenu.addEventListener('mouseenter', () => clearTimeout(hideMenuTimeout));
     vi.radialMenu.addEventListener('mouseleave', () => hideMenuTimeout = setTimeout(hideRadialMenu, 500));
 
@@ -112,13 +113,14 @@ export function initVisualInventory() {
     populateRoomSelector();
     renderUnplacedAssets();
     const lastRoom = localStorage.getItem('lastActiveRoomId');
-    if (lastRoom && state.allRooms.some(r => r.RoomID === lastRoom)) {
+    const { allRooms } = getState();
+    if (lastRoom && allRooms.some(r => r.RoomID === lastRoom)) {
         vi.roomSelector.value = lastRoom;
-        const room = state.allRooms.find(r => r.RoomID === lastRoom);
+        const room = allRooms.find(r => r.RoomID === lastRoom);
         if (room) navigateTo(room.RoomID, room.RoomName);
-    } else if (state.allRooms.length > 0) {
-        vi.roomSelector.value = state.allRooms[0].RoomID;
-        navigateTo(state.allRooms[0].RoomID, state.allRooms[0].RoomName);
+    } else if (allRooms.length > 0) {
+        vi.roomSelector.value = allRooms[0].RoomID;
+        navigateTo(allRooms[0].RoomID, allRooms[0].RoomName);
     } else {
         renderGrid();
     }
@@ -127,12 +129,13 @@ export function initVisualInventory() {
 function renderUnplacedAssets() {
     if (!vi.unplacedAssetsList) return;
 
-    const placedAssetReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
-    const unplacedAssets = state.allAssets.filter(asset => !placedAssetReferenceIDs.has(asset.AssetID));
-    
+    const { spatialLayoutData, allAssets } = getState();
+    const placedAssetReferenceIDs = new Set(spatialLayoutData.map(item => item.ReferenceID));
+    const unplacedAssets = allAssets.filter(asset => !placedAssetReferenceIDs.has(asset.AssetID));
+
     const searchTerm = vi.unplacedAssetSearch.value;
     const searchFields = ['AssetName', 'AssetType', 'IDCode'];
-    
+
     const filteredAssets = filterData(unplacedAssets, searchTerm, searchFields);
 
     vi.unplacedAssetsList.innerHTML = ''; // Clear current list
@@ -147,7 +150,7 @@ function renderUnplacedAssets() {
         itemEl.className = 'toolbar-item bg-white border text-sm p-2';
         itemEl.setAttribute('draggable', 'true');
         itemEl.textContent = asset.AssetName || 'Unnamed Asset';
-        
+
         itemEl.addEventListener('dragstart', (e) => {
              const data = {
                 type: 'new-object',
@@ -159,7 +162,7 @@ function renderUnplacedAssets() {
             };
             e.dataTransfer.setData('application/json', JSON.stringify(data));
         });
-        
+
         vi.unplacedAssetsList.appendChild(itemEl);
     });
 }
@@ -181,7 +184,7 @@ function handleObjectDragStart(e, objectData) {
     dragGhost.style.height = styles.height;
     dragGhost.classList.add('dragging-ghost');
     document.body.appendChild(dragGhost);
-    
+
     dragGhost.style.left = `${e.pageX}px`;
     dragGhost.style.top = `${e.pageY}px`;
 
@@ -191,14 +194,14 @@ function handleObjectDragStart(e, objectData) {
 function handleGridDragOver(e) {
     e.preventDefault();
     if (!dragGhost) return;
-    
+
     const gridEl = document.getElementById('room-grid');
     if (!gridEl) return;
 
     const rect = gridEl.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     const gridTemplateCols = getComputedStyle(gridEl).gridTemplateColumns.split(' ');
     const cellWidth = rect.width / gridTemplateCols.length;
     const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
@@ -228,10 +231,10 @@ async function handleRoomFormSubmit(e) {
         GridWidth: document.getElementById('grid-width').value,
         GridHeight: document.getElementById('grid-height').value,
     };
-    
+
     const rowData = ROOMS_HEADERS.map(header => roomData[header] || '');
     await api.appendSheetValues(ROOMS_SHEET, [rowData]);
-    
+
     toggleModal(vi.roomModal, false);
     // Dispatch event to notify main app that data has changed
     window.dispatchEvent(new CustomEvent('datachanged'));
@@ -239,7 +242,8 @@ async function handleRoomFormSubmit(e) {
 
 function handleRoomSelection(e) {
     if (e.target.value) {
-        const room = state.allRooms.find(r => r.RoomID === e.target.value);
+        const { allRooms } = getState();
+        const room = allRooms.find(r => r.RoomID === e.target.value);
         if (room) navigateTo(room.RoomID, room.RoomName);
     } else {
         viState.activeParentId = null;
@@ -265,7 +269,7 @@ async function handleGridDrop(e) {
     e.preventDefault();
     cleanupDrag();
     if (!e.dataTransfer.getData('application/json') || !document.getElementById('room-grid')) return;
-    
+
     const data = JSON.parse(e.dataTransfer.getData('application/json'));
     const gridEl = document.getElementById('room-grid');
     const rect = gridEl.getBoundingClientRect();
@@ -279,11 +283,12 @@ async function handleGridDrop(e) {
     const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
     const cellHeight = rect.height / gridTemplateRows.length;
     const gridY = Math.min(gridTemplateRows.length - (data.height || 1) + 1, Math.max(0, Math.floor(y / cellHeight)));
-    
+
     if (data.type === 'new-object') {
         await handleToolbarDrop(data, gridX, gridY);
     } else if (data.type === 'move') {
-        const instance = state.spatialLayoutData.find(i => i.InstanceID === data.instanceId);
+        const { spatialLayoutData } = getState();
+        const instance = spatialLayoutData.find(i => i.InstanceID === data.instanceId);
         if (instance) {
             instance.PosX = gridX;
             instance.PosY = gridY;
@@ -298,7 +303,7 @@ async function handleToolbarDrop(data, gridX, gridY) {
         showMessage("Cannot add an object without a selected room or container.");
         return;
     }
-    
+
     let assetIdToUse = data.referenceId;
 
     // If the item doesn't have a referenceId, it's a new asset from the top toolbar.
@@ -314,7 +319,7 @@ async function handleToolbarDrop(data, gridX, gridY) {
         const newAssetRow = ASSET_HEADERS.map(h => newAsset[h] || '');
         await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
     }
-    
+
     // Create the new instance in the spatial layout sheet, referencing the asset.
     const newInstance = {
         InstanceID: `INST-${Date.now()}`,
@@ -328,10 +333,10 @@ async function handleToolbarDrop(data, gridX, gridY) {
         ShelfRows: data.shelfRows,
         ShelfCols: data.shelfCols,
     };
-    
+
     const newInstanceRow = SPATIAL_LAYOUT_HEADERS.map(h => newInstance[h] || '');
     await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, [newInstanceRow]);
-    
+
     window.dispatchEvent(new CustomEvent('datachanged'));
 }
 
@@ -341,7 +346,7 @@ function navigateTo(id, name) {
         console.error("navigateTo was called with an undefined ID.");
         return;
     }
-    
+
     if (id.startsWith('ROOM-')) {
         viState.activeRoomId = id;
         viState.activeParentId = id;
@@ -401,12 +406,14 @@ function renderGrid() {
     let gridWidth, gridHeight;
 
     if (viState.activeParentId.startsWith('ROOM-')) {
-        parentObject = state.allRooms.find(r => r.RoomID === viState.activeParentId);
+        const { allRooms } = getState();
+        parentObject = allRooms.find(r => r.RoomID === viState.activeParentId);
         if (!parentObject) return;
         gridWidth = parentObject.GridWidth;
         gridHeight = parentObject.GridHeight;
     } else {
-        parentObject = state.spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
+        const { spatialLayoutData } = getState();
+        parentObject = spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
         if (!parentObject) return;
         const assetInfo = getAssetByRefId(parentObject.ReferenceID);
         if (!assetInfo || !['Shelf', 'Container'].includes(assetInfo.AssetType)) {
@@ -427,8 +434,8 @@ function renderGrid() {
         const cellHeight = rect.height / gridHeight;
         roomGrid.style.backgroundSize = `${cellWidth}px ${cellHeight}px`;
     }, 0);
-
-    const childObjects = state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
+    const { spatialLayoutData } = getState();
+    const childObjects = spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
     childObjects.forEach(obj => renderObject(obj, roomGrid));
 }
 
@@ -447,16 +454,16 @@ function renderObject(objectData, parentGrid) {
 
     const isDoor = assetInfo.AssetType === 'Door';
     const isRotatable = assetInfo.AssetType !== 'Wall';
-    
+
     let width = objectData.Width;
     let height = objectData.Height;
     if (isRotatable && !isDoor && objectData.Orientation === 'Vertical') {
         [width, height] = [height, width];
     }
-    
+
     objEl.style.gridColumn = `${parseInt(objectData.PosX) + 1} / span ${width}`;
     objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
-    
+
     if (typeClass === 'shelf' || typeClass === 'container') {
         objEl.addEventListener('mouseenter', (e) => showTooltip(e, objectData));
         objEl.addEventListener('mouseleave', hideTooltip);
@@ -488,7 +495,8 @@ function showTooltip(event, objectData) {
     const assetInfo = getAssetByRefId(objectData.ReferenceID);
     if (!assetInfo || !globalTooltip) return;
 
-    const childCount = state.spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
+    const { spatialLayoutData } = getState();
+    const childCount = spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
     globalTooltip.innerHTML = `<strong>${assetInfo.AssetName}</strong><br>Assets: ${childCount}`;
     globalTooltip.style.display = 'block';
 
@@ -514,7 +522,8 @@ function populateRoomSelector() {
     if (!vi.roomSelector) return;
     const currentValue = vi.roomSelector.value;
     vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
-    state.allRooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
+    const { allRooms } = getState();
+    allRooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
         const option = document.createElement('option');
         option.value = room.RoomID;
         option.textContent = room.RoomName;
@@ -526,7 +535,8 @@ function populateRoomSelector() {
 }
 
 function getAssetByRefId(refId) {
-    return state.allAssets.find(a => a.AssetID === refId);
+    const { allAssets } = getState();
+    return allAssets.find(a => a.AssetID === refId);
 }
 
 // --- OBJECT MANIPULATION & SELECTION ---
@@ -549,8 +559,9 @@ async function updateObjectInSheet(updatedInstance) {
 function showRadialMenu(x, y, instanceId) {
     clearTimeout(hideMenuTimeout);
     viState.activeRadialInstanceId = instanceId;
-    
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+
+    const { spatialLayoutData } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     const asset = instance ? getAssetByRefId(instance.ReferenceID) : null;
     if (!asset) return;
 
@@ -562,11 +573,11 @@ function showRadialMenu(x, y, instanceId) {
     vi.radialFlip.classList.toggle('hidden', !isDoor);
     vi.radialOpen.classList.toggle('hidden', !isContainer);
     vi.radialRotate.classList.toggle('hidden', isWall);
-    
+
     vi.radialMenu.style.left = `${x}px`;
     vi.radialMenu.style.top = `${y}px`;
     vi.radialMenu.classList.remove('hidden');
-    
+
     setTimeout(() => vi.radialMenu.classList.add('visible'), 10);
 }
 
@@ -581,9 +592,10 @@ function hideRadialMenu() {
 
 async function handleRename(instanceId) {
     if (!instanceId) return;
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const { spatialLayoutData, allAssets } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-    const asset = state.allAssets.find(a => a.AssetID === instance.ReferenceID);
+    const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
     if (!asset) return;
     const newName = prompt("Enter new name:", asset.AssetName);
     if (newName && newName.trim() && newName.trim() !== asset.AssetName) {
@@ -596,7 +608,8 @@ async function handleRename(instanceId) {
 
 async function handleFlip(instanceId) {
     if (!instanceId) return;
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const { spatialLayoutData } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
         const flipMap = { 'East': 'West', 'West': 'East', 'North': 'South', 'South': 'North' };
         instance.Orientation = flipMap[instance.Orientation] || 'East';
@@ -607,7 +620,8 @@ async function handleFlip(instanceId) {
 
 async function handleRotate(instanceId) {
     if (!instanceId) return;
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const { spatialLayoutData } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
     const asset = getAssetByRefId(instance.ReferenceID);
     if (!asset) return;
@@ -624,7 +638,8 @@ async function handleRotate(instanceId) {
 
 function handleOpen(instanceId) {
     if (!instanceId) return;
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const { spatialLayoutData } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
         const assetInfo = getAssetByRefId(instance.ReferenceID);
         if (assetInfo) navigateTo(instance.InstanceID, assetInfo.AssetName);
@@ -641,16 +656,17 @@ function handleResize(instanceId) {
 
 async function handleDelete(instanceId) {
     if (!instanceId) return;
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const { spatialLayoutData, allAssets, sheetIds } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
 
     // Directly delete without confirmation
-    const asset = state.allAssets.find(a => a.AssetID === instance.ReferenceID);
+    const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
     if (asset) {
-        const sheetId = state.sheetIds[ASSET_SHEET];
+        const sheetId = sheetIds[ASSET_SHEET];
         await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } }] });
     }
-    const layoutSheetId = state.sheetIds[SPATIAL_LAYOUT_SHEET];
+    const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET];
     await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } }] });
     window.dispatchEvent(new CustomEvent('datachanged'));
 }
@@ -670,8 +686,9 @@ function createObjectResizeHandles(objEl, instanceId) {
 function initResize(e, instanceId, direction) {
     e.preventDefault();
     e.stopPropagation();
-    
-    const instance = state.spatialLayoutData.find(i => i.InstanceID === instanceId);
+
+    const { spatialLayoutData } = getState();
+    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
 
     const startX = e.clientX;
@@ -680,7 +697,7 @@ function initResize(e, instanceId, direction) {
     let startHeight = parseInt(instance.Height);
     let startPosX = parseInt(instance.PosX);
     let startPosY = parseInt(instance.PosY);
-    
+
     const gridEl = document.getElementById('room-grid');
     const rect = gridEl.getBoundingClientRect();
     const gridTemplateCols = getComputedStyle(gridEl).gridTemplateColumns.split(' ');
@@ -706,12 +723,12 @@ function initResize(e, instanceId, direction) {
             newHeight = Math.max(1, startHeight - dy_cells);
             if(newHeight !== startHeight) newPosY = startPosY + dy_cells;
         }
-        
+
         instance.Width = newWidth;
         instance.Height = newHeight;
         instance.PosX = newPosX;
         instance.PosY = newPosY;
-        
+
         const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
         if(objEl) {
             objEl.style.gridColumn = `${newPosX + 1} / span ${newWidth}`;
