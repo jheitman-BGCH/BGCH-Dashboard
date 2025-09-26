@@ -30,7 +30,8 @@ export function initUI() {
         'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn',
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
         'employee-id', 'employee-row-index', 'bulk-site', 'bulk-location', 'bulk-container',
-        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to', 'pagination-controls'
+        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to', 
+        'pagination-controls-top', 'pagination-controls-bottom'
     ];
     ids.forEach(id => {
         const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
@@ -264,58 +265,88 @@ export function renderTable(assetsToRender) {
  * @param {number} totalItems - Total number of items to paginate.
  */
 function renderPagination(totalItems) {
-    if (!dom.paginationControls) return;
+    const containers = [dom.paginationControlsTop, dom.paginationControlsBottom];
+    
+    if (containers.some(c => !c)) return;
 
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-    dom.paginationControls.innerHTML = '';
 
-    if (totalPages <= 1) return;
+    containers.forEach(container => {
+        container.innerHTML = '';
+        if (totalPages <= 1) {
+            container.classList.add('hidden');
+        } else {
+            container.classList.remove('hidden');
+            
+            // Set specific classes for each container
+            if (container.id === 'pagination-controls-top') {
+                container.className = 'flex justify-between items-center';
+            } else {
+                container.className = 'flex justify-center items-center mt-6';
+            }
 
-    // Previous Button
-    const prevButton = document.createElement('div');
-    prevButton.className = 'pagination-arrow';
-    prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-    if (state.pagination.currentPage === 1) {
-        prevButton.classList.add('disabled');
-    } else {
-        prevButton.addEventListener('click', () => {
-            state.pagination.currentPage--;
-            window.dispatchEvent(new CustomEvent('paginationchange'));
-        });
-    }
-    dom.paginationControls.appendChild(prevButton);
+            // Previous Button
+            const prevButton = document.createElement('button');
+            prevButton.className = 'pagination-arrow';
+            prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+            if (state.pagination.currentPage === 1) {
+                prevButton.classList.add('disabled');
+                prevButton.disabled = true;
+            } else {
+                prevButton.addEventListener('click', () => {
+                    state.pagination.currentPage--;
+                    window.dispatchEvent(new CustomEvent('paginationchange'));
+                });
+            }
+            container.appendChild(prevButton);
 
-    // Dots
-    const dotsContainer = document.createElement('div');
-    dotsContainer.className = 'flex items-center';
-    for (let i = 1; i <= totalPages; i++) {
-        const dot = document.createElement('span');
-        dot.className = 'pagination-dot';
-        if (i === state.pagination.currentPage) {
-            dot.classList.add('active');
+            // Page Numbers Container
+            const numbersContainer = document.createElement('div');
+            numbersContainer.className = 'pagination-numbers flex-grow mx-4';
+            
+            for (let i = 1; i <= totalPages; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = 'page-number';
+                pageBtn.textContent = i;
+                if (i === state.pagination.currentPage) {
+                    pageBtn.classList.add('active');
+                }
+                pageBtn.dataset.page = i;
+                pageBtn.addEventListener('click', (e) => {
+                    const page = parseInt(e.target.dataset.page, 10);
+                    if (page !== state.pagination.currentPage) {
+                        state.pagination.currentPage = page;
+                        window.dispatchEvent(new CustomEvent('paginationchange'));
+                    }
+                });
+                numbersContainer.appendChild(pageBtn);
+            }
+            container.appendChild(numbersContainer);
+
+            // Next Button
+            const nextButton = document.createElement('button');
+            nextButton.className = 'pagination-arrow';
+            nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
+            if (state.pagination.currentPage === totalPages) {
+                nextButton.classList.add('disabled');
+                nextButton.disabled = true;
+            } else {
+                nextButton.addEventListener('click', () => {
+                    state.pagination.currentPage++;
+                    window.dispatchEvent(new CustomEvent('paginationchange'));
+                });
+            }
+            container.appendChild(nextButton);
+
+            // Scroll active page into view
+            const activePage = numbersContainer.querySelector('.page-number.active');
+            if (activePage) {
+                setTimeout(() => {
+                    activePage.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }, 100);
+            }
         }
-        dot.dataset.page = i;
-        dot.addEventListener('click', (e) => {
-            state.pagination.currentPage = parseInt(e.target.dataset.page, 10);
-            window.dispatchEvent(new CustomEvent('paginationchange'));
-        });
-        dotsContainer.appendChild(dot);
-    }
-    dom.paginationControls.appendChild(dotsContainer);
-
-    // Next Button
-    const nextButton = document.createElement('div');
-    nextButton.className = 'pagination-arrow';
-    nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
-    if (state.pagination.currentPage === totalPages) {
-        nextButton.classList.add('disabled');
-    } else {
-        nextButton.addEventListener('click', () => {
-            state.pagination.currentPage++;
-            window.dispatchEvent(new CustomEvent('paginationchange'));
-        });
-    }
-    dom.paginationControls.appendChild(nextButton);
+    });
 }
 
 
@@ -612,3 +643,4 @@ export function renderOverviewCharts(clickCallback) {
     state.charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
     state.charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'filter-assigned-to'));
 }
+
