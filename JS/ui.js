@@ -332,8 +332,17 @@ export function openDetailModal(assetId, openEditCallback) {
     const asset = selectors.selectAssetsById(state.allAssets).get(assetId);
     if (!asset) return;
 
+    // --- DEBUGGING START ---
+    console.log("--- Debugging openDetailModal ---");
+    console.log("1. Asset Data:", asset);
+
     const parentId = selectors.selectResolvedAssetParentId(asset, state);
+    console.log("2. Resolved Parent ID:", parentId);
+
     const locationPath = selectors.selectFullLocationPathString(state, parentId);
+    console.log("3. Final Location Path String:", locationPath);
+    console.log("---------------------------------");
+    // --- DEBUGGING END ---
 
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
     const detailHeaders = ASSET_HEADER_MAP.map(h => h.key).filter(h => !['Site', 'Location', 'Container', 'LoginInfo', 'ParentObjectID', 'AssetID'].includes(h));
@@ -563,3 +572,4 @@ export function setupModalHierarchy() {
         populateContainerDropdownForRoom(dom.modalRoom.value);
     });
 }
+
