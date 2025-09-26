@@ -212,6 +212,21 @@ function applyEmployeeFiltersAndSearch() {
     ui.renderEmployeeList(filteredEmployees);
 }
 
+function handleSortClick(e) {
+    const th = e.target.closest('th[data-column]');
+    if (!th) return;
+
+    const colName = th.dataset.column;
+    if (state.sortState.column === colName) {
+        state.sortState.direction = state.sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortState.column = colName;
+        state.sortState.direction = 'asc';
+    }
+    state.pagination.currentPage = 1; // Reset to page 1 on sort
+    applyFiltersAndSearch();
+}
+
 function openEditModal(assetId) {
     const asset = state.allAssets.find(a => a.AssetID === assetId);
     if (!asset) return;
@@ -236,6 +251,7 @@ function setupEventListeners() {
     d.refreshDataBtn.onclick = initializeAppData;
 
     window.addEventListener('datachanged', initializeAppData);
+    window.addEventListener('paginationchange', applyFiltersAndSearch);
 
     d.addAssetBtn.onclick = () => {
         d.assetForm.reset();
@@ -267,7 +283,10 @@ function setupEventListeners() {
     d.assetType.addEventListener('change', () => ui.handleDynamicSelectChange(d.assetType, document.getElementById('asset-type-new')));
 
     document.querySelectorAll('#filter-section input, #filter-section select').forEach(el => {
-        el.addEventListener('input', applyFiltersAndSearch);
+        el.addEventListener('input', () => {
+            state.pagination.currentPage = 1; // Reset to page 1 on any filter change
+            applyFiltersAndSearch();
+        });
     });
     
     document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', () => ui.renderOverviewCharts(handleChartClick)));
@@ -436,20 +455,6 @@ function handleTableClick(e) {
         return;
     }
     if (assetId) ui.openDetailModal(assetId, openEditModal);
-}
-
-function handleSortClick(e) {
-    const th = e.target.closest('th[data-column]');
-    if (!th) return;
-
-    const colName = th.dataset.column;
-    if (state.sortState.column === colName) {
-        state.sortState.direction = state.sortState.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        state.sortState.column = colName;
-        state.sortState.direction = 'asc';
-    }
-    applyFiltersAndSearch();
 }
 
 function setupBulkEditListeners() {

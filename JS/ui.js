@@ -1,5 +1,5 @@
 // JS/ui.js
-import { state, ASSET_HEADERS, CHART_COLORS } from './state.js';
+import { state, ASSET_HEADERS, CHART_COLORS, ITEMS_PER_PAGE } from './state.js';
 
 // --- DOM ELEMENT REFERENCES ---
 export const dom = {};
@@ -30,7 +30,7 @@ export function initUI() {
         'employee-detail-info', 'employee-detail-assets', 'employee-detail-close-btn',
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
         'employee-id', 'employee-row-index', 'bulk-site', 'bulk-location', 'bulk-container',
-        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to'
+        'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to', 'pagination-controls'
     ];
     ids.forEach(id => {
         const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
@@ -174,14 +174,29 @@ export function populateFilterDropdowns() {
 }
 
 /**
- * Renders the main asset data table.
- * @param {Array<Object>} assetsToRender - The array of asset objects to display.
+ * Renders the main asset data table with pagination.
+ * @param {Array<Object>} assetsToRender - The full array of asset objects to display (before pagination).
  */
 export function renderTable(assetsToRender) {
     if (!dom.assetTableHead || !dom.assetTableBody) return;
     dom.assetTableHead.innerHTML = '';
     dom.assetTableBody.innerHTML = '';
 
+    // Sorting should be applied to the full list before pagination
+    const sortedAssets = [...assetsToRender].sort((a, b) => {
+        const valA = a[state.sortState.column] || '';
+        const valB = b[state.sortState.column] || '';
+        if (valA < valB) return state.sortState.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return state.sortState.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    // Pagination logic
+    const startIndex = (state.pagination.currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const paginatedAssets = sortedAssets.slice(startIndex, endIndex);
+
+    // Render Table Header
     const headerRow = document.createElement('tr');
     let headerHTML = `<th scope="col" class="relative px-6 py-3"><input type="checkbox" id="select-all-assets" class="h-4 w-4 rounded"></th>`;
     state.visibleColumns.forEach(colName => {
@@ -205,17 +220,10 @@ export function renderTable(assetsToRender) {
         });
     }
 
-    const sortedAssets = [...assetsToRender].sort((a, b) => {
-        const valA = a[state.sortState.column] || '';
-        const valB = b[state.sortState.column] || '';
-        if (valA < valB) return state.sortState.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return state.sortState.direction === 'asc' ? 1 : -1;
-        return 0;
-    });
+    dom.noDataMessage.classList.toggle('hidden', assetsToRender.length > 0);
 
-    dom.noDataMessage.classList.toggle('hidden', sortedAssets.length > 0);
-
-    sortedAssets.forEach(asset => {
+    // Render Table Body for the current page
+    paginatedAssets.forEach(asset => {
         const tr = document.createElement('tr');
         tr.dataset.id = asset.AssetID;
         let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>`;
@@ -243,8 +251,73 @@ export function renderTable(assetsToRender) {
         tr.innerHTML = rowHtml;
         dom.assetTableBody.appendChild(tr);
     });
+    
+    // Render pagination controls
+    renderPagination(assetsToRender.length);
+
     updateBulkEditButtonVisibility();
 }
+
+
+/**
+ * Renders pagination controls.
+ * @param {number} totalItems - Total number of items to paginate.
+ */
+function renderPagination(totalItems) {
+    if (!dom.paginationControls) return;
+
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    dom.paginationControls.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    // Previous Button
+    const prevButton = document.createElement('div');
+    prevButton.className = 'pagination-arrow';
+    prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+    if (state.pagination.currentPage === 1) {
+        prevButton.classList.add('disabled');
+    } else {
+        prevButton.addEventListener('click', () => {
+            state.pagination.currentPage--;
+            window.dispatchEvent(new CustomEvent('paginationchange'));
+        });
+    }
+    dom.paginationControls.appendChild(prevButton);
+
+    // Dots
+    const dotsContainer = document.createElement('div');
+    dotsContainer.className = 'flex items-center';
+    for (let i = 1; i <= totalPages; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'pagination-dot';
+        if (i === state.pagination.currentPage) {
+            dot.classList.add('active');
+        }
+        dot.dataset.page = i;
+        dot.addEventListener('click', (e) => {
+            state.pagination.currentPage = parseInt(e.target.dataset.page, 10);
+            window.dispatchEvent(new CustomEvent('paginationchange'));
+        });
+        dotsContainer.appendChild(dot);
+    }
+    dom.paginationControls.appendChild(dotsContainer);
+
+    // Next Button
+    const nextButton = document.createElement('div');
+    nextButton.className = 'pagination-arrow';
+    nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
+    if (state.pagination.currentPage === totalPages) {
+        nextButton.classList.add('disabled');
+    } else {
+        nextButton.addEventListener('click', () => {
+            state.pagination.currentPage++;
+            window.dispatchEvent(new CustomEvent('paginationchange'));
+        });
+    }
+    dom.paginationControls.appendChild(nextButton);
+}
+
 
 /**
  * Opens the detail modal and populates it with asset information.

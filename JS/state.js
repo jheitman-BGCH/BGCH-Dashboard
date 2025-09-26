@@ -7,6 +7,7 @@ export const ASSET_SHEET = 'Asset';
 export const EMPLOYEES_SHEET = 'Employees';
 export const ROOMS_SHEET = 'Rooms';
 export const SPATIAL_LAYOUT_SHEET = 'Spatial Layout';
+export const ITEMS_PER_PAGE = 25;
 
 export const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
@@ -93,6 +94,9 @@ const _state = {
     visibleColumns: [],
     sortState: { column: 'AssetName', direction: 'asc' },
     sheetIds: {},
+    pagination: {
+        currentPage: 1,
+    },
 };
 
 export const state = {
@@ -118,4 +122,6 @@ export const state = {
     set sortState(val) { _state.sortState = val; },
     get sheetIds() { return _state.sheetIds; },
     set sheetIds(val) { _state.sheetIds = val; },
+    get pagination() { return _state.pagination; },
+    set pagination(val) { _state.pagination = val; },
 };
