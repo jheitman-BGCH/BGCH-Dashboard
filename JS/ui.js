@@ -37,6 +37,38 @@ export function initUI() {
         const key = id.replace(/[-_]([a-z])/g, (g) => g[1].toUpperCase());
         dom[key] = document.getElementById(id);
     });
+
+    // Swipe navigation for pagination
+    let touchstartX = 0;
+    let touchendX = 0;
+    const swipeThreshold = 50; // Minimum distance for a swipe
+
+    function handleSwipe() {
+        const totalPages = Math.ceil(state.allAssets.length / ITEMS_PER_PAGE);
+        if (touchendX < touchstartX - swipeThreshold) { // Swiped left
+            if (state.pagination.currentPage < totalPages) {
+                state.pagination.currentPage++;
+                window.dispatchEvent(new CustomEvent('paginationchange'));
+            }
+        }
+        if (touchendX > touchstartX + swipeThreshold) { // Swiped right
+             if (state.pagination.currentPage > 1) {
+                state.pagination.currentPage--;
+                window.dispatchEvent(new CustomEvent('paginationchange'));
+            }
+        }
+    }
+    
+    if (dom.assetTableBody) {
+        dom.assetTableBody.addEventListener('touchstart', e => {
+            touchstartX = e.changedTouches[0].screenX;
+        }, false);
+
+        dom.assetTableBody.addEventListener('touchend', e => {
+            touchendX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+    }
 }
 
 /**
@@ -266,86 +298,65 @@ export function renderTable(assetsToRender) {
  */
 function renderPagination(totalItems) {
     const containers = [dom.paginationControlsTop, dom.paginationControlsBottom];
-    
     if (containers.some(c => !c)) return;
 
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
     containers.forEach(container => {
         container.innerHTML = '';
+        container.className = 'flex justify-center items-center mt-6';
+
         if (totalPages <= 1) {
             container.classList.add('hidden');
+            return;
+        } 
+        container.classList.remove('hidden');
+
+        // Previous Button
+        const prevButton = document.createElement('div');
+        prevButton.className = 'pagination-arrow';
+        prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+        if (state.pagination.currentPage === 1) {
+            prevButton.classList.add('disabled');
         } else {
-            container.classList.remove('hidden');
-            
-            // Set specific classes for each container
-            if (container.id === 'pagination-controls-top') {
-                container.className = 'flex justify-between items-center';
-            } else {
-                container.className = 'flex justify-center items-center mt-6';
-            }
-
-            // Previous Button
-            const prevButton = document.createElement('button');
-            prevButton.className = 'pagination-arrow';
-            prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-            if (state.pagination.currentPage === 1) {
-                prevButton.classList.add('disabled');
-                prevButton.disabled = true;
-            } else {
-                prevButton.addEventListener('click', () => {
-                    state.pagination.currentPage--;
-                    window.dispatchEvent(new CustomEvent('paginationchange'));
-                });
-            }
-            container.appendChild(prevButton);
-
-            // Page Numbers Container
-            const numbersContainer = document.createElement('div');
-            numbersContainer.className = 'pagination-numbers flex-grow mx-4';
-            
-            for (let i = 1; i <= totalPages; i++) {
-                const pageBtn = document.createElement('button');
-                pageBtn.className = 'page-number';
-                pageBtn.textContent = i;
-                if (i === state.pagination.currentPage) {
-                    pageBtn.classList.add('active');
-                }
-                pageBtn.dataset.page = i;
-                pageBtn.addEventListener('click', (e) => {
-                    const page = parseInt(e.target.dataset.page, 10);
-                    if (page !== state.pagination.currentPage) {
-                        state.pagination.currentPage = page;
-                        window.dispatchEvent(new CustomEvent('paginationchange'));
-                    }
-                });
-                numbersContainer.appendChild(pageBtn);
-            }
-            container.appendChild(numbersContainer);
-
-            // Next Button
-            const nextButton = document.createElement('button');
-            nextButton.className = 'pagination-arrow';
-            nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
-            if (state.pagination.currentPage === totalPages) {
-                nextButton.classList.add('disabled');
-                nextButton.disabled = true;
-            } else {
-                nextButton.addEventListener('click', () => {
-                    state.pagination.currentPage++;
-                    window.dispatchEvent(new CustomEvent('paginationchange'));
-                });
-            }
-            container.appendChild(nextButton);
-
-            // Scroll active page into view
-            const activePage = numbersContainer.querySelector('.page-number.active');
-            if (activePage) {
-                setTimeout(() => {
-                    activePage.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                }, 100);
-            }
+            prevButton.addEventListener('click', () => {
+                state.pagination.currentPage--;
+                window.dispatchEvent(new CustomEvent('paginationchange'));
+            });
         }
+        container.appendChild(prevButton);
+
+        // Dots Container
+        const dotsContainer = document.createElement('div');
+        dotsContainer.className = 'flex items-center';
+        for (let i = 1; i <= totalPages; i++) {
+            const dot = document.createElement('span');
+            dot.className = 'pagination-dot';
+            if (i === state.pagination.currentPage) {
+                dot.classList.add('active');
+            }
+            dot.dataset.page = i;
+            dot.addEventListener('click', (e) => {
+                state.pagination.currentPage = parseInt(e.target.dataset.page, 10);
+                window.dispatchEvent(new CustomEvent('paginationchange'));
+            });
+            dotsContainer.appendChild(dot);
+        }
+        container.appendChild(dotsContainer);
+
+        // Next Button
+        const nextButton = document.createElement('div');
+        nextButton.className = 'pagination-arrow';
+        nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
+        if (state.pagination.currentPage === totalPages) {
+            nextButton.classList.add('disabled');
+        } else {
+            nextButton.addEventListener('click', () => {
+                state.pagination.currentPage++;
+                window.dispatchEvent(new CustomEvent('paginationchange'));
+            });
+        }
+        container.appendChild(nextButton);
     });
 }
 
