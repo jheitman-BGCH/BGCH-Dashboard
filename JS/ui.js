@@ -1,6 +1,7 @@
 // JS/ui.js
-import { ASSET_HEADERS, CHART_COLORS, ITEMS_PER_PAGE } from './state.js';
+import { ASSET_HEADERS } from './state.js';
 import { getState, dispatch, actionTypes } from './store.js';
+import * as selectors from './selectors.js';
 
 // --- DOM ELEMENT REFERENCES ---
 export const dom = {};
@@ -46,9 +47,8 @@ export function initUI() {
     let touchendX = 0;
     const swipeThreshold = 50; // Minimum distance for a swipe
 
-    function handleSwipe() {
-        const { allAssets, pagination } = getState();
-        const totalPages = Math.ceil(allAssets.length / ITEMS_PER_PAGE);
+    function handleSwipe(totalPages) {
+        const { pagination } = getState();
         if (touchendX < touchstartX - swipeThreshold) { // Swiped left
             if (pagination.currentPage < totalPages) {
                 dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage + 1 });
@@ -68,7 +68,8 @@ export function initUI() {
 
         dom.assetTableBody.addEventListener('touchend', e => {
             touchendX = e.changedTouches[0].screenX;
-            handleSwipe();
+            const { totalPages } = e.target.closest('table').dataset;
+            if(totalPages) handleSwipe(parseInt(totalPages));
         }, false);
     }
 }
@@ -166,7 +167,6 @@ function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
         selectEl.appendChild(addNewOption);
     }
 
-    // Restore previous value if it still exists
     if ([...selectEl.options].some(opt => opt.value === currentValue)) {
         selectEl.value = currentValue;
     }
@@ -177,7 +177,6 @@ function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
  */
 export function populateModalDropdowns() {
     const { allAssets, allEmployees } = getState();
-    // Asset-based dropdowns
     const assetFields = ['Site', 'Location', 'Container', 'AssetType'];
     assetFields.forEach(field => {
         const key = field.charAt(0).toLowerCase() + field.slice(1);
@@ -185,7 +184,6 @@ export function populateModalDropdowns() {
         populateSelect(dom[`bulk${field}`], allAssets, field, field, { initialOptionText: '-- Select --', addNew: true });
     });
 
-    // Employee-based dropdowns
     populateSelect(dom.assignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
     populateSelect(dom.bulkAssignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
 }
@@ -203,7 +201,6 @@ export function populateFilterDropdowns() {
     populateSelect(dom.filterLocation, allAssets, 'Location', 'Location', { initialOptionText: 'All' });
     populateSelect(dom.filterIntendedUserType, allAssets, 'IntendedUserType', 'IntendedUserType', { initialOptionText: 'All' });
 
-    // The AssignedTo filter shows employee names but filters by them.
     const assignedToData = allEmployees.map(e => ({ EmployeeName: e.EmployeeName }));
     populateSelect(dom.filterAssignedTo, assignedToData, 'EmployeeName', 'EmployeeName', { initialOptionText: 'All' });
 
@@ -211,30 +208,19 @@ export function populateFilterDropdowns() {
 }
 
 /**
- * Renders the main asset data table with pagination.
- * @param {Array<Object>} assetsToRender - The full array of asset objects to display (before pagination).
+ * Renders the main asset data table.
+ * @param {Array<Object>} paginatedAssets - The assets for the current page.
+ * @param {number} totalPages - The total number of pages.
+ * @param {number} currentPage - The current page number.
+ * @param {Array<string>} visibleColumns - The columns to display.
+ * @param {Object} sortState - The current sort state.
  */
-export function renderTable(assetsToRender) {
+export function renderTable(paginatedAssets, totalPages, currentPage, visibleColumns, sortState) {
     if (!dom.assetTableHead || !dom.assetTableBody) return;
     dom.assetTableHead.innerHTML = '';
     dom.assetTableBody.innerHTML = '';
-    const { sortState, pagination, visibleColumns, allEmployees } = getState();
+    dom.assetTableBody.closest('table').dataset.totalPages = totalPages;
 
-    // Sorting should be applied to the full list before pagination
-    const sortedAssets = [...assetsToRender].sort((a, b) => {
-        const valA = a[sortState.column] || '';
-        const valB = b[sortState.column] || '';
-        if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
-        return 0;
-    });
-
-    // Pagination logic
-    const startIndex = (pagination.currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const paginatedAssets = sortedAssets.slice(startIndex, endIndex);
-
-    // Render Table Header
     const headerRow = document.createElement('tr');
     let headerHTML = `<th scope="col" class="relative px-6 py-3"><input type="checkbox" id="select-all-assets" class="h-4 w-4 rounded"></th>`;
     visibleColumns.forEach(colName => {
@@ -242,7 +228,7 @@ export function renderTable(assetsToRender) {
         if (sortState.column === colName) {
             sortArrow = sortState.direction === 'asc' ? '▲' : '▼';
         }
-        headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" data-column="${colName}">${colName} <span class="sort-arrow">${sortArrow}</span></th>`;
+        headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" data-column="${colName}">${colName.replace(/([A-Z])/g, ' $1')} <span class="sort-arrow">${sortArrow}</span></th>`;
     });
     headerHTML += `<th scope="col" class="px-6 py-3">Actions</th>`;
     headerRow.innerHTML = headerHTML;
@@ -258,55 +244,47 @@ export function renderTable(assetsToRender) {
         });
     }
 
-    dom.noDataMessage.classList.toggle('hidden', assetsToRender.length > 0);
+    dom.noDataMessage.classList.toggle('hidden', paginatedAssets.length > 0);
 
-    // Render Table Body for the current page
     paginatedAssets.forEach(asset => {
         const tr = document.createElement('tr');
         tr.dataset.id = asset.AssetID;
-        let rowHtml = `<td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>`;
-        visibleColumns.forEach(colName => {
-            let value = asset[colName] || '';
-            if (colName === 'AssignedTo') {
-                const employee = allEmployees.find(e => e.EmployeeID === value);
-                value = employee ? employee.EmployeeName : (value || '');
-            }
-            rowHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm">${value}</td>`;
-        });
-        rowHtml += `
+        // Use the pre-enriched AssignedToName property
+        const displayColumns = visibleColumns.map(colName => {
+            const value = colName === 'AssignedTo' ? asset.AssignedToName : asset[colName];
+            return `<td class="px-6 py-4 whitespace-nowrap text-sm">${value || ''}</td>`;
+        }).join('');
+
+        tr.innerHTML = `
+            <td class="relative px-6 py-4"><input type="checkbox" data-id="${asset.AssetID}" class="asset-checkbox h-4 w-4 rounded"></td>
+            ${displayColumns}
             <td class="px-6 py-4 text-right text-sm font-medium">
                 <div class="actions-menu">
                     <button class="actions-btn p-1 rounded-full hover:bg-gray-200">
                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
                     </button>
                     <div class="actions-dropdown">
-                        <a class="edit-btn" data-id="${asset.AssetID}">Edit</a>
-                        <a class="clone-btn" data-id="${asset.AssetID}">Clone</a>
-                        <a class="delete-btn" data-row-index="${asset.rowIndex}">Delete</a>
+                        <a href="#" class="edit-btn" data-id="${asset.AssetID}">Edit</a>
+                        <a href="#" class="clone-btn" data-id="${asset.AssetID}">Clone</a>
+                        <a href="#" class="delete-btn" data-row-index="${asset.rowIndex}">Delete</a>
                     </div>
                 </div>
             </td>`;
-        tr.innerHTML = rowHtml;
         dom.assetTableBody.appendChild(tr);
     });
 
-    // Render pagination controls
-    renderPagination(assetsToRender.length);
-
+    renderPagination(totalPages, currentPage);
     updateBulkEditButtonVisibility();
 }
 
-
 /**
  * Renders pagination controls.
- * @param {number} totalItems - Total number of items to paginate.
+ * @param {number} totalPages - Total number of pages.
+ * @param {number} currentPage - The current active page.
  */
-function renderPagination(totalItems) {
+function renderPagination(totalPages, currentPage) {
     const containers = [dom.paginationControlsTop, dom.paginationControlsBottom];
     if (containers.some(c => !c)) return;
-
-    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-    const { pagination } = getState();
 
     containers.forEach(container => {
         container.innerHTML = '';
@@ -318,46 +296,35 @@ function renderPagination(totalItems) {
         }
         container.classList.remove('hidden');
 
-        // Previous Button
         const prevButton = document.createElement('div');
         prevButton.className = 'pagination-arrow';
         prevButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-        if (pagination.currentPage === 1) {
+        if (currentPage === 1) {
             prevButton.classList.add('disabled');
         } else {
-            prevButton.addEventListener('click', () => {
-                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage - 1 });
-            });
+            prevButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage - 1 }));
         }
         container.appendChild(prevButton);
 
-        // Dots Container
         const dotsContainer = document.createElement('div');
         dotsContainer.className = 'flex items-center';
         for (let i = 1; i <= totalPages; i++) {
             const dot = document.createElement('span');
             dot.className = 'pagination-dot';
-            if (i === pagination.currentPage) {
-                dot.classList.add('active');
-            }
+            if (i === currentPage) dot.classList.add('active');
             dot.dataset.page = i;
-            dot.addEventListener('click', (e) => {
-                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: parseInt(e.target.dataset.page, 10) });
-            });
+            dot.addEventListener('click', (e) => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: parseInt(e.target.dataset.page, 10) }));
             dotsContainer.appendChild(dot);
         }
         container.appendChild(dotsContainer);
 
-        // Next Button
         const nextButton = document.createElement('div');
         nextButton.className = 'pagination-arrow';
         nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
-        if (pagination.currentPage === totalPages) {
+        if (currentPage === totalPages) {
             nextButton.classList.add('disabled');
         } else {
-            nextButton.addEventListener('click', () => {
-                dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: pagination.currentPage + 1 });
-            });
+            nextButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage + 1 }));
         }
         container.appendChild(nextButton);
     });
@@ -370,16 +337,20 @@ function renderPagination(totalItems) {
  * @param {function} openEditCallback - A callback function to open the edit modal.
  */
 export function openDetailModal(assetId, openEditCallback) {
-    const { allAssets, allEmployees } = getState();
-    const asset = allAssets.find(a => a.AssetID === assetId);
+    const state = getState();
+    const assetsById = selectors.selectAssetsById(state.allAssets);
+    const asset = assetsById.get(assetId);
     if (!asset) return;
+    
+    const employeesById = selectors.selectEmployeesById(state.allEmployees);
+
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
     dom.detailModalContent.innerHTML = `
         <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
             ${ASSET_HEADERS.filter(h => h !== "LoginInfo").map(key => {
                 let displayValue = asset[key] || 'N/A';
                 if (key === 'AssignedTo') {
-                    const employee = allEmployees.find(e => e.EmployeeID === asset[key]);
+                    const employee = employeesById.get(asset[key]);
                     displayValue = employee ? employee.EmployeeName : 'Unassigned';
                 }
                 return `
@@ -419,7 +390,7 @@ export function populateAssetForm(asset) {
     dom.dateIssued.value = asset.DateIssued || '';
     dom.purchaseDate.value = asset.PurchaseDate || '';
     dom.specs.value = asset.Specs || '';
-    dom.loginInfo.value = asset.LoginInfo || '';
+    dom.loginInfo.value = asset.LoginInfo ? atob(asset.LoginInfo) : '';
     dom.notes.value = asset.Notes || '';
 
     const dynamicFields = [
@@ -436,14 +407,14 @@ export function populateAssetForm(asset) {
         if (value && optionExists) {
             select.value = value;
             if(newInp) newInp.classList.add('hidden');
-        } else if (value && field.id !== 'assigned-to') {
+        } else if (value && field.id !== 'assigned-to') { // Can't add new employees this way
             select.value = '--new--';
             if(newInp) {
                 newInp.value = value;
                 newInp.classList.remove('hidden');
             }
         } else {
-            select.value = value || ''; // Set to value if it exists, otherwise empty string
+            select.value = value || '';
             if(newInp) {
                 newInp.classList.add('hidden');
                 newInp.value = '';
@@ -454,21 +425,27 @@ export function populateAssetForm(asset) {
 
 /**
  * Renders the list of employees as cards in the Employees tab.
- * @param {Array<Object>} employeesToRender - The list of employee objects to display.
+ * @param {Array<Object>} sortedEmployees - The sorted list of employee objects to display.
  */
-export function renderEmployeeList(employeesToRender) {
+export function renderEmployeeList(sortedEmployees) {
     if (!dom.employeeListContainer) return;
     dom.employeeListContainer.innerHTML = '';
+    const { allAssets } = getState();
 
-    if (!employeesToRender || employeesToRender.length === 0) {
+    if (!sortedEmployees || sortedEmployees.length === 0) {
         dom.employeeListContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No employees match the current filters.</p>`;
         return;
     }
 
-    const sortedEmployees = [...employeesToRender].sort((a, b) => a.EmployeeName.localeCompare(b.EmployeeName));
-    const { allAssets } = getState();
+    const assetCounts = allAssets.reduce((acc, asset) => {
+        if (asset.AssignedTo) {
+            acc[asset.AssignedTo] = (acc[asset.AssignedTo] || 0) + 1;
+        }
+        return acc;
+    }, {});
+
     sortedEmployees.forEach(emp => {
-        const assignedAssets = allAssets.filter(asset => asset.AssignedTo === emp.EmployeeID);
+        const assignedCount = assetCounts[emp.EmployeeID] || 0;
         const card = document.createElement('div');
         card.className = 'employee-card bg-white p-5 rounded-lg shadow-md cursor-pointer border border-gray-200';
         card.dataset.id = emp.EmployeeID;
@@ -477,7 +454,7 @@ export function renderEmployeeList(employeesToRender) {
             <p class="text-sm text-gray-600">${emp.Title || 'N/A'}</p>
             <div class="mt-4 pt-4 border-t border-gray-200">
                 <p class="text-sm text-gray-500">
-                    <span class="font-semibold text-gray-700">${assignedAssets.length}</span>
+                    <span class="font-semibold text-gray-700">${assignedCount}</span>
                     assets assigned
                 </p>
             </div>
@@ -491,8 +468,9 @@ export function renderEmployeeList(employeesToRender) {
  * @param {string} employeeId - The ID of the employee to show.
  */
 export function openEmployeeDetailModal(employeeId) {
-    const { allEmployees, allAssets } = getState();
-    const employee = allEmployees.find(e => e.EmployeeID === employeeId);
+    const state = getState();
+    const employeesById = selectors.selectEmployeesById(state.allEmployees);
+    const employee = employeesById.get(employeeId);
     if (!employee) {
         showMessage('Employee not found.');
         return;
@@ -502,31 +480,20 @@ export function openEmployeeDetailModal(employeeId) {
     dom.employeeDetailTitleDept.textContent = `${employee.Title || 'No Title'} | ${employee.Department || 'No Department'}`;
 
     dom.employeeDetailInfo.innerHTML = `
-        <div>
-            <dt class="font-semibold text-gray-600">Email:</dt>
-            <dd class="text-gray-800">${employee.Email || 'N/A'}</dd>
-        </div>
-        <div>
-            <dt class="font-semibold text-gray-600">Phone:</dt>
-            <dd class="text-gray-800">${employee.Phone || 'N/A'}</dd>
-        </div>
+        <div><dt class="font-semibold text-gray-600">Email:</dt><dd class="text-gray-800">${employee.Email || 'N/A'}</dd></div>
+        <div><dt class="font-semibold text-gray-600">Phone:</dt><dd class="text-gray-800">${employee.Phone || 'N/A'}</dd></div>
     `;
 
-    const assignedAssets = allAssets.filter(a => a.AssignedTo === employee.EmployeeID);
-    if (assignedAssets.length > 0) {
-        dom.employeeDetailAssets.innerHTML = `
-            <ul class="divide-y divide-gray-200">
-                ${assignedAssets.map(a => `
-                    <li class="py-2 cursor-pointer hover:bg-gray-100 rounded-md p-2 employee-asset-item" data-asset-id="${a.AssetID}">
-                        <p class="text-sm font-medium text-gray-900 pointer-events-none">${a.AssetName}</p>
-                        <p class="text-xs text-gray-500 pointer-events-none">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
-                    </li>
-                `).join('')}
-            </ul>
-        `;
-    } else {
-        dom.employeeDetailAssets.innerHTML = `<p class="text-sm text-gray-500">No assets currently assigned.</p>`;
-    }
+    const assignedAssets = state.allAssets.filter(a => a.AssignedTo === employee.EmployeeID);
+    dom.employeeDetailAssets.innerHTML = assignedAssets.length > 0 ? `
+        <ul class="divide-y divide-gray-200">
+            ${assignedAssets.map(a => `
+                <li class="py-2 cursor-pointer hover:bg-gray-100 rounded-md p-2 employee-asset-item" data-asset-id="${a.AssetID}">
+                    <p class="text-sm font-medium text-gray-900 pointer-events-none">${a.AssetName}</p>
+                    <p class="text-xs text-gray-500 pointer-events-none">${a.AssetType || ''} (ID: ${a.IDCode || 'N/A'})</p>
+                </li>
+            `).join('')}
+        </ul>` : `<p class="text-sm text-gray-500">No assets currently assigned.</p>`;
 
     dom.employeeDetailEditBtn.dataset.employeeId = employeeId;
     toggleModal(dom.employeeDetailModal, true);
@@ -549,44 +516,24 @@ export function populateEmployeeForm(employee) {
     dom.employeeModalTitle.textContent = 'Edit Employee';
 }
 
-/**
- * Populates the department filter dropdown on the Employees tab.
- */
 export function populateEmployeeFilterDropdowns() {
     const { allEmployees } = getState();
     populateSelect(dom.employeeDepartmentFilter, allEmployees, 'Department', 'Department', { initialOptionText: 'All Departments' });
 }
 
-
-/**
- * Shows/hides the "Add New..." text input for a dynamic select dropdown.
- * @param {HTMLSelectElement} selectElement - The dropdown element.
- * @param {HTMLInputElement} newElement - The text input element.
- */
 export function handleDynamicSelectChange(selectElement, newElement) {
     if (!newElement) return;
-    if (selectElement.value === '--new--') {
-        newElement.classList.remove('hidden');
-        newElement.focus();
-    } else {
-        newElement.classList.add('hidden');
-        newElement.value = '';
-    }
+    newElement.classList.toggle('hidden', selectElement.value !== '--new--');
+    if (selectElement.value === '--new--') newElement.focus();
+    else newElement.value = '';
 }
 
-/**
- * Updates the visibility and text of the bulk edit button based on selection count.
- */
 export function updateBulkEditButtonVisibility() {
     const selectedCount = document.querySelectorAll('.asset-checkbox:checked').length;
     dom.bulkEditBtn.classList.toggle('hidden', selectedCount === 0);
     if (selectedCount > 0) dom.bulkEditBtn.textContent = `Bulk Edit (${selectedCount}) Selected`;
 }
 
-
-/**
- * Shows or hides filter controls based on which columns are visible.
- */
 export function renderFilters() {
     const filterMap = {
         "Site": "filter-site-wrapper", "AssetType": "filter-asset-type-wrapper",
@@ -599,68 +546,53 @@ export function renderFilters() {
     visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
 }
 
-
-/**
- * Populates the column selection modal with checkboxes for each asset header.
- */
 export function populateColumnSelector() {
     dom.columnCheckboxes.innerHTML = '';
     const { visibleColumns } = getState();
     const selectableColumns = ASSET_HEADERS.filter(h => !["AssetID", "Specs", "LoginInfo", "Notes", "AssetName"].includes(h));
     selectableColumns.forEach(colName => {
         const isChecked = visibleColumns.includes(colName);
-        const div = document.createElement('div');
-        div.className = "flex items-center";
-        div.innerHTML = `
-            <input id="col-${colName.replace(/\s+/g, '')}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} class="h-4 w-4 rounded">
-            <label for="col-${colName.replace(/\s+/g, '')}" class="ml-2 block text-sm">${colName}</label>
+        dom.columnCheckboxes.innerHTML += `
+            <div class="flex items-center">
+                <input id="col-${colName}" type="checkbox" value="${colName}" ${isChecked ? 'checked' : ''} class="h-4 w-4 rounded">
+                <label for="col-${colName}" class="ml-2 block text-sm">${colName}</label>
+            </div>
         `;
-        dom.columnCheckboxes.appendChild(div);
     });
 }
 
 /**
- * Renders all charts on the overview panel.
- * @param {function} clickCallback - The callback function to execute when a chart segment is clicked.
+ * Renders or updates all charts on the overview panel.
+ * @param {Object} chartData - An object containing data for all charts from selectors.
+ * @param {function} clickCallback - The callback function for chart clicks.
  */
-export function renderOverviewCharts(clickCallback) {
-    Object.values(charts).forEach(chart => {
-        if(chart.destroy) chart.destroy();
-    });
-    const { allAssets, allEmployees } = getState();
-    const processData = (key) => {
-        const counts = allAssets.reduce((acc, asset) => {
-            let value;
-            if (key === 'AssignedTo') {
-                const employee = allEmployees.find(e => e.EmployeeID === asset.AssignedTo);
-                value = employee ? employee.EmployeeName : 'Unassigned';
-            } else {
-                value = asset[key] || 'Uncategorized';
-            }
-
-            if (key !== 'AssignedTo' && value === 'Uncategorized') {
-                return acc;
-            }
-
-            acc[value] = (acc[value] || 0) + 1;
-            return acc;
-        }, {});
-
-        if (key === 'AssignedTo') {
-            delete counts.Unassigned;
-        }
-        return { labels: Object.keys(counts), data: Object.values(counts) };
+export function renderOverviewCharts(chartData, clickCallback) {
+    const chartConfigs = {
+        siteChart: { data: chartData.siteData, el: 'site-chart', typeEl: 'site-chart-type', filterId: 'filter-site' },
+        conditionChart: { data: chartData.conditionData, el: 'condition-chart', typeEl: 'condition-chart-type', filterId: 'filter-condition' },
+        typeChart: { data: chartData.typeData, el: 'type-chart', typeEl: 'type-chart-type', filterId: 'filter-asset-type' },
+        employeeChart: { data: chartData.employeeData, el: 'employee-chart', typeEl: 'employee-chart-type', filterId: 'filter-assigned-to' },
     };
 
-    const createChartConfig = (type, data, label, filterId) => ({
-        type: type,
-        data: { labels: data.labels, datasets: [{ label, data: data.data, backgroundColor: CHART_COLORS, borderWidth: 1 }] },
-        options: { onClick: (e, el) => clickCallback(e, el, filterId), scales: (type === 'bar' || type === 'line') ? { y: { beginAtZero: true } } : {} }
-    });
-
-    charts.siteChart = new Chart(document.getElementById('site-chart'), createChartConfig(document.getElementById('site-chart-type').value, processData('Site'), 'Assets per Site', 'filter-site'));
-    charts.conditionChart = new Chart(document.getElementById('condition-chart'), createChartConfig(document.getElementById('condition-chart-type').value, processData('Condition'), 'Assets by Condition', 'filter-condition'));
-    charts.typeChart = new Chart(document.getElementById('type-chart'), createChartConfig(document.getElementById('type-chart-type').value, processData('AssetType'), 'Assets by Type', 'filter-asset-type'));
-    charts.employeeChart = new Chart(document.getElementById('employee-chart'), createChartConfig(document.getElementById('employee-chart-type').value, processData('AssignedTo'), 'Assignments per Employee', 'filter-assigned-to'));
+    for (const [key, config] of Object.entries(chartConfigs)) {
+        const canvas = document.getElementById(config.el);
+        const type = document.getElementById(config.typeEl).value;
+        if (charts[key] && charts[key].config.type === type) {
+            // Update existing chart
+            charts[key].data = config.data;
+            charts[key].update();
+        } else {
+            // Create new chart
+            if (charts[key]) charts[key].destroy();
+            charts[key] = new Chart(canvas, {
+                type: type,
+                data: config.data,
+                options: { 
+                    onClick: (e, el) => clickCallback(e, el, config.filterId), 
+                    scales: (type === 'bar' || type === 'line') ? { y: { beginAtZero: true } } : {},
+                    maintainAspectRatio: false,
+                }
+            });
+        }
+    }
 }
-

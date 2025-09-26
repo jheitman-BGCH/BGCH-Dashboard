@@ -4,6 +4,7 @@ import { getState } from './store.js';
 import * as api from './sheetsService.js';
 import { toggleModal, showMessage } from './ui.js';
 import { filterData } from './filterService.js';
+import { selectAssetsById } from './selectors.js';
 
 // --- STATE ---
 let viState = {
@@ -22,6 +23,9 @@ let hideMenuTimeout; // Variable to manage the hide timer
 // --- DRAG STATE & GLOBAL UI ---
 let dragGhost = null;
 let globalTooltip = null;
+
+// Cached selector
+let assetsByIdMap = new Map();
 
 // --- INITIALIZATION ---
 function setupAndBindVisualInventory() {
@@ -80,7 +84,6 @@ function setupAndBindVisualInventory() {
 
     vi.gridContainer.addEventListener('dragover', handleGridDragOver);
     vi.gridContainer.addEventListener('drop', handleGridDrop);
-
     vi.gridContainer.addEventListener('click', (e) => {
         if (e.target === vi.gridContainer || e.target.id === 'room-grid') {
             selectObject(null);
@@ -109,6 +112,9 @@ function setupAndBindVisualInventory() {
 
 export function initVisualInventory() {
     if (!setupAndBindVisualInventory()) return;
+    
+    // Update the cached map whenever this tab is initialized
+    assetsByIdMap = selectAssetsById(getState().allAssets);
 
     populateRoomSelector();
     renderUnplacedAssets();
@@ -147,7 +153,7 @@ function renderUnplacedAssets() {
 
     filteredAssets.forEach(asset => {
         const itemEl = document.createElement('div');
-        itemEl.className = 'toolbar-item bg-white border text-sm p-2';
+        itemEl.className = 'toolbar-item bg-white border text-sm p-2 rounded-md';
         itemEl.setAttribute('draggable', 'true');
         itemEl.textContent = asset.AssetName || 'Unnamed Asset';
 
@@ -156,8 +162,7 @@ function renderUnplacedAssets() {
                 type: 'new-object',
                 assetType: asset.AssetType || 'Container',
                 name: asset.AssetName,
-                width: 1, // Default width
-                height: 1, // Default height
+                width: 1, height: 1, // Default size
                 referenceId: asset.AssetID // IMPORTANT: Reference the existing asset
             };
             e.dataTransfer.setData('application/json', JSON.stringify(data));
@@ -166,7 +171,6 @@ function renderUnplacedAssets() {
         vi.unplacedAssetsList.appendChild(itemEl);
     });
 }
-
 
 // --- DRAG AND DROP HANDLERS ---
 function handleObjectDragStart(e, objectData) {
@@ -184,7 +188,6 @@ function handleObjectDragStart(e, objectData) {
     dragGhost.style.height = styles.height;
     dragGhost.classList.add('dragging-ghost');
     document.body.appendChild(dragGhost);
-
     dragGhost.style.left = `${e.pageX}px`;
     dragGhost.style.top = `${e.pageY}px`;
 
@@ -194,7 +197,6 @@ function handleObjectDragStart(e, objectData) {
 function handleGridDragOver(e) {
     e.preventDefault();
     if (!dragGhost) return;
-
     const gridEl = document.getElementById('room-grid');
     if (!gridEl) return;
 
@@ -236,7 +238,6 @@ async function handleRoomFormSubmit(e) {
     await api.appendSheetValues(ROOMS_SHEET, [rowData]);
 
     toggleModal(vi.roomModal, false);
-    // Dispatch event to notify main app that data has changed
     window.dispatchEvent(new CustomEvent('datachanged'));
 }
 
@@ -278,11 +279,11 @@ async function handleGridDrop(e) {
 
     const gridTemplateCols = getComputedStyle(gridEl).gridTemplateColumns.split(' ');
     const cellWidth = rect.width / gridTemplateCols.length;
-    const gridX = Math.min(gridTemplateCols.length - (data.width || 1) + 1, Math.max(0, Math.floor(x / cellWidth)));
+    const gridX = Math.min(gridTemplateCols.length, Math.max(0, Math.floor(x / cellWidth)));
 
     const gridTemplateRows = getComputedStyle(gridEl).gridTemplateRows.split(' ');
     const cellHeight = rect.height / gridTemplateRows.length;
-    const gridY = Math.min(gridTemplateRows.length - (data.height || 1) + 1, Math.max(0, Math.floor(y / cellHeight)));
+    const gridY = Math.min(gridTemplateRows.length, Math.max(0, Math.floor(y / cellHeight)));
 
     if (data.type === 'new-object') {
         await handleToolbarDrop(data, gridX, gridY);
@@ -306,32 +307,18 @@ async function handleToolbarDrop(data, gridX, gridY) {
 
     let assetIdToUse = data.referenceId;
 
-    // If the item doesn't have a referenceId, it's a new asset from the top toolbar.
-    // We need to create a new entry for it in the 'Asset' sheet.
     if (!assetIdToUse) {
-        const newAsset = {
-            AssetID: `ASSET-${Date.now()}`,
-            AssetName: data.name,
-            AssetType: data.assetType,
-            Condition: "New",
-        };
+        const newAsset = { AssetID: `ASSET-${Date.now()}`, AssetName: data.name, AssetType: data.assetType, Condition: "New" };
         assetIdToUse = newAsset.AssetID;
         const newAssetRow = ASSET_HEADERS.map(h => newAsset[h] || '');
         await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
     }
 
-    // Create the new instance in the spatial layout sheet, referencing the asset.
     const newInstance = {
-        InstanceID: `INST-${Date.now()}`,
-        ReferenceID: assetIdToUse,
-        ParentID: viState.activeParentId,
-        PosX: gridX,
-        PosY: gridY,
-        Width: data.width,
-        Height: data.height,
+        InstanceID: `INST-${Date.now()}`, ReferenceID: assetIdToUse, ParentID: viState.activeParentId,
+        PosX: gridX, PosY: gridY, Width: data.width, Height: data.height,
         Orientation: data.assetType === 'Door' ? 'East' : 'Horizontal',
-        ShelfRows: data.shelfRows,
-        ShelfCols: data.shelfCols,
+        ShelfRows: data.shelfRows, ShelfCols: data.shelfCols,
     };
 
     const newInstanceRow = SPATIAL_LAYOUT_HEADERS.map(h => newInstance[h] || '');
@@ -342,11 +329,7 @@ async function handleToolbarDrop(data, gridX, gridY) {
 
 // --- NAVIGATION & RENDERING ---
 function navigateTo(id, name) {
-    if (!id) {
-        console.error("navigateTo was called with an undefined ID.");
-        return;
-    }
-
+    if (!id) return;
     if (id.startsWith('ROOM-')) {
         viState.activeRoomId = id;
         viState.activeParentId = id;
@@ -354,11 +337,7 @@ function navigateTo(id, name) {
     } else {
         viState.activeParentId = id;
         const existingIndex = viState.breadcrumbs.findIndex(b => b.id === id);
-        if (existingIndex > -1) {
-            viState.breadcrumbs = viState.breadcrumbs.slice(0, existingIndex + 1);
-        } else {
-            viState.breadcrumbs.push({ id, name });
-        }
+        viState.breadcrumbs = existingIndex > -1 ? viState.breadcrumbs.slice(0, existingIndex + 1) : [...viState.breadcrumbs, { id, name }];
     }
     localStorage.setItem('lastActiveRoomId', viState.activeRoomId);
     selectObject(null);
@@ -368,25 +347,15 @@ function navigateTo(id, name) {
 
 function renderBreadcrumbs() {
     if (!vi.breadcrumbContainer) return;
-    vi.breadcrumbContainer.innerHTML = '';
-    viState.breadcrumbs.forEach((crumb, index) => {
-        const crumbEl = document.createElement('span');
+    vi.breadcrumbContainer.innerHTML = viState.breadcrumbs.map((crumb, index) => {
         if (index < viState.breadcrumbs.length - 1) {
-            const anchor = document.createElement('a');
-            anchor.href = '#';
-            anchor.textContent = crumb.name;
-            anchor.className = 'hover:underline text-indigo-600';
-            anchor.onclick = (e) => {
-                e.preventDefault();
-                navigateTo(crumb.id, crumb.name);
-            };
-            crumbEl.appendChild(anchor);
-            crumbEl.appendChild(document.createTextNode(' / '));
-        } else {
-            crumbEl.textContent = crumb.name;
-            crumbEl.className = 'font-semibold text-gray-700';
+            return `<span><a href="#" data-id="${crumb.id}" data-name="${crumb.name}" class="hover:underline text-indigo-600">${crumb.name}</a> / </span>`;
         }
-        vi.breadcrumbContainer.appendChild(crumbEl);
+        return `<span class="font-semibold text-gray-700">${crumb.name}</span>`;
+    }).join('');
+    vi.breadcrumbContainer.querySelectorAll('a').forEach(a => a.onclick = (e) => {
+        e.preventDefault();
+        navigateTo(e.target.dataset.id, e.target.dataset.name);
     });
 }
 
@@ -403,44 +372,45 @@ function renderGrid() {
     const roomGrid = document.getElementById('room-grid');
 
     let parentObject;
-    let gridWidth, gridHeight;
+    let gridWidth = 10, gridHeight = 10; // Default grid size
 
     if (viState.activeParentId.startsWith('ROOM-')) {
-        const { allRooms } = getState();
-        parentObject = allRooms.find(r => r.RoomID === viState.activeParentId);
-        if (!parentObject) return;
-        gridWidth = parentObject.GridWidth;
-        gridHeight = parentObject.GridHeight;
+        parentObject = getState().allRooms.find(r => r.RoomID === viState.activeParentId);
+        if (parentObject) {
+            gridWidth = parentObject.GridWidth || 20;
+            gridHeight = parentObject.GridHeight || 15;
+        }
     } else {
-        const { spatialLayoutData } = getState();
-        parentObject = spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
-        if (!parentObject) return;
-        const assetInfo = getAssetByRefId(parentObject.ReferenceID);
-        if (!assetInfo || !['Shelf', 'Container'].includes(assetInfo.AssetType)) {
-            gridWidth = 10;
-            gridHeight = 10;
-        } else {
-            gridWidth = parentObject.Orientation === 'Vertical' ? parentObject.ShelfRows : parentObject.ShelfCols;
-            gridHeight = parentObject.Orientation === 'Vertical' ? parentObject.ShelfCols : parentObject.ShelfRows;
+        parentObject = getState().spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
+        if (parentObject) {
+            const assetInfo = assetsByIdMap.get(parentObject.ReferenceID);
+            if (assetInfo && ['Shelf', 'Container'].includes(assetInfo.AssetType)) {
+                gridWidth = parentObject.Orientation === 'Vertical' ? parentObject.ShelfRows : parentObject.ShelfCols;
+                gridHeight = parentObject.Orientation === 'Vertical' ? parentObject.ShelfCols : parentObject.ShelfRows;
+            }
         }
     }
 
     roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
     roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
-
+    
+    // Defer background size calculation to avoid layout reflow issues
     setTimeout(() => {
         const rect = roomGrid.getBoundingClientRect();
-        const cellWidth = rect.width / gridWidth;
-        const cellHeight = rect.height / gridHeight;
-        roomGrid.style.backgroundSize = `${cellWidth}px ${cellHeight}px`;
+        if (rect.width > 0 && rect.height > 0) {
+            const cellWidth = rect.width / gridWidth;
+            const cellHeight = rect.height / gridHeight;
+            roomGrid.style.backgroundSize = `${cellWidth}px ${cellHeight}px`;
+        }
     }, 0);
-    const { spatialLayoutData } = getState();
-    const childObjects = spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
+
+    const childObjects = getState().spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId);
     childObjects.forEach(obj => renderObject(obj, roomGrid));
 }
 
 function renderObject(objectData, parentGrid) {
-    const assetInfo = getAssetByRefId(objectData.ReferenceID);
+    // OPTIMIZED: Use the cached map for O(1) lookup
+    const assetInfo = assetsByIdMap.get(objectData.ReferenceID);
     if (!assetInfo) return;
 
     const objEl = document.createElement('div');
@@ -474,14 +444,14 @@ function renderObject(objectData, parentGrid) {
         if (objectData.Orientation === 'South') svg.style.transform = 'rotate(90deg)';
         if (objectData.Orientation === 'West') svg.style.transform = 'scaleX(-1)';
     } else if(typeClass !== 'wall') {
-        objEl.innerHTML = `<span class="truncate">${assetInfo.AssetName}</span>`;
+        objEl.innerHTML = `<span class="truncate pointer-events-none">${assetInfo.AssetName}</span>`;
     }
 
     objEl.addEventListener('dragstart', (e) => handleObjectDragStart(e, objectData));
     objEl.addEventListener('dragend', cleanupDrag);
     objEl.addEventListener('click', (e) => { e.stopPropagation(); selectObject(objectData.InstanceID); });
     objEl.addEventListener('dblclick', (e) => {
-        if (typeClass === 'shelf' || typeClass === 'container') {
+        if (['shelf', 'container'].includes(typeClass)) {
             e.stopPropagation();
             navigateTo(objectData.InstanceID, assetInfo.AssetName);
         }
@@ -492,11 +462,10 @@ function renderObject(objectData, parentGrid) {
 
 // --- TOOLTIP ---
 function showTooltip(event, objectData) {
-    const assetInfo = getAssetByRefId(objectData.ReferenceID);
+    const assetInfo = assetsByIdMap.get(objectData.ReferenceID);
     if (!assetInfo || !globalTooltip) return;
 
-    const { spatialLayoutData } = getState();
-    const childCount = spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
+    const childCount = getState().spatialLayoutData.filter(obj => obj.ParentID === objectData.InstanceID).length;
     globalTooltip.innerHTML = `<strong>${assetInfo.AssetName}</strong><br>Assets: ${childCount}`;
     globalTooltip.style.display = 'block';
 
@@ -522,21 +491,12 @@ function populateRoomSelector() {
     if (!vi.roomSelector) return;
     const currentValue = vi.roomSelector.value;
     vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
-    const { allRooms } = getState();
-    allRooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
-        const option = document.createElement('option');
-        option.value = room.RoomID;
-        option.textContent = room.RoomName;
-        vi.roomSelector.appendChild(option);
+    getState().allRooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
+        vi.roomSelector.innerHTML += `<option value="${room.RoomID}">${room.RoomName}</option>`;
     });
     if ([...vi.roomSelector.options].some(opt => opt.value === currentValue)) {
         vi.roomSelector.value = currentValue;
     }
-}
-
-function getAssetByRefId(refId) {
-    const { allAssets } = getState();
-    return allAssets.find(a => a.AssetID === refId);
 }
 
 // --- OBJECT MANIPULATION & SELECTION ---
@@ -545,8 +505,7 @@ function selectObject(instanceId) {
     document.querySelectorAll('.visual-object.selected').forEach(el => el.classList.remove('selected'));
     viState.selectedInstanceId = instanceId;
     if (!instanceId) return;
-    const roomGrid = document.getElementById('room-grid');
-    const objEl = roomGrid?.querySelector(`[data-instance-id="${instanceId}"]`);
+    const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
     if (objEl) objEl.classList.add('selected');
 }
 
@@ -559,13 +518,11 @@ async function updateObjectInSheet(updatedInstance) {
 function showRadialMenu(x, y, instanceId) {
     clearTimeout(hideMenuTimeout);
     viState.activeRadialInstanceId = instanceId;
-
-    const { spatialLayoutData } = getState();
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
-    const asset = instance ? getAssetByRefId(instance.ReferenceID) : null;
+    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const asset = instance ? assetsByIdMap.get(instance.ReferenceID) : null;
     if (!asset) return;
 
-    const isContainer = asset.AssetType === 'Shelf' || asset.AssetType === 'Container';
+    const isContainer = ['Shelf', 'Container'].includes(asset.AssetType);
     const isDoor = asset.AssetType === 'Door';
     const isWall = asset.AssetType === 'Wall';
 
@@ -573,11 +530,12 @@ function showRadialMenu(x, y, instanceId) {
     vi.radialFlip.classList.toggle('hidden', !isDoor);
     vi.radialOpen.classList.toggle('hidden', !isContainer);
     vi.radialRotate.classList.toggle('hidden', isWall);
+    vi.radialResize.classList.toggle('hidden', isDoor);
+
 
     vi.radialMenu.style.left = `${x}px`;
     vi.radialMenu.style.top = `${y}px`;
     vi.radialMenu.classList.remove('hidden');
-
     setTimeout(() => vi.radialMenu.classList.add('visible'), 10);
 }
 
@@ -592,11 +550,11 @@ function hideRadialMenu() {
 
 async function handleRename(instanceId) {
     if (!instanceId) return;
-    const { spatialLayoutData, allAssets } = getState();
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-    const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
+    const asset = assetsByIdMap.get(instance.ReferenceID);
     if (!asset) return;
+
     const newName = prompt("Enter new name:", asset.AssetName);
     if (newName && newName.trim() && newName.trim() !== asset.AssetName) {
         asset.AssetName = newName.trim();
@@ -623,8 +581,9 @@ async function handleRotate(instanceId) {
     const { spatialLayoutData } = getState();
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
-    const asset = getAssetByRefId(instance.ReferenceID);
+    const asset = assetsByIdMap.get(instance.ReferenceID);
     if (!asset) return;
+
     if (asset.AssetType === 'Door') {
         const rotateMap = { 'East': 'South', 'South': 'West', 'West': 'North', 'North': 'East' };
         instance.Orientation = rotateMap[instance.Orientation] || 'South';
@@ -638,10 +597,9 @@ async function handleRotate(instanceId) {
 
 function handleOpen(instanceId) {
     if (!instanceId) return;
-    const { spatialLayoutData } = getState();
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (instance) {
-        const assetInfo = getAssetByRefId(instance.ReferenceID);
+        const assetInfo = assetsByIdMap.get(instance.ReferenceID);
         if (assetInfo) navigateTo(instance.InstanceID, assetInfo.AssetName);
     }
 }
@@ -656,26 +614,37 @@ function handleResize(instanceId) {
 
 async function handleDelete(instanceId) {
     if (!instanceId) return;
-    const { spatialLayoutData, allAssets, sheetIds } = getState();
+    const { spatialLayoutData, sheetIds } = getState();
     const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
+    if (!confirm("Are you sure you want to delete this object? This cannot be undone.")) return;
 
-    // Directly delete without confirmation
-    const asset = allAssets.find(a => a.AssetID === instance.ReferenceID);
-    if (asset) {
-        const sheetId = sheetIds[ASSET_SHEET];
-        await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } }] });
-    }
+    const asset = assetsByIdMap.get(instance.ReferenceID);
+    const requests = [];
+
+    // Add request to delete the spatial layout instance
     const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET];
-    await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } }] });
-    window.dispatchEvent(new CustomEvent('datachanged'));
-}
+    if (layoutSheetId && instance.rowIndex) {
+        requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } });
+    }
 
+    // If the asset isn't a "structural" type, add request to delete the asset entry itself
+    if (asset && !['Shelf', 'Container', 'Wall', 'Door'].includes(asset.AssetType)) {
+        const assetSheetId = sheetIds[ASSET_SHEET];
+        if (assetSheetId && asset.rowIndex) {
+            requests.push({ deleteDimension: { range: { sheetId: assetSheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } });
+        }
+    }
+    
+    if (requests.length > 0) {
+        await api.batchUpdateSheet({ requests });
+        window.dispatchEvent(new CustomEvent('datachanged'));
+    }
+}
 
 function createObjectResizeHandles(objEl, instanceId) {
     document.querySelectorAll('.resize-handle').forEach(el => el.remove());
-    const handles = ['n', 's', 'e', 'w'];
-    handles.forEach(dir => {
+    ['n', 's', 'e', 'w'].forEach(dir => {
         const handle = document.createElement('div');
         handle.className = `resize-handle ${dir}`;
         objEl.appendChild(handle);
@@ -687,16 +656,12 @@ function initResize(e, instanceId, direction) {
     e.preventDefault();
     e.stopPropagation();
 
-    const { spatialLayoutData } = getState();
-    const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
+    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
     if (!instance) return;
 
-    const startX = e.clientX;
-    const startY = e.clientY;
-    let startWidth = parseInt(instance.Width);
-    let startHeight = parseInt(instance.Height);
-    let startPosX = parseInt(instance.PosX);
-    let startPosY = parseInt(instance.PosY);
+    const startX = e.clientX, startY = e.clientY;
+    let startWidth = parseInt(instance.Width), startHeight = parseInt(instance.Height);
+    let startPosX = parseInt(instance.PosX), startPosY = parseInt(instance.PosY);
 
     const gridEl = document.getElementById('room-grid');
     const rect = gridEl.getBoundingClientRect();
@@ -706,10 +671,8 @@ function initResize(e, instanceId, direction) {
     const cellHeight = rect.height / gridTemplateRows.length;
 
     function doDrag(e) {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        const dx_cells = Math.round(dx / cellWidth);
-        const dy_cells = Math.round(dy / cellHeight);
+        const dx_cells = Math.round((e.clientX - startX) / cellWidth);
+        const dy_cells = Math.round((e.clientY - startY) / cellHeight);
 
         let newWidth = startWidth, newHeight = startHeight, newPosX = startPosX, newPosY = startPosY;
 
@@ -717,33 +680,34 @@ function initResize(e, instanceId, direction) {
         if (direction === 's') newHeight = Math.max(1, startHeight + dy_cells);
         if (direction === 'w') {
             newWidth = Math.max(1, startWidth - dx_cells);
-            if(newWidth !== startWidth) newPosX = startPosX + dx_cells;
+            newPosX = startPosX + dx_cells;
         }
         if (direction === 'n') {
             newHeight = Math.max(1, startHeight - dy_cells);
-            if(newHeight !== startHeight) newPosY = startPosY + dy_cells;
+            newPosY = startPosY + dy_cells;
         }
-
-        instance.Width = newWidth;
-        instance.Height = newHeight;
-        instance.PosX = newPosX;
-        instance.PosY = newPosY;
-
+        
         const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
         if(objEl) {
             objEl.style.gridColumn = `${newPosX + 1} / span ${newWidth}`;
             objEl.style.gridRow = `${newPosY + 1} / span ${newHeight}`;
+            // Temporarily update instance for visual feedback
+            instance.Width = newWidth; instance.Height = newHeight;
+            instance.PosX = newPosX; instance.PosY = newPosY;
         }
     }
 
     function stopDrag() {
         document.removeEventListener('mousemove', doDrag);
         document.removeEventListener('mouseup', stopDrag);
-        updateObjectInSheet(instance);
-        setTimeout(() => createObjectResizeHandles(document.querySelector(`[data-instance-id="${instanceId}"]`), instanceId), 50);
+        updateObjectInSheet(instance).then(() => {
+            // Re-select and show handles after update
+            selectObject(instanceId);
+            const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
+            if (objEl) createObjectResizeHandles(objEl, instanceId);
+        });
     }
 
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
 }
-

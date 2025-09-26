@@ -20,6 +20,21 @@ let state = {
     pagination: {
         currentPage: 1,
     },
+    // Added state for filters to make selectors pure
+    filters: {
+        searchTerm: '',
+        Site: '',
+        Location: '',
+        AssetType: '',
+        Condition: '',
+        IntendedUserType: '',
+        AssignedTo: '',
+        ModelNumber: '',
+    },
+    employeeFilters: {
+        searchTerm: '',
+        Department: '',
+    },
 };
 
 // A list of callback functions to be executed when the state changes.
@@ -34,6 +49,8 @@ export const actionTypes = {
     SET_VISIBLE_COLUMNS: 'SET_VISIBLE_COLUMNS',
     SET_SORT_STATE: 'SET_SORT_STATE',
     SET_CURRENT_PAGE: 'SET_CURRENT_PAGE',
+    SET_FILTERS: 'SET_FILTERS',
+    SET_EMPLOYEE_FILTERS: 'SET_EMPLOYEE_FILTERS',
 };
 
 /**
@@ -76,6 +93,19 @@ function reducer(currentState, action) {
             return {
                 ...currentState,
                 pagination: { ...currentState.pagination, currentPage: action.payload },
+            };
+
+        case actionTypes.SET_FILTERS:
+            return {
+                ...currentState,
+                filters: { ...currentState.filters, ...action.payload },
+                 pagination: { ...currentState.pagination, currentPage: 1 }, // Reset page on filter change
+            };
+
+        case actionTypes.SET_EMPLOYEE_FILTERS:
+            return {
+                ...currentState,
+                employeeFilters: { ...currentState.employeeFilters, ...action.payload },
             };
 
         default:
@@ -125,4 +155,3 @@ export function getState() {
     // Returning the state directly is fine as the reducer ensures it's a new object.
     return state;
 }
-

@@ -2,6 +2,19 @@
 import { SPREADSHEET_ID } from './state.js';
 
 /**
+ * Fetches data from a single range.
+ * @param {string} range - A single range to fetch data from.
+ * @returns {Promise<Object>} A promise that resolves with the raw value range.
+ */
+export async function getSheetValues(range) {
+    return gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: range,
+    });
+}
+
+
+/**
  * Fetches metadata and data from all required sheets.
  * @param {string[]} ranges - An array of ranges to fetch data from.
  * @returns {Promise<Object>} A promise that resolves with the raw metadata and value ranges from the sheets.

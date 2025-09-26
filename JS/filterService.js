@@ -14,11 +14,15 @@
 export function filterData(data, searchTerm, searchFields, filters = {}, fullState = {}) {
     const lowercasedSearchTerm = searchTerm.toLowerCase();
 
+    // Memoized selector for employeesByName is now passed in fullState.
+    const employeesByName = fullState.employeesByName;
+
     return data.filter(item => {
         // 1. Match search term: Check if the search term appears in the specified fields or any value if no fields are specified.
         const matchesSearch = lowercasedSearchTerm
             ? (searchFields
-                ? searchFields.some(field => String(item[field] || '').toLowerCase().includes(lowercasedSearchTerm))
+                // For assets, we also want to search the enriched 'AssignedToName' field.
+                ? [...searchFields, 'AssignedToName'].some(field => String(item[field] || '').toLowerCase().includes(lowercasedSearchTerm))
                 : Object.values(item).some(val => String(val).toLowerCase().includes(lowercasedSearchTerm))
             )
             : true; // If no search term, it's a match.
@@ -34,9 +38,9 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
             }
 
             // Special handling for the 'AssignedTo' filter, which uses an EmployeeName from a dropdown
-            // to filter assets that store an EmployeeID. This requires looking up the ID from the employee's name.
-            if (key === 'AssignedTo' && fullState.allEmployees && fullState.allEmployees.length > 0) {
-                const employee = fullState.allEmployees.find(e => e.EmployeeName === value);
+            // to filter assets that store an EmployeeID. We now use the fast lookup map.
+            if (key === 'AssignedTo' && employeesByName) {
+                const employee = employeesByName.get(value);
                 return employee ? item[key] === employee.EmployeeID : false;
             }
 
