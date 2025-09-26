@@ -1,157 +1,205 @@
-// JS/store.js
+const store = {
+    assets: [],
+    employees: [],
+    sites: [],
+    rooms: [],
+    containers: [],
+    spatialLayouts: [],
+    _idCache: {},
 
-/**
- * @fileoverview A simple, reactive state management store based on the Observer pattern.
- */
+    /**
+     * Initializes the data store by loading all necessary data from the sheetsService.
+     * @param {function} callback - The function to call when all data is loaded and processed.
+     */
+    init: function(callback) {
+        const sheetsToLoad = ['Asset', 'Employees', 'Sites', 'Rooms', 'Containers', 'Spatial Layout'];
+        let loadedCount = 0;
 
-// The single source of truth for the application's state.
-// We keep this as a mutable let variable that the reducer will replace.
-let state = {
-    tokenClient: null,
-    gapiInited: false,
-    gisInited: false,
-    allAssets: [],
-    allEmployees: [],
-    allRooms: [],
-    spatialLayoutData: [],
-    visibleColumns: [],
-    sortState: { column: 'AssetName', direction: 'asc' },
-    sheetIds: {},
-    pagination: {
-        currentPage: 1,
+        const onSheetLoaded = () => {
+            loadedCount++;
+            if (loadedCount === sheetsToLoad.length) {
+                console.log("All sheets loaded. Processing data relationships.");
+                this._buildIdCache();
+
+                // Post-process assets to add backward-compatible location strings.
+                // This allows the old filtering UI to continue working until it's updated in Phase 4.
+                this.assets.forEach(asset => {
+                    if (!asset.ParentID) {
+                        asset.Location = 'No Location';
+                        return;
+                    }
+
+                    const path = this.getFullLocationPath(asset.AssetID);
+                    const site = path.find(p => p.SiteID);
+                    const room = path.find(p => p.RoomID);
+
+                    if (site && room) {
+                        asset.Location = `${site.SiteName} - ${room.RoomName}`;
+                    } else if (room) {
+                        asset.Location = `Unknown Site - ${room.RoomName}`;
+                    } else {
+                        asset.Location = 'Unknown Location';
+                    }
+                });
+
+                console.log("Data processing complete.");
+                callback();
+            }
+        };
+
+        // Load Sites
+        sheetsService.load('Sites', (data) => {
+            this.sites = data;
+            onSheetLoaded();
+        });
+
+        // Load Rooms
+        sheetsService.load('Rooms', (data) => {
+            this.rooms = data.map(r => ({
+                RoomID: r['Room ID'],
+                RoomName: r['Room Name'],
+                SiteID: r['Site ID'],
+                GridWidth: r['Grid Width'] ? parseInt(r['Grid Width'], 10) : null,
+                GridHeight: r['Grid Height'] ? parseInt(r['Grid Height'], 10) : null,
+                Notes: r.Notes,
+            }));
+            onSheetLoaded();
+        });
+
+        // Load Containers
+        sheetsService.load('Containers', (data) => {
+            this.containers = data;
+            onSheetLoaded();
+        });
+
+        // Load Spatial Layout
+        sheetsService.load('Spatial Layout', (data) => {
+            this.spatialLayouts = data;
+            onSheetLoaded();
+        });
+
+        // Load Assets
+        sheetsService.load('Asset', (data) => {
+            this.assets = data.map(asset => ({
+                ...asset,
+                Quantity: parseInt(asset.Quantity, 10) || 1
+            }));
+            onSheetLoaded();
+        });
+
+        // Load Employees
+        sheetsService.load('Employees', (data) => {
+            this.employees = data;
+            onSheetLoaded();
+        });
     },
-    // Added state for filters to make selectors pure
-    filters: {
-        searchTerm: '',
-        Site: '',
-        Location: '',
-        AssetType: '',
-        Condition: '',
-        IntendedUserType: '',
-        AssignedTo: '',
-        ModelNumber: '',
-    },
-    employeeFilters: {
-        searchTerm: '',
-        Department: '',
-    },
-};
-
-// A list of callback functions to be executed when the state changes.
-const subscribers = [];
-
-// --- Action Types ---
-export const actionTypes = {
-    SET_GAPI_STATUS: 'SET_GAPI_STATUS',
-    SET_GIS_STATUS: 'SET_GIS_STATUS',
-    SET_TOKEN_CLIENT: 'SET_TOKEN_CLIENT',
-    SET_APP_DATA: 'SET_APP_DATA',
-    SET_VISIBLE_COLUMNS: 'SET_VISIBLE_COLUMNS',
-    SET_SORT_STATE: 'SET_SORT_STATE',
-    SET_CURRENT_PAGE: 'SET_CURRENT_PAGE',
-    SET_FILTERS: 'SET_FILTERS',
-    SET_EMPLOYEE_FILTERS: 'SET_EMPLOYEE_FILTERS',
-};
-
-/**
- * The reducer function. It takes the current state and an action, and returns the new state.
- * It is the only place where state mutations should occur. It must be a "pure" function.
- * @param {Object} currentState - The current state.
- * @param {Object} action - The action to be processed.
- * @returns {Object} The new state.
- */
-function reducer(currentState, action) {
-    switch (action.type) {
-        case actionTypes.SET_GAPI_STATUS:
-            return { ...currentState, gapiInited: action.payload };
-        
-        case actionTypes.SET_GIS_STATUS:
-            return { ...currentState, gisInited: action.payload };
-
-        case actionTypes.SET_TOKEN_CLIENT:
-            return { ...currentState, tokenClient: action.payload };
-
-        case actionTypes.SET_APP_DATA:
-            // This action replaces all the core data from the spreadsheet in one go.
-            return {
-                ...currentState,
-                allAssets: action.payload.allAssets || [],
-                allEmployees: action.payload.allEmployees || [],
-                allRooms: action.payload.allRooms || [],
-                spatialLayoutData: action.payload.spatialLayoutData || [],
-                sheetIds: action.payload.sheetIds || {},
-            };
-
-        case actionTypes.SET_VISIBLE_COLUMNS:
-            return { ...currentState, visibleColumns: action.payload };
-
-        case actionTypes.SET_SORT_STATE:
-            return { ...currentState, sortState: action.payload };
-        
-        case actionTypes.SET_CURRENT_PAGE:
-            // To update a nested property immutably, we copy both levels.
-            return {
-                ...currentState,
-                pagination: { ...currentState.pagination, currentPage: action.payload },
-            };
-
-        case actionTypes.SET_FILTERS:
-            return {
-                ...currentState,
-                filters: { ...currentState.filters, ...action.payload },
-                 pagination: { ...currentState.pagination, currentPage: 1 }, // Reset page on filter change
-            };
-
-        case actionTypes.SET_EMPLOYEE_FILTERS:
-            return {
-                ...currentState,
-                employeeFilters: { ...currentState.employeeFilters, ...action.payload },
-            };
-
-        default:
-            // If the action type is unknown, return the state unchanged.
-            return currentState;
-    }
-}
-
-
-/**
- * Allows a module to register a callback function that will be called whenever the state changes.
- * @param {Function} callback - The function to call on state updates.
- * @returns {Function} An unsubscribe function to remove the listener.
- */
-export function subscribe(callback) {
-    subscribers.push(callback);
-    // Return an unsubscribe function to prevent memory leaks
-    return () => {
-        const index = subscribers.indexOf(callback);
-        if (index > -1) {
-            subscribers.splice(index, 1);
-        }
-    };
-}
-
-/**
- * Dispatches an action to update the state via the reducer and notifies all subscribers.
- * @param {Object} action - An object describing the change (e.g., { type: 'SET_ASSETS', payload: [...] }).
- */
-export function dispatch(action) {
-    // Calculate the new state by running the reducer.
-    const newState = reducer(state, action);
-
-    // Replace the old state with the new state.
-    state = newState;
     
-    // Notify all subscribers that the state has changed.
-    console.log(`Dispatched Action: ${action.type}`);
-    subscribers.forEach(callback => callback());
-}
+    /**
+     * Builds a cache of all items with IDs for quick lookups.
+     */
+    _buildIdCache: function() {
+        this._idCache = {};
+        const cacheItem = (item, idKey) => {
+            if (item && item[idKey]) {
+                this._idCache[item[idKey]] = item;
+            }
+        };
 
-/**
- * Returns a copy of the current state.
- * @returns {Object} The current application state.
- */
-export function getState() {
-    // Returning the state directly is fine as the reducer ensures it's a new object.
-    return state;
-}
+        this.assets.forEach(item => cacheItem(item, 'AssetID'));
+        this.sites.forEach(item => cacheItem(item, 'SiteID'));
+        this.rooms.forEach(item => cacheItem(item, 'RoomID'));
+        this.containers.forEach(item => cacheItem(item, 'ContainerID'));
+        this.employees.forEach(item => cacheItem(item, 'EmployeeID'));
+    },
+
+    /**
+     * Finds any object in the store by its unique ID.
+     * @param {string} id - The ID of the object to find.
+     * @returns {object|null} The found object or null.
+     */
+    findObjectById: function(id) {
+        if (!id || typeof id !== 'string') return null;
+        return this._idCache[id] || null;
+    },
+
+    /**
+     * Gets the direct parent object of an asset or container.
+     * @param {string|object} itemOrId - The item object or its ID.
+     * @returns {object|null} The parent object (a Room or Container) or null.
+     */
+    getParent: function(itemOrId) {
+        const item = typeof itemOrId === 'string' ? this.findObjectById(itemOrId) : itemOrId;
+        if (!item || !item.ParentID) {
+            return null;
+        }
+        return this.findObjectById(item.ParentID);
+    },
+
+    /**
+     * Gets the full hierarchical location path for any item.
+     * @param {string|object} itemOrId - The item object or its ID.
+     * @returns {Array<object>} An array of objects representing the path, e.g., [Site, Room, Container].
+     */
+    getFullLocationPath: function(itemOrId) {
+        const path = [];
+        let currentItem = typeof itemOrId === 'string' ? this.findObjectById(itemOrId) : itemOrId;
+        if (!currentItem) return [];
+
+        let parent = this.getParent(currentItem);
+
+        while (parent) {
+            path.unshift(parent);
+            const parentId = parent.ContainerID || parent.RoomID;
+            parent = this.getParent(parentId);
+        }
+
+        if (path.length > 0 && path[0].RoomID) {
+            const room = path[0];
+            const site = this.getSiteForRoom(room.RoomID);
+            if (site) {
+                path.unshift(site);
+            }
+        }
+        return path;
+    },
+
+    /**
+     * Finds the Site object that a given Room belongs to.
+     * @param {string} roomId - The ID of the room.
+     * @returns {object|null} The Site object or null.
+     */
+    getSiteForRoom: function(roomId) {
+        const room = this.findObjectById(roomId);
+        if (!room || !room.SiteID) return null;
+        return this.findObjectById(room.SiteID);
+    },
+
+    /**
+     * Traverses up the hierarchy from a container to find the Room it's in.
+     * @param {string} containerId - The ID of the container.
+     * @returns {object|null} The Room object or null.
+     */
+    getRoomForContainer: function(containerId) {
+        let parent = this.getParent(containerId);
+        while (parent) {
+            if (parent.RoomID) {
+                return parent;
+            }
+            parent = this.getParent(parent.ContainerID);
+        }
+        return null;
+    },
+
+    // --- Existing Functions ---
+    getAssets: function() {
+        return this.assets;
+    },
+
+    getAssetById: function(id) {
+        return this.assets.find(asset => asset.AssetID === id);
+    },
+
+    getEmployees: function() {
+        return this.employees;
+    }
+};
