@@ -180,6 +180,19 @@ function processSheetData(values, headerMapConfig, idKey) {
             }
         }
     }
+    
+    // --- DEBUGGING START ---
+    // This will only log for the 'Asset' sheet to avoid clutter.
+    if (idKey === 'AssetID') {
+        console.log("--- Debugging processSheetData for Assets ---");
+        console.log("1. Headers found in sheet:", actualHeaders);
+        console.log("2. Column mapping result (what the app uses):", columnIndexMap);
+        if (columnIndexMap.ParentObjectID === undefined) {
+            console.error("CRITICAL: 'ParentObjectID' could not be found in the sheet headers. Please check that the column name in your sheet is one of the following (case-insensitive): ParentObjectID, Parent Object ID, ParentID");
+        }
+        console.log("-------------------------------------------");
+    }
+    // --- DEBUGGING END ---
 
     const idKeyIndex = columnIndexMap[idKey];
     if (idKeyIndex === undefined && idKey) { // idKey might be null for sheets without one
