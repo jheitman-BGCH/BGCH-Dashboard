@@ -235,25 +235,32 @@ export const selectFullLocationPath = memoize((state, parentId) => {
     const roomsById = selectRoomsById(state.allRooms);
     const containersById = selectContainersById(state.allContainers);
 
-    let currentItem = roomsById.get(parentId) || containersById.get(parentId);
-
-    while (currentItem) {
-        path.unshift(currentItem);
-        let nextParentId = null;
-
-        if (currentItem.ContainerID) { // If the item is a container, its parent is a room or another container
-            nextParentId = currentItem.ParentID;
-        } else if (currentItem.RoomID) { // If the item is a room, its parent is a site
-            const site = sitesById.get(currentItem.SiteID);
-            if (site) {
-                path.unshift(site);
-            }
-            break; // Rooms are the top of the ParentID hierarchy, so we can stop.
+    let currentId = parentId;
+    // Loop up the chain of parents until there are no more
+    while (currentId) {
+        const container = containersById.get(currentId);
+        if (container) {
+            path.push(container);
+            currentId = container.ParentID;
+            continue;
         }
-        // Move to the next parent
-        currentItem = nextParentId ? (roomsById.get(nextParentId) || containersById.get(nextParentId)) : null;
+
+        const room = roomsById.get(currentId);
+        if (room) {
+            path.push(room);
+            const site = sitesById.get(room.SiteID);
+            if (site) {
+                path.push(site);
+            }
+            // A room's parent is a site, which is the top of the hierarchy.
+            break;
+        }
+        
+        // If we reach here, the ID was not found in rooms or containers.
+        break; 
     }
-    return path;
+
+    return path.reverse(); // Reverse to get Site > Room > Container order
 });
 
 
@@ -261,3 +268,4 @@ export const selectFullLocationPathString = (state, parentId) => {
     const path = selectFullLocationPath(state, parentId);
     return path.map(p => p.SiteName || p.RoomName || p.ContainerName).join(' > ');
 };
+
