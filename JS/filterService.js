@@ -73,8 +73,8 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
 
         // 3. Match other flat filters
         const matchesFilters = Object.entries(filters).every(([key, value]) => {
-            // Skip handled hierarchical filters and empty filters
-            if (['site', 'room', 'container'].includes(key) || !value) {
+            // Skip handled hierarchical filters, the search term, and empty filters
+            if (['site', 'room', 'container', 'searchTerm'].includes(key) || !value) {
                 return true;
             }
 
