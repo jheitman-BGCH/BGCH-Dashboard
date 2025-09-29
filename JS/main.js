@@ -212,7 +212,7 @@ function renderApp() {
     const state = getState();
     const employeesById = selectors.selectEmployeesById(state.allEmployees);
     const employeesByName = selectors.selectEmployeesByName(state.allEmployees);
-    const enrichedAssets = selectors.selectEnrichedAssets(state.allAssets, employeesById);
+    const enrichedAssets = selectors.selectEnrichedAssets(state.allAssets, employeesById, state);
     const stateForFiltering = { ...state, employeesByName };
     const filteredAssets = selectors.selectFilteredAssets(enrichedAssets, state.filters, state.filters.searchTerm, stateForFiltering);
     const sortedAssets = selectors.selectSortedAssets(filteredAssets, state.sortState);

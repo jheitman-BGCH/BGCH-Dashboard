@@ -78,14 +78,29 @@ export const selectEmployeesByName = memoize((allEmployees) =>
  * This prevents repeated lookups in the UI rendering layer.
  * @param {Array<Object>} allAssets - The array of all assets.
  * @param {Map<string, Object>} employeesById - The map of employees by ID.
+ * @param {Object} fullState - The entire application state for resolving locations.
  * @returns {Array<Object>} A new array of assets with an `AssignedToName` property.
  */
-export const selectEnrichedAssets = memoize((allAssets, employeesById) => {
+export const selectEnrichedAssets = memoize((allAssets, employeesById, fullState) => {
+    // A guard in case fullState isn't passed during an initial render cycle.
+    if (!fullState || !fullState.allSites) {
+        return allAssets.map(asset => ({
+             ...asset,
+             AssignedToName: employeesById.get(asset.AssignedTo)?.EmployeeName || (asset.AssignedTo || ''),
+        }));
+    }
+
     return allAssets.map(asset => {
         const employee = employeesById.get(asset.AssignedTo);
+        const resolvedParentId = selectResolvedAssetParentId(asset, fullState);
+        const path = selectFullLocationPath(fullState, resolvedParentId);
+        const site = path.find(p => p.SiteID);
+
         return {
             ...asset,
             AssignedToName: employee ? employee.EmployeeName : (asset.AssignedTo || ''),
+            resolvedParentId: resolvedParentId,
+            resolvedSiteId: site ? site.SiteID : null,
         };
     });
 });

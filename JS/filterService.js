@@ -33,28 +33,6 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
     const lowercasedSearchTerm = searchTerm.toLowerCase();
     const employeesByName = fullState.employeesByName;
 
-    // --- Hierarchical Location Filtering ---
-    let validParentIDs = null; // null means don't filter by parent
-    const { site, room, container } = filters;
-
-    if (container) {
-        validParentIDs = new Set([container]);
-        const children = getChildContainerIdsRecursive(fullState, container);
-        children.forEach(c => validParentIDs.add(c));
-    } else if (room) {
-        validParentIDs = new Set([room]);
-        const children = getChildContainerIdsRecursive(fullState, room);
-        children.forEach(c => validParentIDs.add(c));
-    } else if (site) {
-        validParentIDs = new Set();
-        const roomsInSite = fullState.allRooms.filter(r => r.SiteID === site);
-        for (const r of roomsInSite) {
-            validParentIDs.add(r.RoomID);
-            const children = getChildContainerIdsRecursive(fullState, r.RoomID);
-            children.forEach(c => validParentIDs.add(c));
-        }
-    }
-
     return data.filter(item => {
         // 1. Match search term
         const matchesSearch = lowercasedSearchTerm
@@ -66,10 +44,33 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
 
         if (!matchesSearch) return false;
 
-        // 2. Match hierarchical location filter
-        if (validParentIDs && !validParentIDs.has(item.ParentID)) {
+        // 2. Match hierarchical location filters
+        const { site, room, container } = filters;
+
+        // Site filter is a simple and efficient check now
+        if (site && item.resolvedSiteId !== site) {
             return false;
         }
+
+        // Room/Container filters check against the resolved parent ID
+        let validParentIDs = null;
+        if (container) {
+            // If a container is selected, an asset's parent must be that container or one of its children
+            validParentIDs = new Set([container]);
+            const children = getChildContainerIdsRecursive(fullState, container);
+            children.forEach(c => validParentIDs.add(c));
+        } else if (room) {
+            // If a room is selected, an asset's parent must be that room or one of its children
+            validParentIDs = new Set([room]);
+            const children = getChildContainerIdsRecursive(fullState, room);
+            children.forEach(c => validParentIDs.add(c));
+        }
+
+        // Apply the room/container filter if it was created
+        if (validParentIDs && !validParentIDs.has(item.resolvedParentId)) {
+            return false;
+        }
+
 
         // 3. Match other flat filters
         const matchesFilters = Object.entries(filters).every(([key, value]) => {
@@ -91,3 +92,4 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
         return matchesFilters;
     });
 }
+
