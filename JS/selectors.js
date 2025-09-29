@@ -166,14 +166,20 @@ export const selectSortedEmployees = memoize((filteredEmployees) => {
 
 // --- Chart Data Selectors ---
 
-export const selectChartData = memoize((enrichedAssets, allEmployees) => {
-    const processData = (key) => {
-        const displayKey = key === 'AssignedTo' ? 'AssignedToName' : key;
-        const sourceData = key === 'AssignedTo' ? enrichedAssets : enrichedAssets;
+export const selectChartData = memoize((enrichedAssets, allEmployees, allSites) => {
+    const sitesById = selectSitesById(allSites);
 
-        const counts = sourceData.reduce((acc, item) => {
-            const value = item[displayKey] || 'Uncategorized';
-            if (value !== 'Uncategorized' && value !== '') {
+    const processData = (key) => {
+        const counts = enrichedAssets.reduce((acc, item) => {
+            let value;
+            if (key === 'resolvedSiteId') {
+                const site = sitesById.get(item.resolvedSiteId);
+                value = site ? site.SiteName : 'Unassigned';
+            } else {
+                 value = item[key === 'AssignedTo' ? 'AssignedToName' : key] || 'Uncategorized';
+            }
+           
+            if (value !== 'Uncategorized' && value !== '' && value !== 'Unassigned') {
                  acc[value] = (acc[value] || 0) + 1;
             }
             return acc;
@@ -193,7 +199,7 @@ export const selectChartData = memoize((enrichedAssets, allEmployees) => {
     });
 
     return {
-        siteData: createChartConfig(processData('Site'), 'Assets per Site'),
+        siteData: createChartConfig(processData('resolvedSiteId'), 'Assets per Site'),
         conditionData: createChartConfig(processData('Condition'), 'Assets by Condition'),
         typeData: createChartConfig(processData('AssetType'), 'Assets by Type'),
         employeeData: createChartConfig(processData('AssignedTo'), 'Assignments per Employee'),
