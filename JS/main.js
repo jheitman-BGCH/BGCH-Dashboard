@@ -221,7 +221,7 @@ function renderApp() {
     const filteredEmployees = selectors.selectFilteredEmployees(state.allEmployees, state.employeeFilters, state.employeeFilters.searchTerm);
     const sortedEmployees = selectors.selectSortedEmployees(filteredEmployees);
     ui.renderEmployeeList(sortedEmployees);
-    const chartData = selectors.selectChartData(enrichedAssets, state.allEmployees);
+    const chartData = selectors.selectChartData(enrichedAssets, state.allEmployees, state.allSites);
     ui.renderOverviewCharts(chartData, handleChartClick);
     ui.populateColumnSelector();
 }
