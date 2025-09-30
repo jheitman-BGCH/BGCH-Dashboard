@@ -277,7 +277,8 @@ function setupEventListeners() {
     d.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.assetModal, false);
 
     ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(tabName => {
-        const tab = d[`${tabName.replace('-', '')}Tab`];
+        const camelCaseName = tabName.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+        const tab = d[`${camelCaseName}Tab`];
         if(tab) tab.addEventListener('click', () => switchTab(tabName));
     });
 
