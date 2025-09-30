@@ -92,3 +92,43 @@ export async function batchUpdateSheet(resource) {
         resource: resource
     });
 }
+
+/**
+ * Prepares a data object to be written to a sheet, aligning its values with the sheet's current column order.
+ * This prevents data corruption if columns are reordered in the Google Sheet.
+ * @param {string} sheetName The name of the sheet (e.g., 'Asset').
+ * @param {Object} dataObject A key-value object of the data to write (e.g., { AssetName: 'Laptop', Condition: 'Good' }).
+ * @param {Array<Object>} headerMap The header mapping configuration for this data type (e.g., ASSET_HEADER_MAP).
+ * @returns {Promise<Array<any>>} A promise that resolves with an array of values, ordered correctly for the sheet.
+ */
+export async function prepareRowData(sheetName, dataObject, headerMap) {
+    // 1. Fetch the live header row from the sheet.
+    const headerResponse = await getSheetValues(`${sheetName}!1:1`);
+    const liveHeaders = headerResponse.result.values ? headerResponse.result.values[0] : [];
+
+    if (liveHeaders.length === 0) {
+        throw new Error(`Could not read headers from sheet: "${sheetName}". The sheet might be empty.`);
+    }
+
+    // 2. Create a map from normalized header aliases to the canonical data key.
+    // e.g., {'asset name': 'AssetName', 'item name': 'AssetName', ...}
+    const aliasToKeyMap = new Map();
+    const normalize = (header) => String(header || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    
+    for (const mapping of headerMap) {
+        if (mapping.deprecated) continue; // Skip deprecated headers for writing
+        for (const alias of mapping.aliases) {
+            aliasToKeyMap.set(normalize(alias), mapping.key);
+        }
+    }
+
+    // 3. Build the row array based on the live header order.
+    const rowData = liveHeaders.map(header => {
+        const normalizedHeader = normalize(header);
+        const dataKey = aliasToKeyMap.get(normalizedHeader);
+        // If a corresponding key is found in our map, use the value from the data object. Otherwise, use an empty string.
+        return dataKey && dataObject.hasOwnProperty(dataKey) ? dataObject[dataKey] : '';
+    });
+
+    return rowData;
+}

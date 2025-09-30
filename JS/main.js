@@ -370,7 +370,6 @@ async function handleAssetFormSubmit(e) {
             AssetName: ui.dom.assetName.value,
             Quantity: ui.dom.quantity.value,
             ParentObjectID: parentId,
-            Site: '', Location: '', Container: '', // Deprecated
             IntendedUserType: ui.dom.intendedUserType.value,
             Condition: ui.dom.condition.value,
             AssetType: getSelectValue('asset-type'),
@@ -386,8 +385,7 @@ async function handleAssetFormSubmit(e) {
         };
 
         const isUpdate = !!assetData.rowIndex;
-        const headers = ASSET_HEADER_MAP.map(h => h.key);
-        const rowData = headers.map(header => assetData[header] || '');
+        const rowData = await api.prepareRowData(ASSET_SHEET, assetData, ASSET_HEADER_MAP);
 
         if (isUpdate) {
             await api.updateSheetValues(`${ASSET_SHEET}!A${assetData.rowIndex}`, [rowData]);
@@ -419,8 +417,8 @@ async function handleEmployeeFormSubmit(e) {
             Phone: document.getElementById('employee-phone').value,
         };
         const isUpdate = !!employeeData.rowIndex;
-        const headers = EMPLOYEE_HEADER_MAP.map(h => h.key);
-        const rowData = headers.map(header => employeeData[header] || '');
+        const rowData = await api.prepareRowData(EMPLOYEES_SHEET, employeeData, EMPLOYEE_HEADER_MAP);
+        
         if (isUpdate) {
             await api.updateSheetValues(`${EMPLOYEES_SHEET}!A${employeeData.rowIndex}`, [rowData]);
         } else {
@@ -527,13 +525,17 @@ async function handleBulkUpdate() {
         if (document.getElementById('bulk-update-condition-check').checked) updates.Condition = document.getElementById('bulk-condition').value;
         if (document.getElementById('bulk-update-assigned-to-check').checked) updates.AssignedTo = document.getElementById('bulk-assigned-to').value;
 
-        const headers = ASSET_HEADER_MAP.map(h => h.key);
-        const updateRequests = assetsToUpdate.map(asset => {
+        const updateRequests = await Promise.all(assetsToUpdate.map(async (asset) => {
             const updatedAsset = { ...asset, ...updates };
-            if(updates.ParentObjectID) { updatedAsset.Site = ''; updatedAsset.Location = ''; updatedAsset.Container = ''; }
-            const rowData = headers.map(header => updatedAsset[header] || '');
+            // Deprecated fields should be cleared if the primary location key is updated.
+            if(updates.ParentObjectID) { 
+                updatedAsset.Site = ''; 
+                updatedAsset.Location = ''; 
+                updatedAsset.Container = ''; 
+            }
+            const rowData = await api.prepareRowData(ASSET_SHEET, updatedAsset, ASSET_HEADER_MAP);
             return { range: `${ASSET_SHEET}!A${asset.rowIndex}`, values: [rowData] };
-        });
+        }));
 
         if (updateRequests.length > 0) {
             await api.batchUpdateSheetValues(updateRequests);
@@ -600,4 +602,3 @@ function handleChartClick(event, elements, filterId) {
     }
     switchTab('inventory');
 }
-

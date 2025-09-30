@@ -1,5 +1,5 @@
 // JS/visual_inventory_logic.js
-import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP } from './state.js';
+import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, ROOMS_HEADER_MAP } from './state.js';
 import { getState, dispatch, actionTypes } from './store.js';
 import * as api from './sheetsService.js';
 import { toggleModal, showMessage } from './ui.js';
@@ -218,8 +218,7 @@ async function handleRoomFormSubmit(e) {
         GridWidth: document.getElementById('grid-width').value,
         GridHeight: document.getElementById('grid-height').value,
     };
-    const headers = ['RoomID', 'RoomName', 'SiteID', 'GridWidth', 'GridHeight'];
-    const rowData = headers.map(h => roomData[h] || '');
+    const rowData = await api.prepareRowData(ROOMS_SHEET, roomData, ROOMS_HEADER_MAP);
     await api.appendSheetValues(ROOMS_SHEET, [rowData]);
     toggleModal(vi.roomModal, false);
     window.dispatchEvent(new CustomEvent('datachanged'));
@@ -309,20 +308,19 @@ async function handleToolbarDrop(data, gridX, gridY) {
     if (!newInstanceData.ReferenceID) {
         const newAsset = { AssetID: `ASSET-${Date.now()}`, AssetName: data.name, AssetType: data.assetType, ParentObjectID: viState.activeParentId };
         newInstanceData.ReferenceID = newAsset.AssetID;
-        const newAssetRow = ASSET_HEADER_MAP.map(h => h.key).map(h => newAsset[h] || '');
+        const newAssetRow = await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP);
         await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
     } else {
         // If we are placing an existing asset, update its ParentObjectID
         const asset = selectors.selectAssetsById(getState().allAssets).get(newInstanceData.ReferenceID);
         if(asset) {
             asset.ParentObjectID = viState.activeParentId;
-            const headers = ASSET_HEADER_MAP.map(h => h.key);
-            const rowData = headers.map(h => asset[h] || '');
+            const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP);
             await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]);
         }
     }
     
-    const newInstanceRow = SPATIAL_LAYOUT_HEADER_MAP.map(h => h.key).map(h => newInstanceData[h] || '');
+    const newInstanceRow = await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstanceData, SPATIAL_LAYOUT_HEADER_MAP);
     await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, [newInstanceRow]);
 
     window.dispatchEvent(new CustomEvent('datachanged'));
@@ -490,8 +488,7 @@ function selectObject(instanceId) {
 }
 
 async function updateObjectInSheet(updatedInstance) {
-    const headers = SPATIAL_LAYOUT_HEADER_MAP.map(h => h.key);
-    const rowData = headers.map(header => updatedInstance[header] || '');
+    const rowData = await api.prepareRowData(SPATIAL_LAYOUT_SHEET, updatedInstance, SPATIAL_LAYOUT_HEADER_MAP);
     await api.updateSheetValues(`${SPATIAL_LAYOUT_SHEET}!A${updatedInstance.rowIndex}`, [rowData]);
 }
 
@@ -530,8 +527,7 @@ async function handleRename(instanceId) {
     const newName = prompt("Enter new name:", asset.AssetName);
     if (newName && newName.trim() && newName.trim() !== asset.AssetName) {
         asset.AssetName = newName.trim();
-        const headers = ASSET_HEADER_MAP.map(h => h.key);
-        const rowData = headers.map(h => asset[h] || '');
+        const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP);
         await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]);
         window.dispatchEvent(new CustomEvent('datachanged'));
     }
