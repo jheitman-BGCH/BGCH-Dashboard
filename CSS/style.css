@@ -1,171 +1,268 @@
-body { 
-    font-family: 'Inter', sans-serif; 
-}
+/* CSS/visual_inventory_styles.css */
 
-/* --- MODAL STYLES --- */
-.modal-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 50; /* Tailwind z-50 */
-    display: flex;
-    align-items: center;
-    justify-content: center;
+/* --- Grid and Room Styles --- */
+#room-grid-container {
+    background-color: #f7fafc; /* gray-100 */
+    border: 1px solid #e2e8f0; /* gray-300 */
+    overflow: auto;
+    position: relative;
+    min-height: 60vh;
+    border-radius: 0.5rem;
+    /* Added padding */
     padding: 1rem;
 }
 
-.modal-backdrop {
-    position: absolute;
-    top: 0;
-    left: 0;
+#room-grid {
+    display: grid;
+    position: relative;
+    height: 100%;
+    width: 100%;
+    /* Darker gridlines for better visibility */
+    background-image:
+        linear-gradient(to right, #d1d5db 1px, transparent 1px),
+        linear-gradient(to bottom, #d1d5db 1px, transparent 1px);
+    /* background-size is now set dynamically via JS */
+}
+
+/* --- Visual Object Styles --- */
+.visual-object {
+    position: relative;
+    border-radius: 0.375rem;
+    transition: all 0.2s ease-in-out;
+    font-size: 0.75rem;
+    font-weight: 500;
+    overflow: visible; 
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    cursor: grab;
+    /* Added margin for padding around the object */
+    margin: 4px;
+    box-sizing: border-box;
+}
+.visual-object:active {
+    cursor: grabbing;
+}
+
+.visual-object:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    z-index: 10;
+}
+
+.visual-object.shelf {
+    background-color: #fefcbf; /* yellow-100 */
+    border: 2px solid #f59e0b; /* yellow-500 */
+    color: #b45309; /* yellow-800 */
+}
+
+.visual-object.container {
+    background-color: #dbeafe; /* blue-100 */
+    border: 2px solid #3b82f6; /* blue-500 */
+    color: #1e3a8a; /* blue-800 */
+}
+
+.visual-object.asset-item {
+     background-color: #e5e7eb; /* gray-200 */
+    border: 1px solid #6b7280; /* gray-500 */
+    color: #1f2937; /* gray-800 */
+}
+
+.visual-object.wall {
+    background-color: #4b5563; /* gray-600 */
+    border: 1px solid #1f2937; /* gray-800 */
+}
+
+.visual-object.door {
+    background-color: transparent;
+    border: 2px solid #9ca3af; /* gray-400 */
+}
+
+.visual-object.door svg {
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    transition: opacity 0.3s ease-in-out;
+    fill: #4b5563; /* gray-600 */
+    transition: transform 0.2s ease-in-out;
 }
 
-.modal-content {
-    position: relative;
-    z-index: 51;
-    background: white;
-    border-radius: 0.5rem; /* rounded-lg */
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* shadow-2xl */
-    transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
-    max-height: 90vh;
-    overflow-y: auto;
+/* --- Dragging Styles --- */
+.dragging-source {
+    opacity: 0.3;
+    transition: opacity 0.2s ease;
 }
 
-.loader {
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3498db;
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.tab-btn.active {
-    border-bottom-color: #4f46e5;
-    color: #4f46e5;
-    font-weight: 600;
-}
-
-.chart-container {
-    position: relative;
-    height: 350px;
-    width: 100%;
-}
-
-#overview-panel canvas {
-    cursor: pointer;
-}
-
-#asset-table-body tr:not(.no-hover):hover {
-    background-color: #f9fafb;
-}
-
-#asset-table-body tr td:not(:first-child):not(:last-child) {
-    cursor: pointer;
-}
-
-#employee-asset-list li:hover {
-    background-color: #f9fafb;
-    cursor: pointer;
-}
-
-.actions-menu { 
-    position: relative; 
-}
-
-.actions-dropdown {
-    display: none;
+.dragging-ghost {
     position: absolute;
-    right: 0;
-    top: 100%;
-    z-index: 10;
-    background-color: white;
-    border: 1px solid #e5e7eb;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0.8;
+    transition: transform 0.1s ease-out; /* Smooth lift effect */
+    transform: scale(1.05); /* Slightly bigger to feel "lifted" */
+}
+
+/* --- Global Hover Tooltip --- */
+#inventory-global-tooltip {
+    display: none;
+    position: fixed; /* Use fixed to escape parent overflow */
+    background-color: #1f2937; /* gray-800 */
+    color: white;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem; /* rounded-md */
+    font-size: 0.875rem; /* text-sm */
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+    z-index: 2000; /* High z-index */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    pointer-events: none; /* Make sure it doesn't interfere with mouse events */
+}
+
+/* --- Toolbar & Unplaced Assets --- */
+.toolbar-item {
+    cursor: grab;
     border-radius: 0.375rem;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    padding: 0.5rem 0;
-    min-width: 8rem;
-}
-
-.actions-dropdown.show { 
-    display: block; 
-}
-
-.actions-dropdown a {
-    display: block;
     padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    user-select: none;
+}
+.toolbar-item:active {
+    cursor: grabbing;
+}
+
+.toolbar-item:hover {
+    background-color: #e5e7eb; /* gray-200 */
+}
+
+/* NEW: Unplaced Asset Item Styling */
+.unplaced-asset-item {
+    position: relative;
+    padding: 0.5rem 0.5rem 0.5rem 1.5rem; /* Make space for icon */
     font-size: 0.875rem;
-    color: #374151;
-    cursor: pointer;
+    line-height: 1.25rem;
+    border-left: 4px solid #d1d5db; /* Default color: gray-400 */
+    background-color: #fff;
+    border-radius: 0.25rem;
+    cursor: grab;
+    transition: background-color 0.2s;
 }
 
-.actions-dropdown a:hover { 
-    background-color: #f3f4f6; 
+.unplaced-asset-item:hover {
+    background-color: #f9fafb; /* gray-50 */
 }
 
-#detail-modal-content dt {
-    font-weight: 600;
+.unplaced-asset-item::before {
+    content: '📄'; /* Default icon */
+    position: absolute;
+    left: 0.3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+/* Specific Icons/Colors for Unplaced Assets */
+.unplaced-asset-item[data-asset-type*="laptop"] { border-left-color: #3b82f6; } /* blue-500 */
+.unplaced-asset-item[data-asset-type*="laptop"]::before { content: '💻'; }
+
+.unplaced-asset-item[data-asset-type*="chair"] { border-left-color: #a855f7; } /* purple-500 */
+.unplaced-asset-item[data-asset-type*="chair"]::before { content: '🪑'; }
+
+.unplaced-asset-item[data-asset-type*="container"] { border-left-color: #f59e0b; } /* amber-500 */
+.unplaced-asset-item[data-asset-type*="container"]::before { content: '📦'; }
+
+.unplaced-asset-item[data-asset-type*="shelf"] { border-left-color: #84cc16; } /* lime-500 */
+.unplaced-asset-item[data-asset-type*="shelf"]::before { content: '📚'; }
+
+.unplaced-asset-item[data-asset-type*="monitor"] { border-left-color: #10b981; } /* emerald-500 */
+.unplaced-asset-item[data-asset-type*="monitor"]::before { content: '🖥️'; }
+
+.unplaced-asset-item[data-asset-type*="projector"] { border-left-color: #6366f1; } /* indigo-500 */
+.unplaced-asset-item[data-asset-type*="projector"]::before { content: '📽️'; }
+
+.unplaced-asset-item[data-asset-type*="tablet"] { border-left-color: #0ea5e9; } /* sky-500 */
+.unplaced-asset-item[data-asset-type*="tablet"]::before { content: '📱'; }
+
+.unplaced-asset-item[data-asset-type*="tv"] { border-left-color: #ec4899; } /* pink-500 */
+.unplaced-asset-item[data-asset-type*="tv"]::before { content: '📺'; }
+
+/* NEW: Unplaced Asset Group Header */
+.unplaced-group-header {
+    font-weight: 600; /* semibold */
+    font-size: 0.75rem; /* text-xs */
     color: #4b5563; /* text-gray-600 */
+    padding: 0.5rem 0.25rem;
+    margin-top: 0.75rem;
+    border-bottom: 1px solid #e5e7eb; /* border-gray-200 */
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-#detail-modal-content dd {
-    color: #1f2937; /* text-gray-800 */
-    word-break: break-word;
+
+/* --- Object Selection & Controls Styles --- */
+.visual-object.selected {
+    outline: 2px dashed #4f46e5; /* indigo-600 */
+    outline-offset: 2px;
+    z-index: 20;
 }
 
-#asset-table-head th {
+/* --- New Radial Menu using SVG Sprite --- */
+.radial-menu {
+    position: fixed;
+    /* Reduced size by ~15% from 200px */
+    width: 170px;
+    height: 170px;
+    z-index: 1000;
+    pointer-events: none;
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+    /* Adjusted transition for a smoother fade */
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease-out;
+}
+
+.radial-menu.visible {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+}
+
+.radial-svg-container {
+    width: 100%;
+    height: 100%;
+    pointer-events: all; /* The SVG itself is interactive */
+}
+
+.radial-button {
     cursor: pointer;
+    opacity: 0.8; /* Dimmed by default */
+    transition: opacity 0.15s ease-in-out, filter 0.15s ease-in-out;
 }
 
-.employee-card {
-    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+.radial-button.hidden {
+    display: none;
 }
 
-.employee-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+.radial-button:hover {
+    opacity: 1; /* Full opacity on hover */
+    filter: brightness(1.1) saturate(1.2); /* Add a pop effect */
 }
 
-.pagination-dot {
-    cursor: pointer;
-    height: 12px;
+/* Specific hover effect for the delete button to make it more vibrant */
+#radial-delete-use:hover {
+    filter: brightness(1.25);
+}
+
+
+/* --- Resize Handles --- */
+.resize-handle {
+    position: absolute;
     width: 12px;
-    margin: 0 5px;
-    background-color: #bbb;
+    height: 12px;
+    background-color: #fff;
+    border: 2px solid #4f46e5;
     border-radius: 50%;
-    display: inline-block;
-    transition: background-color 0.6s ease;
+    z-index: 30;
 }
-
-.pagination-dot.active, .pagination-dot:hover {
-    background-color: #717171;
-}
-
-.pagination-arrow {
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 50%;
-    background-color: #f3f4f6;
-    margin: 0 10px;
-    transition: background-color 0.3s ease;
-}
-
-.pagination-arrow:hover {
-    background-color: #e5e7eb;
-}
-
-.pagination-arrow.disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
+.resize-handle.n { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }

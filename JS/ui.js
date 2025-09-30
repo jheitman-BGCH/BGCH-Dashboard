@@ -43,7 +43,8 @@ export function initUI() {
         'breadcrumb-container', 'room-modal', 'room-form', 'contents-modal',
         'radial-menu', 'radial-rename-use', 'radial-flip-use', 'radial-rotate-use',
         'radial-resize-use', 'radial-open-use', 'radial-delete-use',
-        'unplaced-asset-search', 'unplaced-assets-list'
+        'unplaced-asset-search', 'unplaced-assets-list', 'unplaced-group-by', 'unplaced-sort-btn',
+        'unplaced-sort-icon'
     ];
     ids.forEach(id => {
         const key = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -323,7 +324,7 @@ function renderPagination(totalPages, currentPage) {
 
         const nextButton = document.createElement('div');
         nextButton.className = 'pagination-arrow';
-        nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
+        nextButton.innerHTML = `<svg xmlns="http://www.w.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
         nextButton.classList.toggle('disabled', currentPage === totalPages);
         if (currentPage < totalPages) {
             nextButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage + 1 }));

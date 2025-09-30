@@ -14,6 +14,8 @@ let viState = {
     breadcrumbs: [],
     selectedInstanceId: null,
     activeRadialInstanceId: null,
+    unplacedAssetSort: 'asc', // 'asc' or 'desc'
+    unplacedAssetGroupBy: 'none' // 'none' or 'assetType'
 };
 
 // --- DOM REFERENCES & FLAGS ---
@@ -59,7 +61,21 @@ function setupAndBindVisualInventory() {
     dom.roomForm.addEventListener('submit', handleRoomFormSubmit);
     dom.viSiteSelector.addEventListener('change', handleSiteSelection);
     dom.roomSelector.addEventListener('change', handleRoomSelection);
+    
+    // --- Unplaced Assets Listeners ---
     dom.unplacedAssetSearch.addEventListener('input', () => renderUnplacedAssets(viState.activeSiteId));
+    dom.unplacedGroupBy.addEventListener('change', (e) => {
+        viState.unplacedAssetGroupBy = e.target.value;
+        renderUnplacedAssets(viState.activeSiteId);
+    });
+    dom.unplacedSortBtn.addEventListener('click', () => {
+        viState.unplacedAssetSort = viState.unplacedAssetSort === 'asc' ? 'desc' : 'asc';
+        const iconPath = viState.unplacedAssetSort === 'asc' 
+            ? "M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" // A-Z
+            : "M3 4h13M3 8h9m-9 4h9m-9 4h13M16 8l4 4m0 0l4-4m-4 4v-4"; // Z-A
+        dom.unplacedSortIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPath}" />`;
+        renderUnplacedAssets(viState.activeSiteId);
+    });
 
     document.querySelectorAll('.toolbar-item').forEach(item => {
         item.addEventListener('dragstart', handleToolbarDragStart);
@@ -114,44 +130,105 @@ export function initVisualInventory() {
     }
 }
 
+function createUnplacedAssetElement(asset) {
+    const itemEl = document.createElement('div');
+    itemEl.className = 'unplaced-asset-item';
+    itemEl.setAttribute('draggable', 'true');
+    itemEl.dataset.assetType = (asset.AssetType || 'unknown').toLowerCase().replace(/\s+/g, '-');
+    itemEl.textContent = asset.AssetName || 'Unnamed Asset';
+    itemEl.title = `${asset.AssetName} (${asset.AssetType})`;
+    itemEl.addEventListener('dragstart', (e) => {
+        const data = {
+            type: 'new-object',
+            assetType: asset.AssetType,
+            name: asset.AssetName,
+            width: 1, // Default width
+            height: 1, // Default height
+            referenceId: asset.AssetID
+        };
+        e.dataTransfer.setData('application/json', JSON.stringify(data));
+    });
+    return itemEl;
+}
+
+
 function renderUnplacedAssets(siteId) {
     if (!dom.unplacedAssetsList) return;
-
     const state = getState();
     const placedAssetReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
+
+    // Get all assets not in the spatial layout
     let unplacedAssets = state.allAssets.filter(asset => !placedAssetReferenceIDs.has(asset.AssetID));
     
-    // If a site is selected, filter unplaced assets to those whose original (deprecated) site matches
-    // This provides a transitional way to find assets for a site before they get a proper ParentObjectID
+    // If a site is selected, filter to that site.
     if (siteId) {
         const site = selectors.selectSitesById(state.allSites).get(siteId);
         if (site) {
-            unplacedAssets = unplacedAssets.filter(asset => asset.Site === site.SiteName);
+            unplacedAssets = unplacedAssets.filter(asset => {
+                 const parentId = selectors.selectResolvedAssetParentId(asset, state);
+                 const path = selectors.selectFullLocationPath(state, parentId);
+                 const assetSite = path.find(p => p.SiteID);
+                 // Fallback to deprecated field if no proper location is set
+                 return assetSite ? assetSite.SiteID === siteId : asset.Site === site.SiteName;
+            });
         }
     }
 
+    // --- Hierarchy Logic ---
+    // Only show "root" unplaced assets. If a container is unplaced, its children shouldn't also be in the list.
+    const unplacedAssetIds = new Set(unplacedAssets.map(a => a.AssetID));
+    let rootUnplacedAssets = unplacedAssets.filter(asset => {
+        const parentId = selectors.selectResolvedAssetParentId(asset, state);
+        // An asset is a "root" unplaced item if its parent is NOT another unplaced item.
+        // A null/empty parentId means its parent is placed (e.g., in a room), so it's a root.
+        return !unplacedAssetIds.has(parentId);
+    });
+
+    // --- Search ---
     const searchTerm = dom.unplacedAssetSearch.value;
     const searchFields = ['AssetName', 'AssetType', 'IDCode'];
-    const filteredAssets = filterData(unplacedAssets, searchTerm, searchFields);
+    let finalAssets = filterData(rootUnplacedAssets, searchTerm, searchFields);
 
+    // --- Sorting ---
+    finalAssets.sort((a, b) => (a.AssetName || '').localeCompare(b.AssetName || ''));
+    if (viState.unplacedAssetSort === 'desc') {
+        finalAssets.reverse();
+    }
+    
+    // --- Rendering ---
     dom.unplacedAssetsList.innerHTML = '';
-    if (filteredAssets.length === 0) {
+    if (finalAssets.length === 0) {
         dom.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced assets found.</p>`;
         return;
     }
 
-    filteredAssets.forEach(asset => {
-        const itemEl = document.createElement('div');
-        itemEl.className = 'toolbar-item bg-white border text-sm p-2 rounded-md';
-        itemEl.setAttribute('draggable', 'true');
-        itemEl.textContent = asset.AssetName || 'Unnamed Asset';
-        itemEl.addEventListener('dragstart', (e) => {
-             const data = { type: 'new-object', assetType: 'Container', name: asset.AssetName, width: 1, height: 1, referenceId: asset.AssetID };
-            e.dataTransfer.setData('application/json', JSON.stringify(data));
+    // --- Grouping ---
+    if (viState.unplacedAssetGroupBy === 'assetType') {
+        const grouped = finalAssets.reduce((acc, asset) => {
+            const type = asset.AssetType || 'Uncategorized';
+            if (!acc[type]) acc[type] = [];
+            acc[type].push(asset);
+            return acc;
+        }, {});
+
+        Object.keys(grouped).sort().forEach(groupName => {
+            const groupHeader = document.createElement('h4');
+            groupHeader.className = 'unplaced-group-header';
+            groupHeader.textContent = groupName;
+            dom.unplacedAssetsList.appendChild(groupHeader);
+            grouped[groupName].forEach(asset => {
+                const itemEl = createUnplacedAssetElement(asset);
+                dom.unplacedAssetsList.appendChild(itemEl);
+            });
         });
-        dom.unplacedAssetsList.appendChild(itemEl);
-    });
+    } else {
+        finalAssets.forEach(asset => {
+            const itemEl = createUnplacedAssetElement(asset);
+            dom.unplacedAssetsList.appendChild(itemEl);
+        });
+    }
 }
+
 
 // --- DRAG AND DROP ---
 function handleObjectDragStart(e, objectData) {

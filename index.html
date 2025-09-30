@@ -232,7 +232,23 @@
                             <div class="mb-2">
                                 <input type="text" id="unplaced-asset-search" placeholder="Search assets..." class="form-input w-full text-sm">
                             </div>
-                            <div id="unplaced-assets-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
+                            <!-- NEW: Grouping and Sorting Controls -->
+                            <div class="flex items-center justify-between gap-2 my-2 text-xs">
+                                <div class="flex items-center gap-1">
+                                    <label for="unplaced-group-by" class="font-medium text-gray-600">Group:</label>
+                                    <select id="unplaced-group-by" class="form-select p-1 h-7 text-xs rounded-md">
+                                        <option value="none">None</option>
+                                        <option value="assetType">Type</option>
+                                    </select>
+                                </div>
+                                <button id="unplaced-sort-btn" class="p-1.5 rounded-md hover:bg-gray-200" title="Sort by Name">
+                                    <svg id="unplaced-sort-icon" xmlns="http://www.w.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <!-- END NEW -->
+                            <div id="unplaced-assets-list" class="space-y-1.5 max-h-96 overflow-y-auto"></div>
                         </div>
 
                         <div id="grid-container" class="lg:col-span-3 bg-gray-100 border rounded-lg p-2">
