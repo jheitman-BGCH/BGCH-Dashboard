@@ -9,7 +9,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="CSS/style.css">
-    <link rel="stylesheet" href="CSS/visual_inventory_styles.css">
+    <!-- Updated stylesheet link with cache-busting query -->
+    <link rel="stylesheet" href="CSS/visual_inventory_styles.css?v=1.1">
 </head>
 <body class="bg-gray-100 text-gray-800">
 
@@ -118,7 +119,7 @@
                         </div>
                         <div class="ml-auto">
                             <button id="customize-cols-btn" class="w-full h-10 flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
-                                <svg xmlns="http://www.w.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
                                 <span>View</span>
                             </button>
                         </div>
@@ -242,7 +243,7 @@
                                     </select>
                                 </div>
                                 <button id="unplaced-sort-btn" class="p-1.5 rounded-md hover:bg-gray-200" title="Sort by Name">
-                                    <svg id="unplaced-sort-icon" xmlns="http://www.w.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg id="unplaced-sort-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
                                     </svg>
                                 </button>
@@ -562,3 +563,4 @@
     <script type="module" src="JS/main.js"></script>
 </body>
 </html>
+
