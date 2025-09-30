@@ -22,6 +22,70 @@ let viState = {
 let viListenersInitialized = false;
 let hideMenuTimeout; // Variable to manage the hide timer
 
+// --- NEW: Intelligent Emoji Mapping ---
+const EMOJI_KEYWORD_MAP = {
+    'laptop': '💻',
+    'macbook': '💻',
+    'chromebook': '💻',
+    'computer': '🖥️',
+    'monitor': '🖥️',
+    'screen': '🖥️',
+    'imac': '🖥️',
+    'pc': '🖥️',
+    'server': '🗄️',
+    'nas': '🗄️',
+    'chair': '🪑',
+    'stool': '🪑',
+    'seating': '🪑',
+    'desk': '🗄️', // No great desk emoji, using filing cabinet
+    'table': '🗄️',
+    'container': '📦',
+    'box': '📦',
+    'shelf': '📚',
+    'bookshelf': '📚',
+    'rack': '📚',
+    'projector': '📽️',
+    'tablet': '📱',
+    'ipad': '📱',
+    'phone': '☎️',
+    'tv': '📺',
+    'television': '📺',
+    'camera': '📷',
+    'webcam': '📷',
+    'keyboard': '⌨️',
+    'mouse': '🖱️',
+    'router': '🌐',
+    'modem': '🌐',
+    'switch': '🌐',
+    'network': '🌐',
+    'cable': '🔌',
+    'adapter': '🔌',
+    'charger': '🔌',
+    'printer': '🖨️',
+    'scanner': '🖨️',
+    'headphone': '🎧',
+    'headset': '🎧',
+    'speaker': '🔊',
+    'microphone': '🎤',
+};
+
+/**
+ * Gets an emoji for a given asset type based on keyword matching.
+ * @param {string} assetType - The asset type string.
+ * @returns {string} The best-matched emoji or a default one.
+ */
+function getEmojiForAssetType(assetType) {
+    if (!assetType) return '📄';
+    const lowerAssetType = assetType.toLowerCase();
+    // Find the first keyword in our map that is present in the asset type string
+    for (const keyword in EMOJI_KEYWORD_MAP) {
+        if (lowerAssetType.includes(keyword)) {
+            return EMOJI_KEYWORD_MAP[keyword];
+        }
+    }
+    return '📄'; // Default icon for unmatched types
+}
+
 // --- DRAG STATE & GLOBAL UI ---
 let dragGhost = null;
 let globalTooltip = null;
@@ -134,8 +198,22 @@ function createUnplacedAssetElement(asset) {
     const itemEl = document.createElement('div');
     itemEl.className = 'unplaced-asset-item';
     itemEl.setAttribute('draggable', 'true');
+    // Keep data-asset-type for CSS border-color styling
     itemEl.dataset.assetType = (asset.AssetType || 'unknown').toLowerCase().replace(/\s+/g, '-');
-    itemEl.textContent = asset.AssetName || 'Unnamed Asset';
+    
+    const emoji = getEmojiForAssetType(asset.AssetType);
+
+    const emojiSpan = document.createElement('span');
+    emojiSpan.className = 'unplaced-asset-icon';
+    emojiSpan.textContent = emoji;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'unplaced-asset-name';
+    nameSpan.textContent = asset.AssetName || 'Unnamed Asset';
+    
+    itemEl.appendChild(emojiSpan);
+    itemEl.appendChild(nameSpan);
+
     itemEl.title = `${asset.AssetName} (${asset.AssetType})`;
     itemEl.addEventListener('dragstart', (e) => {
         const data = {
@@ -716,3 +794,4 @@ function initResize(e, instanceId, direction) {
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
 }
+
