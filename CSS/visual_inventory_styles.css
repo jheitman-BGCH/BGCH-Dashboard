@@ -134,7 +134,7 @@
     background-color: #e5e7eb; /* gray-200 */
 }
 
-/* UPDATED: Unplaced Asset Item Styling */
+/* CORRECTED: Unplaced Asset Item Styling */
 .unplaced-asset-item {
     display: flex;
     align-items: center;
@@ -165,6 +165,7 @@
     text-overflow: ellipsis;
 }
 
+/* REMOVED the ::before pseudo-element rules that were adding the duplicate emoji */
 
 /* Specific BORDER COLORS for Unplaced Assets (Icons are now handled in JS) */
 .unplaced-asset-item[data-asset-type*="laptop"] { border-left-color: #3b82f6; } /* blue-500 */
