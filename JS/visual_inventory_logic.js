@@ -1,8 +1,8 @@
 // JS/visual_inventory_logic.js
 import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, ROOMS_HEADER_MAP } from './state.js';
-import { getState, dispatch, actionTypes } from './store.js';
+import { getState } from './store.js';
 import * as api from './sheetsService.js';
-import { toggleModal, showMessage } from './ui.js';
+import { toggleModal, showMessage, dom, populateSelect } from './ui.js';
 import { filterData } from './filterService.js';
 import * as selectors from './selectors.js';
 
@@ -17,7 +17,6 @@ let viState = {
 };
 
 // --- DOM REFERENCES & FLAGS ---
-let vi = {};
 let viListenersInitialized = false;
 let hideMenuTimeout; // Variable to manage the hide timer
 
@@ -29,19 +28,8 @@ let globalTooltip = null;
 function setupAndBindVisualInventory() {
     if (viListenersInitialized) return true;
 
-    const ids = [
-        'vi-site-selector', 'room-selector', 'grid-container', 'create-room-btn',
-        'breadcrumb-container', 'room-modal', 'room-form', 'contents-modal',
-        'radial-menu', 'radial-rename-use', 'radial-flip-use', 'radial-rotate-use',
-        'radial-resize-use', 'radial-open-use', 'radial-delete-use',
-        'unplaced-asset-search', 'unplaced-assets-list'
-    ];
-    ids.forEach(id => {
-        vi[id.replace(/-([a-z])/g, g => g[1].toUpperCase())] = document.getElementById(id);
-    });
-
-    if (Object.values(vi).some(el => !el)) {
-        console.error("Fatal Error: A critical VI DOM element is missing.");
+    if (!dom.viSiteSelector) {
+        console.error("Fatal Error: A critical VI DOM element is missing. UI not initialized correctly.");
         return false;
     }
 
@@ -53,53 +41,53 @@ function setupAndBindVisualInventory() {
         globalTooltip = document.getElementById('inventory-global-tooltip');
     }
 
-    vi.createRoomBtn.addEventListener('click', () => {
+    dom.createRoomBtn.addEventListener('click', () => {
         if (!viState.activeSiteId) {
             showMessage("Please select a site before adding a room.");
             return;
         }
-        vi.roomForm.reset();
+        dom.roomForm.reset();
         document.getElementById('room-id-hidden').value = '';
-        toggleModal(vi.roomModal, true);
+        toggleModal(dom.roomModal, true);
     });
     
-    vi.roomModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.roomModal, false));
-    vi.roomModal.querySelector('#cancel-room-btn').addEventListener('click', () => toggleModal(vi.roomModal, false));
-    vi.contentsModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(vi.contentsModal, false));
-    vi.contentsModal.querySelector('.modal-close-btn').addEventListener('click', () => toggleModal(vi.contentsModal, false));
+    dom.roomModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(dom.roomModal, false));
+    dom.roomModal.querySelector('#cancel-room-btn').addEventListener('click', () => toggleModal(dom.roomModal, false));
+    dom.contentsModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(dom.contentsModal, false));
+    dom.contentsModal.querySelector('.modal-close-btn').addEventListener('click', () => toggleModal(dom.contentsModal, false));
 
-    vi.roomForm.addEventListener('submit', handleRoomFormSubmit);
-    vi.viSiteSelector.addEventListener('change', handleSiteSelection);
-    vi.roomSelector.addEventListener('change', handleRoomSelection);
-    vi.unplacedAssetSearch.addEventListener('input', () => renderUnplacedAssets(viState.activeSiteId));
+    dom.roomForm.addEventListener('submit', handleRoomFormSubmit);
+    dom.viSiteSelector.addEventListener('change', handleSiteSelection);
+    dom.roomSelector.addEventListener('change', handleRoomSelection);
+    dom.unplacedAssetSearch.addEventListener('input', () => renderUnplacedAssets(viState.activeSiteId));
 
     document.querySelectorAll('.toolbar-item').forEach(item => {
         item.addEventListener('dragstart', handleToolbarDragStart);
     });
 
-    vi.gridContainer.addEventListener('dragover', handleGridDragOver);
-    vi.gridContainer.addEventListener('drop', handleGridDrop);
-    vi.gridContainer.addEventListener('click', (e) => {
-        if (e.target === vi.gridContainer || e.target.id === 'room-grid') {
+    dom.gridContainer.addEventListener('dragover', handleGridDragOver);
+    dom.gridContainer.addEventListener('drop', handleGridDrop);
+    dom.gridContainer.addEventListener('click', (e) => {
+        if (e.target === dom.gridContainer || e.target.id === 'room-grid') {
             selectObject(null);
         }
     });
 
     document.addEventListener('click', (e) => {
-        if (vi.radialMenu && !vi.radialMenu.contains(e.target) && !e.target.closest('.visual-object')) {
+        if (dom.radialMenu && !dom.radialMenu.contains(e.target) && !e.target.closest('.visual-object')) {
             hideRadialMenu();
         }
     });
 
-    vi.radialMenu.addEventListener('mouseenter', () => clearTimeout(hideMenuTimeout));
-    vi.radialMenu.addEventListener('mouseleave', () => hideMenuTimeout = setTimeout(hideRadialMenu, 500));
+    dom.radialMenu.addEventListener('mouseenter', () => clearTimeout(hideMenuTimeout));
+    dom.radialMenu.addEventListener('mouseleave', () => hideMenuTimeout = setTimeout(hideRadialMenu, 500));
 
-    vi.radialRename.addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialFlip.addEventListener('click', () => { handleFlip(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialRotate.addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialResize.addEventListener('click', () => { handleResize(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialOpen.addEventListener('click', () => { handleOpen(viState.activeRadialInstanceId); hideRadialMenu(); });
-    vi.radialDelete.addEventListener('click', async () => { await handleDelete(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialRenameUse.addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialFlipUse.addEventListener('click', () => { handleFlip(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialRotateUse.addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialResizeUse.addEventListener('click', () => { handleResize(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialOpenUse.addEventListener('click', () => { handleOpen(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialDeleteUse.addEventListener('click', async () => { await handleDelete(viState.activeRadialInstanceId); hideRadialMenu(); });
 
     viListenersInitialized = true;
     return true;
@@ -108,17 +96,17 @@ function setupAndBindVisualInventory() {
 export function initVisualInventory() {
     if (!setupAndBindVisualInventory()) return;
 
-    populateSiteSelector();
+    populateSelect(dom.viSiteSelector, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select a Site --' });
     renderUnplacedAssets(null); // Initially render all unplaced assets
 
     const lastSiteId = localStorage.getItem('lastActiveViSiteId');
     if (lastSiteId && getState().allSites.some(s => s.SiteID === lastSiteId)) {
-        vi.viSiteSelector.value = lastSiteId;
+        dom.viSiteSelector.value = lastSiteId;
         handleSiteSelection({ target: { value: lastSiteId } }); // Simulate selection
         
         const lastRoomId = localStorage.getItem('lastActiveRoomId');
-        if (lastRoomId && vi.roomSelector.querySelector(`option[value="${lastRoomId}"]`)) {
-            vi.roomSelector.value = lastRoomId;
+        if (lastRoomId && dom.roomSelector.querySelector(`option[value="${lastRoomId}"]`)) {
+            dom.roomSelector.value = lastRoomId;
             handleRoomSelection({ target: { value: lastRoomId } }); // Simulate selection
         }
     } else {
@@ -127,7 +115,7 @@ export function initVisualInventory() {
 }
 
 function renderUnplacedAssets(siteId) {
-    if (!vi.unplacedAssetsList) return;
+    if (!dom.unplacedAssetsList) return;
 
     const state = getState();
     const placedAssetReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
@@ -142,13 +130,13 @@ function renderUnplacedAssets(siteId) {
         }
     }
 
-    const searchTerm = vi.unplacedAssetSearch.value;
+    const searchTerm = dom.unplacedAssetSearch.value;
     const searchFields = ['AssetName', 'AssetType', 'IDCode'];
     const filteredAssets = filterData(unplacedAssets, searchTerm, searchFields);
 
-    vi.unplacedAssetsList.innerHTML = '';
+    dom.unplacedAssetsList.innerHTML = '';
     if (filteredAssets.length === 0) {
-        vi.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced assets found.</p>`;
+        dom.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced assets found.</p>`;
         return;
     }
 
@@ -161,7 +149,7 @@ function renderUnplacedAssets(siteId) {
              const data = { type: 'new-object', assetType: 'Container', name: asset.AssetName, width: 1, height: 1, referenceId: asset.AssetID };
             e.dataTransfer.setData('application/json', JSON.stringify(data));
         });
-        vi.unplacedAssetsList.appendChild(itemEl);
+        dom.unplacedAssetsList.appendChild(itemEl);
     });
 }
 
@@ -220,7 +208,7 @@ async function handleRoomFormSubmit(e) {
     };
     const rowData = await api.prepareRowData(ROOMS_SHEET, roomData, ROOMS_HEADER_MAP);
     await api.appendSheetValues(ROOMS_SHEET, [rowData]);
-    toggleModal(vi.roomModal, false);
+    toggleModal(dom.roomModal, false);
     window.dispatchEvent(new CustomEvent('datachanged'));
 }
 
@@ -230,11 +218,11 @@ function handleSiteSelection(e) {
     localStorage.setItem('lastActiveViSiteId', siteId);
 
     const roomsForSite = selectors.selectRoomsBySiteId(getState(), siteId);
-    populateRoomSelector(roomsForSite);
+    populateSelect(dom.roomSelector, roomsForSite, 'RoomID', 'RoomName', { initialOptionText: '-- Select a Room --' });
     
-    vi.roomSelector.disabled = !siteId;
-    vi.createRoomBtn.disabled = !siteId;
-    vi.createRoomBtn.classList.toggle('opacity-50', !siteId);
+    dom.roomSelector.disabled = !siteId;
+    dom.createRoomBtn.disabled = !siteId;
+    dom.createRoomBtn.classList.toggle('opacity-50', !siteId);
     
     viState.activeRoomId = null;
     viState.activeParentId = null;
@@ -345,12 +333,12 @@ function navigateTo(id, name) {
 }
 
 function renderBreadcrumbs() {
-    vi.breadcrumbContainer.innerHTML = viState.breadcrumbs.map((crumb, index) => 
+    dom.breadcrumbContainer.innerHTML = viState.breadcrumbs.map((crumb, index) => 
         index < viState.breadcrumbs.length - 1
             ? `<span><a href="#" data-id="${crumb.id}" data-name="${crumb.name}" class="hover:underline text-indigo-600">${crumb.name}</a> / </span>`
             : `<span class="font-semibold text-gray-700">${crumb.name}</span>`
     ).join('');
-    vi.breadcrumbContainer.querySelectorAll('a').forEach(a => a.onclick = (e) => {
+    dom.breadcrumbContainer.querySelectorAll('a').forEach(a => a.onclick = (e) => {
         e.preventDefault();
         navigateTo(e.target.dataset.id, e.target.dataset.name);
     });
@@ -359,10 +347,10 @@ function renderBreadcrumbs() {
 function renderGrid() {
     selectObject(null);
     if (!viState.activeParentId) {
-        vi.gridContainer.innerHTML = `<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select a site and room to begin.</p></div>`;
+        dom.gridContainer.innerHTML = `<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select a site and room to begin.</p></div>`;
         return;
     }
-    vi.gridContainer.innerHTML = '<div id="room-grid"></div>';
+    dom.gridContainer.innerHTML = '<div id="room-grid"></div>';
     const roomGrid = document.getElementById('room-grid');
     const state = getState();
     const assetsById = selectors.selectAssetsById(state.allAssets);
@@ -459,24 +447,6 @@ function hideTooltip() {
     if (globalTooltip) globalTooltip.style.display = 'none';
 }
 
-function populateSiteSelector() {
-    vi.viSiteSelector.innerHTML = '<option value="">-- Select a Site --</option>';
-    getState().allSites.sort((a,b) => a.SiteName.localeCompare(b.SiteName)).forEach(site => {
-        vi.viSiteSelector.innerHTML += `<option value="${site.SiteID}">${site.SiteName}</option>`;
-    });
-}
-
-function populateRoomSelector(rooms) {
-    const currentValue = vi.roomSelector.value;
-    vi.roomSelector.innerHTML = '<option value="">-- Select a Room --</option>';
-    rooms.sort((a,b) => a.RoomName.localeCompare(b.RoomName)).forEach(room => {
-        vi.roomSelector.innerHTML += `<option value="${room.RoomID}">${room.RoomName}</option>`;
-    });
-    if ([...vi.roomSelector.options].some(opt => opt.value === currentValue)) {
-        vi.roomSelector.value = currentValue;
-    }
-}
-
 // --- OBJECT MANIPULATION & SELECTION ---
 function selectObject(instanceId) {
     document.querySelectorAll('.resize-handle').forEach(el => el.remove());
@@ -500,21 +470,21 @@ function showRadialMenu(x, y, instanceId) {
     const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null;
     if (!asset) return;
     const isContainer = ['Shelf', 'Container'].includes(asset.AssetType);
-    vi.radialRename.classList.toggle('hidden', asset.AssetType === 'Door' || asset.AssetType === 'Wall');
-    vi.radialFlip.classList.toggle('hidden', asset.AssetType !== 'Door');
-    vi.radialOpen.classList.toggle('hidden', !isContainer);
-    vi.radialRotate.classList.toggle('hidden', asset.AssetType === 'Wall');
-    vi.radialResize.classList.toggle('hidden', asset.AssetType === 'Door');
-    vi.radialMenu.style.left = `${x}px`;
-    vi.radialMenu.style.top = `${y}px`;
-    vi.radialMenu.classList.remove('hidden');
-    setTimeout(() => vi.radialMenu.classList.add('visible'), 10);
+    dom.radialRenameUse.classList.toggle('hidden', asset.AssetType === 'Door' || asset.AssetType === 'Wall');
+    dom.radialFlipUse.classList.toggle('hidden', asset.AssetType !== 'Door');
+    dom.radialOpenUse.classList.toggle('hidden', !isContainer);
+    dom.radialRotateUse.classList.toggle('hidden', asset.AssetType === 'Wall');
+    dom.radialResizeUse.classList.toggle('hidden', asset.AssetType === 'Door');
+    dom.radialMenu.style.left = `${x}px`;
+    dom.radialMenu.style.top = `${y}px`;
+    dom.radialMenu.classList.remove('hidden');
+    setTimeout(() => dom.radialMenu.classList.add('visible'), 10);
 }
 
 function hideRadialMenu() {
-    if (vi.radialMenu) {
-        vi.radialMenu.classList.remove('visible');
-        setTimeout(() => vi.radialMenu.classList.add('hidden'), 200);
+    if (dom.radialMenu) {
+        dom.radialMenu.classList.remove('visible');
+        setTimeout(() => dom.radialMenu.classList.add('hidden'), 200);
     }
     viState.activeRadialInstanceId = null;
     clearTimeout(hideMenuTimeout);

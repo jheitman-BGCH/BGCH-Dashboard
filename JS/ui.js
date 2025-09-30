@@ -37,7 +37,13 @@ export function initUI() {
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
         'employee-id', 'employee-row-index', 'bulk-location',
         'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to',
-        'pagination-controls-top', 'pagination-controls-bottom', 'vi-site-selector'
+        'pagination-controls-top', 'pagination-controls-bottom', 'vi-site-selector',
+        // Visual Inventory Elements
+        'room-selector', 'grid-container', 'create-room-btn',
+        'breadcrumb-container', 'room-modal', 'room-form', 'contents-modal',
+        'radial-menu', 'radial-rename-use', 'radial-flip-use', 'radial-rotate-use',
+        'radial-resize-use', 'radial-open-use', 'radial-delete-use',
+        'unplaced-asset-search', 'unplaced-assets-list'
     ];
     ids.forEach(id => {
         const key = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -141,7 +147,7 @@ export function toggleModal(modal, show) {
  * @param {string} [textKey=valueKey] - The property to use for the option's text.
  * @param {Object} [options={}] - Configuration options.
  */
-function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
+export function populateSelect(selectEl, data, valueKey, textKey, options = {}) {
     if (!selectEl) return;
     textKey = textKey || valueKey;
     const { initialOptionText, addNew } = options;
@@ -572,4 +578,3 @@ export function setupModalHierarchy() {
         populateContainerDropdownForRoom(dom.modalRoom.value);
     });
 }
-
