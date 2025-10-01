@@ -195,14 +195,6 @@ function processSheetData(values, headerMapConfig, idKey) {
         return item;
     }).filter(Boolean);
 
-    // --- NEW DEBUGGING START ---
-    if (idKey === 'AssetID' && processedData.length > 0) {
-        console.log("--- Debugging Asset Object Creation ---");
-        console.log("This is the first asset object created directly from the sheet data. Please check its properties:", processedData[0]);
-        console.log("---------------------------------------");
-    }
-    // --- NEW DEBUGGING END ---
-
     return processedData;
 }
 
@@ -275,6 +267,21 @@ function setupEventListeners() {
 
     d.cancelBtn.onclick = () => ui.toggleModal(d.assetModal, false);
     d.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.assetModal, false);
+
+    // Container Modal Listeners
+    d.addContainerBtn.onclick = () => {
+        d.containerForm.reset();
+        d.containerModalSite.value = '';
+        d.containerModalRoom.innerHTML = '<option value="">-- Select Room --</option>';
+        d.containerModalRoom.disabled = true;
+        d.containerModalParent.innerHTML = '<option value="">-- Select Parent Container --</option>';
+        d.containerModalParent.disabled = true;
+        ui.toggleModal(d.containerModal, true);
+    };
+    d.containerForm.onsubmit = handleContainerFormSubmit;
+    d.containerModal.querySelector('#cancel-container-btn').onclick = () => ui.toggleModal(d.containerModal, false);
+    d.containerModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.containerModal, false);
+
 
     ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(tabName => {
         const camelCaseName = tabName.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -403,6 +410,39 @@ async function handleAssetFormSubmit(e) {
     }
 }
 
+async function handleContainerFormSubmit(e) {
+    e.preventDefault();
+    ui.setLoading(true);
+    const d = ui.dom;
+    try {
+        const parentId = d.containerModalParent.value || d.containerModalRoom.value;
+        if (!parentId) {
+            throw new Error("A container must be placed inside a room or another container.");
+        }
+
+        const containerData = {
+            ContainerID: `CONT-${Date.now()}`,
+            ContainerName: d.containerModal.querySelector('#container-name').value,
+            ContainerType: d.containerModal.querySelector('#container-type').value,
+            ParentID: parentId,
+            Notes: d.containerModal.querySelector('#container-notes').value,
+        };
+        
+        const rowData = await api.prepareRowData(CONTAINERS_SHEET, containerData, CONTAINERS_HEADER_MAP);
+        await api.appendSheetValues(CONTAINERS_SHEET, [rowData]);
+        
+        ui.showMessage('Container added successfully!', 'success');
+        window.dispatchEvent(new CustomEvent('datachanged'));
+
+    } catch (err) {
+        console.error("Error saving container:", err);
+        ui.showMessage(`Error saving container: ${err.result?.error?.message || err.message}`);
+    } finally {
+        ui.toggleModal(d.containerModal, false);
+        ui.setLoading(false);
+    }
+}
+
 
 async function handleEmployeeFormSubmit(e) {
     e.preventDefault();
@@ -476,7 +516,6 @@ function setupBulkEditListeners() {
         document.querySelectorAll('#bulk-edit-form select, #bulk-edit-form input').forEach(el => el.disabled = true);
         document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(cb => cb.disabled = false);
         ui.toggleModal(ui.dom.bulkEditModal, true);
-        ui.setupModalHierarchy('bulk-site', 'bulk-room', 'bulk-container');
     });
     document.getElementById('bulk-cancel-btn').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
     ui.dom.bulkEditModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);

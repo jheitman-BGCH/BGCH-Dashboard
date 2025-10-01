@@ -44,7 +44,10 @@ export function initUI() {
         'radial-menu', 'radial-rename-use', 'radial-flip-use', 'radial-rotate-use',
         'radial-resize-use', 'radial-open-use', 'radial-delete-use',
         'unplaced-asset-search', 'unplaced-assets-list', 'unplaced-group-by', 'unplaced-sort-btn',
-        'unplaced-sort-icon'
+        'unplaced-sort-icon',
+        // New Container Modal Elements
+        'add-container-btn', 'container-modal', 'container-form', 'cancel-container-btn',
+        'container-modal-site', 'container-modal-room', 'container-modal-parent'
     ];
     ids.forEach(id => {
         const key = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -324,7 +327,7 @@ function renderPagination(totalPages, currentPage) {
 
         const nextButton = document.createElement('div');
         nextButton.className = 'pagination-arrow';
-        nextButton.innerHTML = `<svg xmlns="http://www.w.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
+        nextButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>`;
         nextButton.classList.toggle('disabled', currentPage === totalPages);
         if (currentPage < totalPages) {
             nextButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage + 1 }));
@@ -339,18 +342,9 @@ export function openDetailModal(assetId, openEditCallback) {
     const asset = selectors.selectAssetsById(state.allAssets).get(assetId);
     if (!asset) return;
 
-    // --- DEBUGGING START ---
-    console.log("--- Debugging openDetailModal ---");
-    console.log("1. Asset Data:", asset);
-
     const parentId = selectors.selectResolvedAssetParentId(asset, state);
-    console.log("2. Resolved Parent ID:", parentId);
-
     const locationPath = selectors.selectFullLocationPathString(state, parentId);
-    console.log("3. Final Location Path String:", locationPath);
-    console.log("---------------------------------");
-    // --- DEBUGGING END ---
-
+    
     dom.detailModalTitle.textContent = asset.AssetName || 'Asset Details';
     const detailHeaders = ASSET_HEADER_MAP.map(h => h.key).filter(h => !['Site', 'Location', 'Container', 'LoginInfo', 'ParentObjectID', 'AssetID'].includes(h));
 
@@ -405,9 +399,10 @@ export function populateAssetForm(asset = {}) {
     const container = path.find(p => p.ContainerID);
 
     dom.modalSite.value = site ? site.SiteID : '';
-    populateRoomDropdownForSite(site ? site.SiteID : null); // Populate rooms based on site
+    // Trigger change to populate children, then set their values
+    dom.modalSite.dispatchEvent(new Event('change'));
     dom.modalRoom.value = room ? room.RoomID : '';
-    populateContainerDropdownForRoom(room ? room.RoomID : null); // Populate containers based on room
+    dom.modalRoom.dispatchEvent(new Event('change'));
     dom.modalContainer.value = container ? container.ContainerID : '';
 }
 
@@ -552,30 +547,55 @@ export function renderOverviewCharts(chartData, clickCallback) {
 }
 
 // --- HIERARCHICAL MODAL DROPDOWNS ---
-function populateRoomDropdownForSite(siteId) {
+function populateRoomDropdownForSite(siteId, roomEl, containerEl) {
+    if (!roomEl || !containerEl) return;
     const rooms = siteId ? selectors.selectRoomsBySiteId(getState(), siteId) : [];
-    populateSelect(dom.modalRoom, rooms, 'RoomID', 'RoomName', { initialOptionText: '-- Select Room --' });
-    dom.modalRoom.disabled = !siteId;
-    // Also reset and disable container
-    dom.modalContainer.innerHTML = '<option value="">-- Select Container --</option>';
-    dom.modalContainer.disabled = true;
+    populateSelect(roomEl, rooms, 'RoomID', 'RoomName', { initialOptionText: '-- Select Room --' });
+    roomEl.disabled = !siteId;
+    
+    const placeholder = containerEl.id.includes('parent') ? '-- Select Parent Container --' : '-- Select Container --';
+    containerEl.innerHTML = `<option value="">${placeholder}</option>`;
+    containerEl.disabled = true;
 }
 
-function populateContainerDropdownForRoom(roomId) {
+function populateContainerDropdownForRoom(roomId, containerEl) {
+    if (!containerEl) return;
     const containers = roomId ? selectors.selectContainersByParentId(getState(), roomId) : [];
-    populateSelect(dom.modalContainer, containers, 'ContainerID', 'ContainerName', { initialOptionText: '-- Select Container --' });
-    dom.modalContainer.disabled = !roomId;
+    const placeholder = containerEl.id.includes('parent') ? '-- Select Parent Container --' : '-- Select Container --';
+    populateSelect(containerEl, containers, 'ContainerID', 'ContainerName', { initialOptionText: placeholder });
+    containerEl.disabled = !roomId;
 }
 
 export function setupModalHierarchy() {
-    // Populate top-level sites initially
+    // For Asset Modal
     populateSelect(dom.modalSite, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select Site --' });
-
     dom.modalSite.addEventListener('change', () => {
-        populateRoomDropdownForSite(dom.modalSite.value);
+        populateRoomDropdownForSite(dom.modalSite.value, dom.modalRoom, dom.modalContainer);
+    });
+    dom.modalRoom.addEventListener('change', () => {
+        populateContainerDropdownForRoom(dom.modalRoom.value, dom.modalContainer);
     });
 
-    dom.modalRoom.addEventListener('change', () => {
-        populateContainerDropdownForRoom(dom.modalRoom.value);
+    // For New Container Modal
+    populateSelect(dom.containerModalSite, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select Site --' });
+    dom.containerModalSite.addEventListener('change', () => {
+        populateRoomDropdownForSite(dom.containerModalSite.value, dom.containerModalRoom, dom.containerModalParent);
     });
+    dom.containerModalRoom.addEventListener('change', () => {
+        populateContainerDropdownForRoom(dom.containerModalRoom.value, dom.containerModalParent);
+    });
+    
+    // For Bulk Edit Modal
+    const bulkSiteEl = document.getElementById('bulk-site');
+    const bulkRoomEl = document.getElementById('bulk-room');
+    const bulkContainerEl = document.getElementById('bulk-container');
+    if (bulkSiteEl) {
+        populateSelect(bulkSiteEl, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select Site --' });
+        bulkSiteEl.addEventListener('change', (e) => {
+            populateRoomDropdownForSite(e.target.value, bulkRoomEl, bulkContainerEl);
+        });
+        bulkRoomEl.addEventListener('change', (e) => {
+            populateContainerDropdownForRoom(e.target.value, bulkContainerEl);
+        });
+    }
 }

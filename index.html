@@ -57,6 +57,7 @@
             <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
                 <div class="flex gap-4">
                     <button id="add-asset-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700">Add New Asset</button>
+                    <button id="add-container-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Add New Container</button>
                     <button id="bulk-edit-btn" class="hidden bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-yellow-600">Bulk Edit Selected</button>
                 </div>
                 <div class="flex items-center gap-4">
@@ -263,6 +264,52 @@
     </div>
 
     <!-- Modals -->
+    <div id="container-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-2xl">
+            <form id="container-form" class="p-8">
+                <h2 id="container-modal-title" class="text-2xl font-bold mb-6">Add New Container</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                        <label for="container-name" class="form-label">Container Name</label>
+                        <input type="text" id="container-name" required class="form-input">
+                    </div>
+                    <div>
+                        <label for="container-type" class="form-label">Container Type</label>
+                        <input type="text" id="container-type" placeholder="e.g., Box, Cabinet, Bin" class="form-input">
+                    </div>
+                    
+                    <!-- Hierarchical Location -->
+                    <div>
+                        <label for="container-modal-site" class="form-label">Site</label>
+                        <select id="container-modal-site" class="form-select"></select>
+                    </div>
+                    <div>
+                        <label for="container-modal-room" class="form-label">Room</label>
+                        <select id="container-modal-room" class="form-select" disabled></select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="container-modal-parent" class="form-label">Parent Container (Optional)</label>
+                        <select id="container-modal-parent" class="form-select" disabled></select>
+                        <p class="text-xs text-gray-500 mt-1">Select a parent if this container is inside another container.</p>
+                    </div>
+                    <!-- End Hierarchical Location -->
+
+                    <div class="md:col-span-2">
+                        <label for="container-notes" class="form-label">Notes</label>
+                        <textarea id="container-notes" rows="3" class="form-textarea"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="cancel-container-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" id="save-container-btn" class="btn-primary">Save Container</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="asset-modal" class="modal-container hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-content max-w-2xl">
@@ -563,4 +610,3 @@
     <script type="module" src="JS/main.js"></script>
 </body>
 </html>
-

@@ -67,6 +67,7 @@ export const ROOMS_HEADER_MAP = [
 export const CONTAINERS_HEADER_MAP = [
     { key: "ContainerID", aliases: ["ContainerID", "Container ID"] },
     { key: "ContainerName", aliases: ["ContainerName", "Container Name"] },
+    { key: "ContainerType", aliases: ["ContainerType", "Container Type"] },
     { key: "ParentID", aliases: ["ParentID", "Parent ID"] },
     { key: "Notes", aliases: ["Notes"] }
 ];
