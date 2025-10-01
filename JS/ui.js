@@ -127,19 +127,10 @@ export function showMessage(text, type = 'error') {
  */
 export function toggleModal(modal, show) {
     if (!modal) return;
-    const backdrop = modal.querySelector('.modal-backdrop');
-    const content = modal.querySelector('.modal-content');
-
     if (show) {
         modal.classList.remove('hidden');
-        setTimeout(() => {
-            backdrop?.classList.remove('opacity-0');
-            content?.classList.remove('opacity-0', 'scale-95');
-        }, 10);
     } else {
-        backdrop?.classList.add('opacity-0');
-        content?.classList.add('opacity-0', 'scale-95');
-        setTimeout(() => modal.classList.add('hidden'), 300);
+        modal.classList.add('hidden');
     }
 }
 
@@ -599,3 +590,4 @@ export function setupModalHierarchy() {
         });
     }
 }
+
