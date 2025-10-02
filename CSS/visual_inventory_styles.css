@@ -1,5 +1,88 @@
 /* CSS/visual_inventory_styles.css */
 
+/* --- [RESTORED] Main Panel and Layout Styles --- */
+#visual-inventory-panel {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: #f9fafb; /* gray-50 */
+    min-height: 80vh;
+}
+
+#vi-left-panel {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+#vi-main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.vi-card {
+    background-color: white;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb; /* gray-200 */
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.vi-card-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.vi-card-title {
+    font-weight: 600;
+    color: #1f2937; /* gray-800 */
+}
+
+.vi-card-body {
+    padding: 1rem;
+}
+
+#unplaced-assets-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#unplaced-assets-list-wrapper {
+    overflow-y: auto;
+    height: 100%;
+    flex-grow: 1;
+    padding: 0.5rem;
+    background-color: #f3f4f6; /* gray-100 */
+    border-radius: 0.375rem;
+}
+
+#unplaced-assets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+
+/* --- [RESTORED] Toolbar and Controls Styles --- */
+.vi-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.vi-breadcrumb-container {
+    font-size: 0.875rem;
+    color: #6b7280; /* gray-500 */
+}
+
 /* --- Grid and Room Styles --- */
 #room-grid-container {
     background-color: #f7fafc; /* gray-100 */
@@ -8,7 +91,6 @@
     position: relative;
     min-height: 60vh;
     border-radius: 0.5rem;
-    /* Added padding */
     padding: 1rem;
 }
 
@@ -17,11 +99,9 @@
     position: relative;
     height: 100%;
     width: 100%;
-    /* Darker gridlines for better visibility */
     background-image:
         linear-gradient(to right, #d1d5db 1px, transparent 1px),
         linear-gradient(to bottom, #d1d5db 1px, transparent 1px);
-    /* background-size is now set dynamically via JS */
 }
 
 /* --- Visual Object Styles --- */
@@ -36,7 +116,6 @@
     white-space: nowrap;
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
     cursor: grab;
-    /* Added margin for padding around the object */
     margin: 4px;
     box-sizing: border-box;
 }
@@ -50,213 +129,103 @@
     z-index: 10;
 }
 
-.visual-object.shelf {
-    background-color: #fefcbf; /* yellow-100 */
-    border: 2px solid #f59e0b; /* yellow-500 */
-    color: #b45309; /* yellow-800 */
-}
-
-.visual-object.container {
-    background-color: #dbeafe; /* blue-100 */
-    border: 2px solid #3b82f6; /* blue-500 */
-    color: #1e3a8a; /* blue-800 */
-}
-
-.visual-object.asset-item {
-     background-color: #e5e7eb; /* gray-200 */
-    border: 1px solid #6b7280; /* gray-500 */
-    color: #1f2937; /* gray-800 */
-}
-
-.visual-object.wall {
-    background-color: #4b5563; /* gray-600 */
-    border: 1px solid #1f2937; /* gray-800 */
-}
-
-.visual-object.door {
-    background-color: transparent;
-    border: 2px solid #9ca3af; /* gray-400 */
-}
-
-.visual-object.door svg {
-    width: 100%;
-    height: 100%;
-    fill: #4b5563; /* gray-600 */
-    transition: transform 0.2s ease-in-out;
-}
+.visual-object.shelf { background-color: #fefcbf; border: 2px solid #f59e0b; color: #b45309; }
+.visual-object.container { background-color: #dbeafe; border: 2px solid #3b82f6; color: #1e3a8a; }
+.visual-object.asset-item { background-color: #e5e7eb; border: 1px solid #6b7280; color: #1f2937; }
+.visual-object.wall { background-color: #4b5563; border: 1px solid #1f2937; }
+.visual-object.door { background-color: transparent; border: 2px solid #9ca3af; }
+.visual-object.door svg { width: 100%; height: 100%; fill: #4b5563; transition: transform 0.2s ease-in-out; }
 
 /* --- Dragging Styles --- */
-.dragging-source {
-    opacity: 0.3;
-    transition: opacity 0.2s ease;
-}
-
-.dragging-ghost {
+.dragging-source { opacity: 0.3; transition: opacity 0.2s ease; }
+#drag-ghost-container { /* This is the new container for drag ghosts */
     position: absolute;
     z-index: 1000;
     pointer-events: none;
     opacity: 0.8;
-    transition: transform 0.1s ease-out; /* Smooth lift effect */
-    transform: scale(1.05); /* Slightly bigger to feel "lifted" */
+    transition: transform 0.1s ease-out;
+    transform: scale(1.05);
 }
 
 /* --- Global Hover Tooltip --- */
 #inventory-global-tooltip {
     display: none;
-    position: fixed; /* Use fixed to escape parent overflow */
-    background-color: #1f2937; /* gray-800 */
+    position: fixed;
+    background-color: #1f2937;
     color: white;
     padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem; /* rounded-md */
-    font-size: 0.875rem; /* text-sm */
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
     line-height: 1.2;
     text-align: center;
     white-space: nowrap;
-    z-index: 2000; /* High z-index */
+    z-index: 2000;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-    pointer-events: none; /* Make sure it doesn't interfere with mouse events */
+    pointer-events: none;
 }
 
 /* --- Toolbar & Unplaced Assets --- */
-.toolbar-item {
-    cursor: grab;
-    border-radius: 0.375rem;
-    padding: 0.5rem 1rem;
-    font-weight: 500;
-    transition: background-color 0.2s;
-    user-select: none;
-}
-.toolbar-item:active {
-    cursor: grabbing;
-}
+.toolbar-item { cursor: grab; border-radius: 0.375rem; padding: 0.5rem 1rem; font-weight: 500; transition: background-color 0.2s; user-select: none; }
+.toolbar-item:active { cursor: grabbing; }
+.toolbar-item:hover { background-color: #e5e7eb; }
 
-.toolbar-item:hover {
-    background-color: #e5e7eb; /* gray-200 */
-}
+.unplaced-asset-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; font-size: 0.875rem; line-height: 1.25rem; border-left: 4px solid #d1d5db; background-color: #fff; border-radius: 0.25rem; cursor: grab; transition: background-color 0.2s; }
+.unplaced-asset-item:hover { background-color: #f9fafb; }
+.unplaced-asset-icon { font-size: 1rem; line-height: 1; flex-shrink: 0; }
+.unplaced-asset-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* CORRECTED: Unplaced Asset Item Styling */
-.unplaced-asset-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem; /* Space between icon and text */
-    padding: 0.5rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    border-left: 4px solid #d1d5db; /* Default color: gray-400 */
-    background-color: #fff;
-    border-radius: 0.25rem;
-    cursor: grab;
-    transition: background-color 0.2s;
-}
-
-.unplaced-asset-item:hover {
-    background-color: #f9fafb; /* gray-50 */
-}
-
-.unplaced-asset-icon {
-    font-size: 1rem;
-    line-height: 1;
-    flex-shrink: 0; /* Prevent icon from shrinking */
-}
-
-.unplaced-asset-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* REMOVED the ::before pseudo-element rules that were adding the duplicate emoji */
-
-/* Specific BORDER COLORS for Unplaced Assets (Icons are now handled in JS) */
-.unplaced-asset-item[data-asset-type*="laptop"] { border-left-color: #3b82f6; } /* blue-500 */
+/* Specific BORDER COLORS for Unplaced Assets */
+.unplaced-asset-item[data-asset-type*="laptop"] { border-left-color: #3b82f6; }
 .unplaced-asset-item[data-asset-type*="computer"] { border-left-color: #3b82f6; }
-.unplaced-asset-item[data-asset-type*="monitor"] { border-left-color: #10b981; } /* emerald-500 */
-.unplaced-asset-item[data-asset-type*="tv"] { border-left-color: #ec4899; } /* pink-500 */
-.unplaced-asset-item[data-asset-type*="tablet"] { border-left-color: #0ea5e9; } /* sky-500 */
-.unplaced-asset-item[data-asset-type*="chair"] { border-left-color: #a855f7; } /* purple-500 */
-.unplaced-asset-item[data-asset-type*="container"] { border-left-color: #f59e0b; } /* amber-500 */
-.unplaced-asset-item[data-asset-type*="shelf"] { border-left-color: #84cc16; } /* lime-500 */
-.unplaced-asset-item[data-asset-type*="projector"] { border-left-color: #6366f1; } /* indigo-500 */
+.unplaced-asset-item[data-asset-type*="monitor"] { border-left-color: #10b981; }
+.unplaced-asset-item[data-asset-type*="tv"] { border-left-color: #ec4899; }
+.unplaced-asset-item[data-asset-type*="tablet"] { border-left-color: #0ea5e9; }
+.unplaced-asset-item[data-asset-type*="chair"] { border-left-color: #a855f7; }
+.unplaced-asset-item[data-asset-type*="container"] { border-left-color: #f59e0b; }
+.unplaced-asset-item[data-asset-type*="shelf"] { border-left-color: #84cc16; }
+.unplaced-asset-item[data-asset-type*="projector"] { border-left-color: #6366f1; }
 
+.unplaced-group-header { font-weight: 600; font-size: 0.75rem; color: #4b5563; padding: 0.5rem 0.25rem; margin-top: 0.75rem; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; letter-spacing: 0.05em; }
 
-/* NEW: Unplaced Asset Group Header */
-.unplaced-group-header {
-    font-weight: 600; /* semibold */
-    font-size: 0.75rem; /* text-xs */
-    color: #4b5563; /* text-gray-600 */
-    padding: 0.5rem 0.25rem;
-    margin-top: 0.75rem;
-    border-bottom: 1px solid #e5e7eb; /* border-gray-200 */
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-
-/* --- Object Selection & Controls Styles --- */
+/* --- [NEW] Object Selection Style --- */
 .visual-object.selected {
-    outline: 2px dashed #4f46e5; /* indigo-600 */
-    outline-offset: 2px;
+    outline: 2px solid #4f46e5; /* indigo-600 */
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5), 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     z-index: 20;
 }
 
-/* --- New Radial Menu using SVG Sprite --- */
-.radial-menu {
-    position: fixed;
-    /* Reduced size by ~15% from 200px */
-    width: 170px;
-    height: 170px;
-    z-index: 1000;
-    pointer-events: none;
-    transform: translate(-50%, -50%) scale(0.8);
-    opacity: 0;
-    /* Adjusted transition for a smoother fade */
-    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease-out;
-}
-
-.radial-menu.visible {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-}
-
-.radial-svg-container {
-    width: 100%;
-    height: 100%;
-    pointer-events: all; /* The SVG itself is interactive */
-}
-
-.radial-button {
-    cursor: pointer;
-    opacity: 0.8; /* Dimmed by default */
-    transition: opacity 0.15s ease-in-out, filter 0.15s ease-in-out;
-}
-
-.radial-button.hidden {
-    display: none;
-}
-
-.radial-button:hover {
-    opacity: 1; /* Full opacity on hover */
-    filter: brightness(1.1) saturate(1.2); /* Add a pop effect */
-}
-
-/* Specific hover effect for the delete button to make it more vibrant */
-#radial-delete-use:hover {
-    filter: brightness(1.25);
-}
-
+/* --- Radial Menu --- */
+.radial-menu { position: fixed; width: 170px; height: 170px; z-index: 1000; pointer-events: none; transform: translate(-50%, -50%) scale(0.8); opacity: 0; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease-out; }
+.radial-menu.visible { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.radial-svg-container { width: 100%; height: 100%; pointer-events: all; }
+.radial-button { cursor: pointer; opacity: 0.8; transition: opacity 0.15s ease-in-out, filter 0.15s ease-in-out; }
+.radial-button.hidden { display: none; }
+.radial-button:hover { opacity: 1; filter: brightness(1.1) saturate(1.2); }
+#radial-delete-use:hover { filter: brightness(1.25); }
 
 /* --- Resize Handles --- */
-.resize-handle {
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background-color: #fff;
-    border: 2px solid #4f46e5;
-    border-radius: 50%;
-    z-index: 30;
-}
+.resize-handle { position: absolute; width: 12px; height: 12px; background-color: #fff; border: 2px solid #4f46e5; border-radius: 50%; z-index: 30; }
 .resize-handle.n { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
 .resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
 .resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
 .resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+
+/* --- [NEW] Snapping and Alignment Guides --- */
+.snap-guide {
+    position: absolute;
+    background-color: rgba(239, 68, 68, 0.8); /* red-500 with opacity */
+    pointer-events: none;
+    z-index: 500; /* High z-index to be on top */
+    box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+}
+.snap-guide.vertical {
+    width: 1px;
+    height: 100%;
+    top: 0;
+}
+.snap-guide.horizontal {
+    height: 1px;
+    width: 100%;
+    left: 0;
+}
 
