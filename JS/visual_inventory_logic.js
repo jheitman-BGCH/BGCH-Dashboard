@@ -58,6 +58,24 @@ function getEmojiForAssetType(assetType) {
 let globalTooltip = null;
 
 // --- INITIALIZATION ---
+
+// NEW: Restored handleToolbarDragStart function
+function handleToolbarDragStart(e) {
+    const target = e.target;
+    const data = {
+        type: 'new-object',
+        assetType: target.dataset.assetType,
+        name: target.dataset.name,
+        width: parseInt(target.dataset.width || 1),
+        height: parseInt(target.dataset.height || 1),
+        shelfRows: parseInt(target.dataset.shelfRows || 0),
+        shelfCols: parseInt(target.dataset.shelfCols || 0),
+        referenceId: null // It's a new structural item, not based on an existing asset
+    };
+    e.dataTransfer.setData('application/json', JSON.stringify(data));
+    e.dataTransfer.effectAllowed = 'copy';
+}
+
 function setupAndBindVisualInventory() {
     if (viListenersInitialized) return true;
     if (!dom.viSiteSelector) return false;
@@ -127,6 +145,7 @@ function setupAndBindVisualInventory() {
 
 export function initVisualInventory() {
     if (!setupAndBindVisualInventory()) return;
+    dom.visualInventoryPanel.classList.remove('hidden'); // Ensure panel is visible
     populateSelect(dom.viSiteSelector, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select a Site --' });
     renderUnplacedAssets(null);
     const lastSiteId = localStorage.getItem('lastActiveViSiteId');
@@ -778,3 +797,4 @@ function createObjectResizeHandles(objEl, instanceId) { /*...*/ }
 function initResize(e, instanceId, direction) { /*...*/ }
 function showTooltip(event, objectData, assetsById) { /*...*/ }
 function hideTooltip() { /*...*/ }
+
