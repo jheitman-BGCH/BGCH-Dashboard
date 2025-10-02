@@ -1,14 +1,6 @@
 /* CSS/visual_inventory_styles.css */
 
 /* --- [RESTORED] Main Panel and Layout Styles --- */
-#visual-inventory-panel {
-    display: flex;
-    gap: 1rem;
-    padding: 1rem;
-    background-color: #f9fafb; /* gray-50 */
-    min-height: 80vh;
-}
-
 #vi-left-panel {
     width: 280px;
     flex-shrink: 0;
@@ -228,4 +220,3 @@
     width: 100%;
     left: 0;
 }
-
