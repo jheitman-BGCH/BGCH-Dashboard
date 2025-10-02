@@ -1,6 +1,6 @@
 /* CSS/visual_inventory_styles.css */
 
-/* --- [RESTORED] Main Panel and Layout Styles --- */
+/* --- Main Panel and Layout Styles --- */
 #vi-left-panel {
     width: 280px;
     flex-shrink: 0;
@@ -62,7 +62,7 @@
 }
 
 
-/* --- [RESTORED] Toolbar and Controls Styles --- */
+/* --- Toolbar and Controls Styles --- */
 .vi-toolbar {
     display: flex;
     align-items: center;
@@ -86,59 +86,17 @@
     padding: 1rem;
 }
 
+/* The #room-grid div now acts as a container for the canvas. */
+/* Sizing is handled by the script to maintain aspect ratio. */
 #room-grid {
-    display: grid;
-    position: relative;
-    height: 100%;
-    width: 100%;
-    background-image:
-        linear-gradient(to right, #d1d5db 1px, transparent 1px),
-        linear-gradient(to bottom, #d1d5db 1px, transparent 1px);
-    background-size: 1fr 1fr; /* Will be updated by JS */
+    background-color: #ffffff;
 }
 
-/* --- Visual Object Styles --- */
-.visual-object {
-    position: relative;
-    border-radius: 0.375rem;
-    transition: all 0.2s ease-in-out;
-    font-size: 0.75rem;
-    font-weight: 500;
-    overflow: visible; 
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    cursor: grab;
-    margin: 4px;
-    box-sizing: border-box;
-}
-.visual-object:active {
-    cursor: grabbing;
+/* The canvas itself gets a cursor style. */
+canvas {
+    cursor: default;
 }
 
-.visual-object:not(.floor-patch):hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    z-index: 15;
-}
-
-.visual-object.shelf { background-color: #fefcbf; border: 2px solid #f59e0b; color: #b45309; }
-.visual-object.container { background-color: #dbeafe; border: 2px solid #3b82f6; color: #1e3a8a; }
-.visual-object.asset-item { background-color: #e5e7eb; border: 1px solid #6b7280; color: #1f2937; }
-.visual-object.wall { background-color: #4b5563; border: 1px solid #1f2937; }
-.visual-object.door { background-color: transparent; border: 2px solid #9ca3af; }
-.visual-object.door svg { width: 100%; height: 100%; fill: #4b5563; transition: transform 0.2s ease-in-out; }
-
-/* --- Dragging Styles --- */
-.dragging-source { opacity: 0.3; transition: opacity 0.2s ease; }
-#drag-ghost-container { /* This is the new container for drag ghosts */
-    position: absolute;
-    z-index: 1000;
-    pointer-events: none;
-    opacity: 0.8;
-    transition: transform 0.1s ease-out;
-    transform: scale(1.05);
-}
 
 /* --- Global Hover Tooltip --- */
 #inventory-global-tooltip {
@@ -180,12 +138,6 @@
 
 .unplaced-group-header { font-weight: 600; font-size: 0.75rem; color: #4b5563; padding: 0.5rem 0.25rem; margin-top: 0.75rem; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; letter-spacing: 0.05em; }
 
-/* --- [NEW] Object Selection Style --- */
-.visual-object.selected {
-    outline: 2px solid #4f46e5; /* indigo-600 */
-    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5), 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    z-index: 20;
-}
 
 /* --- Radial Menu --- */
 .radial-menu { position: fixed; width: 170px; height: 170px; z-index: 1000; pointer-events: none; transform: translate(-50%, -50%) scale(0.8); opacity: 0; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease-out; }
@@ -195,42 +147,3 @@
 .radial-button.hidden { display: none; }
 .radial-button:hover { opacity: 1; filter: brightness(1.1) saturate(1.2); }
 #radial-delete-use:hover { filter: brightness(1.25); }
-
-/* --- Resize Handles --- */
-.resize-handle { position: absolute; width: 12px; height: 12px; background-color: #fff; border: 2px solid #4f46e5; border-radius: 50%; z-index: 30; }
-.resize-handle.n { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
-.resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
-.resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
-.resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
-
-/* --- [NEW] Snapping and Alignment Guides --- */
-.snap-guide {
-    position: absolute;
-    background-color: rgba(239, 68, 68, 0.8); /* red-500 with opacity */
-    pointer-events: none;
-    z-index: 500; /* High z-index to be on top */
-    box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
-}
-.snap-guide.vertical {
-    width: 1px;
-    height: 100%;
-    top: 0;
-}
-.snap-guide.horizontal {
-    height: 1px;
-    width: 100%;
-    left: 0;
-}
-
-/* --- [NEW] Floor Patch Styles --- */
-.visual-object.floor-patch {
-    z-index: 1;
-    border-radius: 0;
-    box-shadow: none;
-    border: 1px dashed rgba(0, 0, 0, 0.1);
-    cursor: default;
-}
-
-.visual-object.floor-patch.carpet { background-color: #f3e9d2; }
-.visual-object.floor-patch.tile { background-color: #e5e7eb; }
-.visual-object.floor-patch.wood { background-color: #d1b7a0; }

@@ -12,25 +12,21 @@ let viState = {
     activeRoomId: null,
     activeParentId: null,
     breadcrumbs: [],
-    selectedInstanceIds: [], // MODIFIED: Was selectedInstanceId, now an array for multi-select
+    selectedInstanceIds: [],
     activeRadialInstanceId: null,
     unplacedAssetSort: 'asc',
     unplacedAssetGroupBy: 'none',
-    clipboard: null, // NEW: For copy/paste functionality
+    clipboard: null,
 };
+
+// --- NEW: Konva State ---
+let stage, gridLayer, objectsLayer;
+let cellWidth, cellHeight;
 
 // --- DOM REFERENCES & FLAGS ---
 let viListenersInitialized = false;
 let hideMenuTimeout;
-
-// --- NEW: Drag and Snap State ---
-let dragState = {
-    isDragging: false,
-    primaryElement: null,
-    draggedInstances: [], // Holds data for all items being dragged
-    offsets: [], // Relative offsets for multi-drag
-    snapLines: [] // DOM elements for snap guides
-};
+let globalTooltip = null;
 
 
 // --- EMOJI MAPPING ---
@@ -54,30 +50,8 @@ function getEmojiForAssetType(assetType) {
     return '📄';
 }
 
-// --- DRAG STATE & GLOBAL UI ---
-let globalTooltip = null;
 
 // --- INITIALIZATION ---
-
-function handleToolbarDragStart(e) {
-    const target = e.target;
-    // For floor patches, we create a specific asset type.
-    // For other items, it remains generic until dropped.
-    const assetType = target.dataset.assetType;
-    const data = {
-        type: 'new-object',
-        assetType: assetType,
-        name: target.dataset.name,
-        width: parseInt(target.dataset.width || 1),
-        height: parseInt(target.dataset.height || 1),
-        shelfRows: parseInt(target.dataset.shelfRows || 0),
-        shelfCols: parseInt(target.dataset.shelfCols || 0),
-        referenceId: null 
-    };
-    e.dataTransfer.setData('application/json', JSON.stringify(data));
-    e.dataTransfer.effectAllowed = 'copy';
-}
-
 function setupAndBindVisualInventory() {
     if (viListenersInitialized) return true;
     if (!dom.viSiteSelector) return false;
@@ -117,14 +91,26 @@ function setupAndBindVisualInventory() {
         renderUnplacedAssets(viState.activeSiteId);
     });
 
-    document.querySelectorAll('.toolbar-item').forEach(item => item.addEventListener('dragstart', handleToolbarDragStart));
+    document.querySelectorAll('.toolbar-item').forEach(item => item.addEventListener('dragstart', (e) => {
+        const target = e.target;
+        const data = {
+            type: 'new-object',
+            assetType: target.dataset.assetType,
+            name: target.dataset.name,
+            width: parseInt(target.dataset.width || 1),
+            height: parseInt(target.dataset.height || 1),
+            shelfRows: parseInt(target.dataset.shelfRows || 0),
+            shelfCols: parseInt(target.dataset.shelfCols || 0),
+            referenceId: null 
+        };
+        e.dataTransfer.setData('application/json', JSON.stringify(data));
+        e.dataTransfer.effectAllowed = 'copy';
+    }));
 
-    dom.gridContainer.addEventListener('dragover', handleGridDragOver);
+    // Listen for drops on the container, which holds the canvas
+    dom.gridContainer.addEventListener('dragover', (e) => e.preventDefault());
     dom.gridContainer.addEventListener('drop', handleGridDrop);
-    dom.gridContainer.addEventListener('click', (e) => {
-        if (e.target === dom.gridContainer || e.target.id === 'room-grid') selectObject(null);
-    });
-
+    
     document.addEventListener('click', (e) => {
         if (dom.radialMenu && !dom.radialMenu.contains(e.target) && !e.target.closest('.visual-object')) hideRadialMenu();
     });
@@ -138,7 +124,6 @@ function setupAndBindVisualInventory() {
     dom.radialOpenUse.addEventListener('click', () => { handleOpen(viState.activeRadialInstanceId); hideRadialMenu(); });
     dom.radialDeleteUse.addEventListener('click', async () => { await handleDelete([viState.activeRadialInstanceId]); hideRadialMenu(); });
     
-    // NEW: Add keyboard shortcuts listener
     document.addEventListener('keydown', handleKeyDown);
 
     viListenersInitialized = true;
@@ -147,7 +132,7 @@ function setupAndBindVisualInventory() {
 
 export function initVisualInventory() {
     if (!setupAndBindVisualInventory()) return;
-    dom.visualInventoryPanel.classList.remove('hidden'); // Ensure panel is visible
+    dom.visualInventoryPanel.classList.remove('hidden');
     populateSelect(dom.viSiteSelector, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select a Site --' });
     renderUnplacedAssets(null);
     const lastSiteId = localStorage.getItem('lastActiveViSiteId');
@@ -164,7 +149,7 @@ export function initVisualInventory() {
     }
 }
 
-// --- UNPLACED ASSETS ---
+// --- UNPLACED ASSETS (Logic unchanged) ---
 function createUnplacedAssetElement(asset) {
     const itemEl = document.createElement('div');
     itemEl.className = 'unplaced-asset-item';
@@ -183,8 +168,6 @@ function renderUnplacedAssets(siteId) {
     if (!dom.unplacedAssetsList) return;
     const state = getState();
     const placedReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
-
-    // Combine assets and containers into a single list of placeable items
     const allAssets = state.allAssets;
     const allContainers = state.allContainers.map(c => ({
         AssetID: c.ContainerID,
@@ -193,8 +176,6 @@ function renderUnplacedAssets(siteId) {
         ParentObjectID: c.ParentID,
         isContainer: true
     }));
-
-    // Use a Map to combine and de-duplicate
     const combinedItemsMap = new Map();
     allAssets.forEach(a => combinedItemsMap.set(a.AssetID, a));
     allContainers.forEach(c => {
@@ -203,49 +184,32 @@ function renderUnplacedAssets(siteId) {
         }
     });
     const allItems = Array.from(combinedItemsMap.values());
-    
-    // Filter for items that are not yet placed on any grid
     let unplacedItems = allItems.filter(item => !placedReferenceIDs.has(item.AssetID));
-    
-    // Filter for items that are 'top-level' (not inside another container) and belong to the selected site
     const containerIds = new Set(state.allContainers.map(c => c.ContainerID));
     let displayableUnplacedItems = unplacedItems.filter(item => {
         const parentId = selectors.selectResolvedAssetParentId(item, state);
-        
-        // Item should not be displayed if it has no parent or its parent is a container
-        if (!parentId || containerIds.has(parentId)) {
-            return false;
-        }
-
-        // If a site is selected, the item must belong to that site
+        if (!parentId || containerIds.has(parentId)) return false;
         if (siteId) {
             const path = selectors.selectFullLocationPath(state, parentId);
             const itemSite = path.find(p => p.SiteID);
             return itemSite ? itemSite.SiteID === siteId : false;
         }
-
-        return true; // If no site is selected, we passed the container check, so it's displayable
+        return true;
     });
-    
-    // If a specific room is active, further filter down to only items in that room
     if (viState.activeRoomId) {
         displayableUnplacedItems = displayableUnplacedItems.filter(item => {
             const parentId = selectors.selectResolvedAssetParentId(item, state);
             return parentId === viState.activeRoomId;
         });
     }
-
-    // Apply search filter, sort, and then render
     let finalItems = filterData(displayableUnplacedItems, dom.unplacedAssetSearch.value, ['AssetName', 'AssetType', 'IDCode']);
     finalItems.sort((a, b) => (a.AssetName || '').localeCompare(b.AssetName || ''));
     if (viState.unplacedAssetSort === 'desc') finalItems.reverse();
-
     dom.unplacedAssetsList.innerHTML = '';
     if (finalItems.length === 0) {
         dom.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced items found for this view.</p>`;
         return;
     }
-
     if (viState.unplacedAssetGroupBy === 'assetType') {
         const grouped = finalItems.reduce((acc, item) => {
             const type = item.AssetType || 'Uncategorized';
@@ -266,140 +230,18 @@ function renderUnplacedAssets(siteId) {
 }
 
 // --- DRAG AND DROP ---
-function handleObjectDragStart(e, objectData) {
-    e.stopPropagation();
-    const state = getState();
-    dragState.isDragging = true;
-
-    // If the dragged item is part of a selection, drag all selected items. Otherwise, just drag the one item.
-    const isMultiDragging = viState.selectedInstanceIds.includes(objectData.InstanceID);
-    const idsToDrag = isMultiDragging ? viState.selectedInstanceIds : [objectData.InstanceID];
-    
-    dragState.draggedInstances = idsToDrag.map(id => state.spatialLayoutData.find(i => i.InstanceID === id)).filter(Boolean);
-    
-    const primaryInstance = dragState.draggedInstances.find(i => i.InstanceID === objectData.InstanceID);
-    
-    // Calculate offsets from the primary dragged element
-    dragState.offsets = dragState.draggedInstances.map(instance => ({
-        x: instance.PosX - primaryInstance.PosX,
-        y: instance.PosY - primaryInstance.PosY
-    }));
-    
-    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'move', instanceId: objectData.InstanceID }));
-    e.dataTransfer.effectAllowed = 'move';
-    
-    // Use a transparent image as drag image to hide the default ghost
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(img, 0, 0);
-
-    // Create a custom ghost for visual feedback
-    const ghostContainer = document.createElement('div');
-    ghostContainer.id = 'drag-ghost-container';
-    ghostContainer.style.position = 'absolute';
-    ghostContainer.style.pointerEvents = 'none';
-    ghostContainer.style.zIndex = '1000';
-    document.body.appendChild(ghostContainer);
-    dragState.primaryElement = ghostContainer;
-
-    dragState.draggedInstances.forEach(instance => {
-        const el = document.querySelector(`[data-instance-id="${instance.InstanceID}"]`);
-        if(el) {
-            const clone = el.cloneNode(true);
-            clone.style.position = 'absolute';
-            const offset = dragState.offsets.find(o => o.x === instance.PosX - primaryInstance.PosX && o.y === instance.PosY - primaryInstance.PosY);
-            clone.style.left = `${offset.x * 40}px`; // Approximate cell width for initial placement
-            clone.style.top = `${offset.y * 40}px`;
-            ghostContainer.appendChild(clone);
-            el.classList.add('dragging-source');
-        }
-    });
-
-    moveDragGhost(e);
-}
-
-function moveDragGhost(e) {
-    if (!dragState.primaryElement) return;
-    dragState.primaryElement.style.left = `${e.pageX}px`;
-    dragState.primaryElement.style.top = `${e.pageY}px`;
-}
-
-
-function handleGridDragOver(e) {
-    e.preventDefault();
-    if (!dragState.isDragging) return;
-    moveDragGhost(e);
-    
-    // --- Snapping Logic ---
-    const gridEl = document.getElementById('room-grid');
-    if (!gridEl) return;
-    
-    const rect = gridEl.getBoundingClientRect();
-    const cellWidth = rect.width / gridEl.style.gridTemplateColumns.split(' ').length;
-    const cellHeight = rect.height / gridEl.style.gridTemplateRows.split(' ').length;
-    
-    const primaryInstance = dragState.draggedInstances[0];
-    if (!primaryInstance) return;
-
-    let targetX = e.clientX - rect.left - (primaryInstance.Width * cellWidth / 2);
-    let targetY = e.clientY - rect.top - (primaryInstance.Height * cellHeight / 2);
-
-    const { finalX, finalY } = calculateSnapping(targetX, targetY, primaryInstance, cellWidth, cellHeight);
-
-    // Adjust ghost position based on snapping
-    dragState.primaryElement.style.left = `${finalX + rect.left}px`;
-    dragState.primaryElement.style.top = `${finalY + rect.top}px`;
-}
-
-function cleanupDrag() {
-    dragState.isDragging = false;
-    if (dragState.primaryElement) {
-        dragState.primaryElement.remove();
-        dragState.primaryElement = null;
-    }
-    dragState.draggedInstances = [];
-    dragState.offsets = [];
-    hideSnapGuides();
-    document.querySelectorAll('.dragging-source').forEach(el => el.classList.remove('dragging-source'));
-}
-
 async function handleGridDrop(e) {
     e.preventDefault();
-    const gridEl = document.getElementById('room-grid');
+    if (!stage) return;
     const data = JSON.parse(e.dataTransfer.getData('application/json') || '{}');
-    if (!data || !gridEl) {
-        cleanupDrag();
-        return;
-    }
+    if (!data || data.type !== 'new-object') return;
 
-    const rect = gridEl.getBoundingClientRect();
-    const cellWidth = rect.width / gridEl.style.gridTemplateColumns.split(' ').length;
-    const cellHeight = rect.height / gridEl.style.gridTemplateRows.split(' ').length;
-    
-    if (data.type === 'new-object') {
-        const gridX = Math.floor((e.clientX - rect.left) / cellWidth);
-        const gridY = Math.floor((e.clientY - rect.top) / cellHeight);
-        await handleToolbarDrop(data, gridX, gridY);
-    } else if (data.type === 'move' && dragState.draggedInstances.length > 0) {
-        const primaryInstance = dragState.draggedInstances[0];
-        const { finalX, finalY } = calculateSnapping(
-            e.clientX - rect.left - (primaryInstance.Width * cellWidth / 2),
-            e.clientY - rect.top - (primaryInstance.Height * cellHeight / 2),
-            primaryInstance, cellWidth, cellHeight
-        );
-        const finalGridX = Math.round(finalX / cellWidth);
-        const finalGridY = Math.round(finalY / cellHeight);
+    stage.setPointersPositions(e);
+    const pos = stage.getPointerPosition();
+    const gridX = Math.floor(pos.x / cellWidth);
+    const gridY = Math.floor(pos.y / cellHeight);
 
-        const updatePromises = dragState.draggedInstances.map((instance, index) => {
-            const offset = dragState.offsets[index];
-            instance.PosX = finalGridX + offset.x;
-            instance.PosY = finalGridY + offset.y;
-            return updateObjectInSheet(instance);
-        });
-        await Promise.all(updatePromises);
-        renderGrid();
-    }
-    cleanupDrag();
+    await handleToolbarDrop(data, gridX, gridY);
 }
 
 async function handleToolbarDrop(data, gridX, gridY) {
@@ -430,12 +272,17 @@ async function handleToolbarDrop(data, gridX, gridY) {
 
 // --- RENDERING & NAVIGATION ---
 function renderGrid() {
+    const gridContainer = dom.gridContainer;
+    gridContainer.innerHTML = '';
+    const gridEl = document.createElement('div');
+    gridEl.id = 'room-grid';
+    gridContainer.appendChild(gridEl);
+
     if (!viState.activeParentId) {
-        dom.gridContainer.innerHTML = `<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select a site and room to begin.</p></div>`;
+        gridContainer.innerHTML = `<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select a site and room to begin.</p></div>`;
         return;
     }
-    dom.gridContainer.innerHTML = '<div id="room-grid"></div>';
-    const roomGrid = document.getElementById('room-grid');
+
     const state = getState();
     const assetsById = selectors.selectAssetsById(state.allAssets);
 
@@ -450,81 +297,101 @@ function renderGrid() {
             gridHeight = parentInstance.Orientation === 'Vertical' ? parentInstance.ShelfCols : parentInstance.ShelfRows;
         }
     }
+    
+    const containerWidth = gridContainer.clientWidth;
+    const containerHeight = (containerWidth * gridHeight) / gridWidth;
+    
+    cellWidth = containerWidth / gridWidth;
+    cellHeight = containerHeight / gridHeight;
 
-    // Ensure grid cells are square by setting aspect ratio of the grid itself.
-    roomGrid.style.aspectRatio = `${gridWidth} / ${gridHeight}`;
-
-    roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(0, 1fr))`;
-    roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(0, 1fr))`;
-
-    const rect = roomGrid.getBoundingClientRect();
-    if (rect.width > 0) {
-        const cellWidth = rect.width / gridWidth;
-        roomGrid.style.backgroundSize = `${cellWidth}px ${cellWidth}px`;
+    stage = new Konva.Stage({ container: 'room-grid', width: containerWidth, height: containerHeight });
+    gridLayer = new Konva.Layer();
+    
+    for (let i = 0; i < gridWidth + 1; i++) {
+        gridLayer.add(new Konva.Line({ points: [i * cellWidth, 0, i * cellWidth, containerHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
     }
+    for (let j = 0; j < gridHeight + 1; j++) {
+        gridLayer.add(new Konva.Line({ points: [0, j * cellHeight, containerWidth, j * cellHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
+    }
+    stage.add(gridLayer);
 
-    state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId).forEach(obj => renderObject(obj, roomGrid, assetsById));
-    updateSelectionVisuals();
+    objectsLayer = new Konva.Layer();
+    stage.add(objectsLayer);
+
+    state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId).forEach(obj => renderObject(obj, assetsById));
+    objectsLayer.draw();
+
+    stage.on('click', (e) => { if (e.target === stage) selectObject(null); });
+    stage.on('contextmenu', (e) => { e.evt.preventDefault(); });
 }
 
-function renderObject(objectData, parentGrid, assetsById) {
+function renderObject(objectData, assetsById) {
     const assetInfo = assetsById.get(objectData.ReferenceID);
     if (!assetInfo) return;
 
-    const isFloorPatch = assetInfo.AssetType && assetInfo.AssetType.startsWith('FloorPatch_');
-
-    const objEl = document.createElement('div');
-    objEl.className = 'visual-object';
-    objEl.dataset.instanceId = objectData.InstanceID;
+    const group = new Konva.Group({
+        x: objectData.PosX * cellWidth,
+        y: objectData.PosY * cellHeight,
+        id: objectData.InstanceID,
+        draggable: true,
+    });
     
     let width = objectData.Width, height = objectData.Height;
+    if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && objectData.Orientation === 'Vertical') {
+        [width, height] = [height, width];
+    }
+    const pixelWidth = width * cellWidth;
+    const pixelHeight = height * cellHeight;
 
-    if (isFloorPatch) {
-        objEl.classList.add('floor-patch');
-        const floorType = assetInfo.AssetType.split('_')[1]?.toLowerCase() || '';
-        if(floorType) objEl.classList.add(floorType);
-        objEl.style.zIndex = 1;
-    } else {
-        const typeClass = { 'Shelf': 'shelf', 'Container': 'container', 'Wall': 'wall', 'Door': 'door' }[assetInfo.AssetType] || 'asset-item';
-        objEl.classList.add(typeClass, 'flex', 'items-center', 'justify-center', 'p-1', 'select-none');
-        objEl.draggable = true;
-        objEl.style.zIndex = 10;
-        
-        if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && objectData.Orientation === 'Vertical') {
-            [width, height] = [height, width];
-        }
+    const typeStyles = {
+        'Shelf': { fill: '#fef3c7', stroke: '#f59e0b', strokeWidth: 2, textColor: '#78350f' },
+        'Container': { fill: '#dbeafe', stroke: '#3b82f6', strokeWidth: 2, textColor: '#1e3a8a' },
+        'Wall': { fill: '#4b5563', stroke: '#1f2937', strokeWidth: 1 },
+        'Door': { fill: 'white', stroke: '#9ca3af', strokeWidth: 2 },
+        'default': { fill: '#e5e7eb', stroke: '#6b7280', strokeWidth: 1, textColor: '#1f2937' }
+    };
 
-        if (typeClass === 'shelf' || typeClass === 'container') {
-            objEl.addEventListener('mouseenter', (e) => showTooltip(e, objectData, assetsById));
-            objEl.addEventListener('mouseleave', hideTooltip);
-        }
-
-        if (assetInfo.AssetType === 'Door') {
-            objEl.innerHTML = `<svg viewBox="0 0 500 500"><path d="M500,500h-95.21c.22-62.74-17.01-124.74-49.41-178.11-49.99-82.35-134.38-140.31-229.69-156.99-10.12-1.77-20.32-2.86-30.48-4.27v339.37H0v-28.91l.88-.75c.24-.02.44.46.58.46h61.92l.34-313.3c.24-.71.76-.83,1.42-.95,1.93-.35,7.04-.26,9.34-.26,25.01.06,53.35,4.68,77.52,10.94,139.42,36.08,243.83,158.82,254.8,303.02l93.2.84v28.91Z"/></svg>`;
-            const svg = objEl.querySelector('svg');
-            if (objectData.Orientation === 'North') svg.style.transform = 'rotate(270deg)';
-            if (objectData.Orientation === 'South') svg.style.transform = 'rotate(90deg)';
-            if (objectData.Orientation === 'West') svg.style.transform = 'scaleX(-1)';
-        } else if(typeClass !== 'wall') {
-            objEl.innerHTML = `<span class="truncate pointer-events-none">${assetInfo.AssetName}</span>`;
-        }
-
-        objEl.addEventListener('dragstart', (e) => handleObjectDragStart(e, objectData));
-        objEl.addEventListener('dragend', cleanupDrag);
-        objEl.addEventListener('dblclick', (e) => {
-            if (['shelf', 'container'].includes(typeClass)) { e.stopPropagation(); navigateTo(objectData.InstanceID, assetInfo.AssetName); }
-        });
+    const style = typeStyles[assetInfo.AssetType] || typeStyles['default'];
+    if (assetInfo.AssetType.startsWith('FloorPatch_')) {
+        style.strokeWidth = 0;
+        style.fill = { 'Carpet': '#f3e9d2', 'Tile': '#e5e7eb', 'Wood': '#d1b7a0' }[assetInfo.AssetType.split('_')[1]] || '#ccc';
+        group.draggable(false);
+        group.zIndex(0);
     }
 
-    objEl.style.gridColumn = `${parseInt(objectData.PosX) + 1} / span ${width}`;
-    objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
+    const rect = new Konva.Rect({ width: pixelWidth, height: pixelHeight, fill: style.fill, stroke: style.stroke, strokeWidth: style.strokeWidth, cornerRadius: 4 });
+    group.add(rect);
     
-    objEl.addEventListener('click', (e) => { e.stopPropagation(); selectObject(objectData.InstanceID, e.shiftKey); });
-    objEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showRadialMenu(e.clientX, e.clientY, objectData.InstanceID); });
-    parentGrid.appendChild(objEl);
+    if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && !assetInfo.AssetType.startsWith('FloorPatch_')) {
+        const text = new Konva.Text({
+            text: assetInfo.AssetName, fontSize: 12, fontFamily: 'Inter, sans-serif', fill: style.textColor, padding: 5,
+            width: pixelWidth, height: pixelHeight, align: 'center', verticalAlign: 'middle', listening: false,
+        });
+        group.add(text);
+    }
+
+    group.on('click', (e) => { e.evt.stopPropagation(); selectObject(objectData.InstanceID, e.evt.shiftKey); });
+    group.on('dblclick', (e) => {
+        if (['Shelf', 'Container'].includes(assetInfo.AssetType)) {
+            e.evt.stopPropagation();
+            navigateTo(objectData.InstanceID, assetInfo.AssetName);
+        }
+    });
+    group.on('dragend', async () => {
+        const newPosX = Math.round(group.x() / cellWidth);
+        const newPosY = Math.round(group.y() / cellHeight);
+        group.position({ x: newPosX * cellWidth, y: newPosY * cellHeight });
+        const updatedInstance = { ...objectData, PosX: newPosX, PosY: newPosY };
+        await updateObjectInSheet(updatedInstance);
+        const index = getState().spatialLayoutData.findIndex(i => i.InstanceID === objectData.InstanceID);
+        if (index > -1) getState().spatialLayoutData[index] = updatedInstance;
+    });
+    group.on('contextmenu', (e) => { e.evt.preventDefault(); e.evt.stopPropagation(); showRadialMenu(e.evt.pageX, e.evt.pageY, objectData.InstanceID); });
+
+    objectsLayer.add(group);
 }
 
-// --- EVENT HANDLERS & NAVIGATION ---
+// --- EVENT HANDLERS & NAVIGATION (Logic mostly unchanged, hooks into new render functions) ---
 async function handleRoomFormSubmit(e) {
     e.preventDefault();
     const roomData = { RoomID: `ROOM-${Date.now()}`, RoomName: document.getElementById('room-name').value, SiteID: viState.activeSiteId, GridWidth: document.getElementById('grid-width').value, GridHeight: document.getElementById('grid-height').value };
@@ -542,12 +409,8 @@ function handleSiteSelection(e) {
     dom.roomSelector.disabled = !siteId;
     dom.createRoomBtn.disabled = !siteId;
     dom.createRoomBtn.classList.toggle('opacity-50', !siteId);
-    viState.activeRoomId = null;
-    viState.activeParentId = null;
-    viState.breadcrumbs = [];
-    renderBreadcrumbs();
-    renderGrid();
-    renderUnplacedAssets(siteId);
+    viState.activeRoomId = null; viState.activeParentId = null; viState.breadcrumbs = [];
+    renderBreadcrumbs(); renderGrid(); renderUnplacedAssets(siteId);
 }
 function handleRoomSelection(e) {
     const roomId = e.target.value;
@@ -555,30 +418,21 @@ function handleRoomSelection(e) {
         const room = selectors.selectRoomsById(getState().allRooms).get(roomId);
         if (room) navigateTo(room.RoomID, room.RoomName);
     } else {
-        viState.activeParentId = null;
-        viState.activeRoomId = null;
-        viState.breadcrumbs = [];
-        renderBreadcrumbs();
-        renderGrid();
-        renderUnplacedAssets(viState.activeSiteId);
+        viState.activeParentId = null; viState.activeRoomId = null; viState.breadcrumbs = [];
+        renderBreadcrumbs(); renderGrid(); renderUnplacedAssets(viState.activeSiteId);
     }
 }
 function navigateTo(id, name) {
     if (!id) return;
     if (id.startsWith('ROOM-')) {
-        viState.activeRoomId = id;
-        viState.activeParentId = id;
-        viState.breadcrumbs = [{ id, name }];
+        viState.activeRoomId = id; viState.activeParentId = id; viState.breadcrumbs = [{ id, name }];
     } else {
         viState.activeParentId = id;
         const existingIndex = viState.breadcrumbs.findIndex(b => b.id === id);
         viState.breadcrumbs = existingIndex > -1 ? viState.breadcrumbs.slice(0, existingIndex + 1) : [...viState.breadcrumbs, { id, name }];
     }
     localStorage.setItem('lastActiveRoomId', viState.activeRoomId);
-    selectObject(null);
-    renderGrid();
-    renderBreadcrumbs();
-    renderUnplacedAssets(viState.activeSiteId);
+    selectObject(null); renderGrid(); renderBreadcrumbs(); renderUnplacedAssets(viState.activeSiteId);
 }
 function renderBreadcrumbs() {
     dom.breadcrumbContainer.innerHTML = viState.breadcrumbs.map((crumb, index) => index < viState.breadcrumbs.length - 1 ? `<span><a href="#" data-id="${crumb.id}" data-name="${crumb.name}" class="hover:underline text-indigo-600">${crumb.name}</a> / </span>` : `<span class="font-semibold text-gray-700">${crumb.name}</span>`).join('');
@@ -587,28 +441,31 @@ function renderBreadcrumbs() {
 
 // --- OBJECT MANIPULATION & SELECTION ---
 function selectObject(instanceId, isMultiSelect = false) {
-    document.querySelectorAll('.resize-handle').forEach(el => el.remove());
+    if (!stage) return;
+    objectsLayer.find('Transformer').forEach(tr => tr.destroy());
+
     const selectedIds = new Set(viState.selectedInstanceIds);
     if (instanceId === null) {
         selectedIds.clear();
     } else if (isMultiSelect) {
         selectedIds.has(instanceId) ? selectedIds.delete(instanceId) : selectedIds.add(instanceId);
     } else {
-        if (!selectedIds.has(instanceId)) {
+        if (!selectedIds.has(instanceId) || selectedIds.size > 1) {
             selectedIds.clear();
             selectedIds.add(instanceId);
         }
     }
     viState.selectedInstanceIds = Array.from(selectedIds);
-    updateSelectionVisuals();
-}
-
-function updateSelectionVisuals() {
-    document.querySelectorAll('.visual-object.selected').forEach(el => el.classList.remove('selected'));
-    viState.selectedInstanceIds.forEach(id => {
-        const objEl = document.querySelector(`[data-instance-id="${id}"]`);
-        if (objEl) objEl.classList.add('selected');
-    });
+    const selectedNodes = viState.selectedInstanceIds.map(id => stage.findOne('#' + id)).filter(Boolean);
+    
+    if (selectedNodes.length > 0) {
+        const tr = new Konva.Transformer({
+            nodes: selectedNodes, borderStroke: '#4f46e5', borderStrokeWidth: 2, anchorStroke: '#4f46e5',
+            anchorFill: 'white', anchorSize: 8, keepRatio: false, rotateEnabled: false,
+        });
+        objectsLayer.add(tr);
+    }
+    objectsLayer.draw();
 }
 
 async function updateObjectInSheet(updatedInstance) {
@@ -616,13 +473,10 @@ async function updateObjectInSheet(updatedInstance) {
     await api.updateSheetValues(`${SPATIAL_LAYOUT_SHEET}!A${updatedInstance.rowIndex}`, [rowData]);
 }
 
-// --- RADIAL MENU & ACTIONS ---
-// (handleRename, handleFlip, handleRotate, handleOpen, handleResize logic remains largely the same)
+// --- RADIAL MENU & ACTIONS (Logic mostly unchanged) ---
 function showRadialMenu(x, y, instanceId) {
     clearTimeout(hideMenuTimeout);
-    if(viState.selectedInstanceIds.length > 1 && !viState.selectedInstanceIds.includes(instanceId)) { 
-        selectObject(instanceId); 
-    }
+    if(viState.selectedInstanceIds.length > 1 && !viState.selectedInstanceIds.includes(instanceId)) selectObject(instanceId); 
     viState.activeRadialInstanceId = instanceId;
     const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
     const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null;
@@ -634,231 +488,25 @@ function showRadialMenu(x, y, instanceId) {
     dom.radialOpenUse.classList.toggle('hidden', !isContainer);
     dom.radialRotateUse.classList.toggle('hidden', asset.AssetType === 'Wall' || isFloor);
     dom.radialResizeUse.classList.toggle('hidden', asset.AssetType === 'Door');
-    dom.radialMenu.style.left = `${x}px`;
-    dom.radialMenu.style.top = `${y}px`;
+    dom.radialMenu.style.left = `${x}px`; dom.radialMenu.style.top = `${y}px`;
     dom.radialMenu.classList.remove('hidden');
     setTimeout(() => dom.radialMenu.classList.add('visible'), 10);
 }
-function hideRadialMenu() {
-    if (dom.radialMenu) {
-        dom.radialMenu.classList.remove('visible');
-        setTimeout(() => dom.radialMenu.classList.add('hidden'), 200);
-    }
-    viState.activeRadialInstanceId = null;
-    clearTimeout(hideMenuTimeout);
-}
-async function handleRename(instanceId) {
-    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
-    const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null;
-    if (!asset) return;
-    const newName = prompt("Enter new name:", asset.AssetName);
-    if (newName && newName.trim() && newName.trim() !== asset.AssetName) {
-        asset.AssetName = newName.trim();
-        const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP);
-        await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]);
-        window.dispatchEvent(new CustomEvent('datachanged'));
-    }
-}
-async function handleFlip(instanceId) {
-    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
-    if (instance) {
-        instance.Orientation = { 'East': 'West', 'West': 'East', 'North': 'South', 'South': 'North' }[instance.Orientation] || 'East';
-        await updateObjectInSheet(instance);
-        renderGrid();
-    }
-}
-async function handleRotate(instanceId) {
-    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
-    if (!instance) return;
-    const asset = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID);
-    if (!asset) return;
-    if (asset.AssetType === 'Door') {
-        instance.Orientation = { 'East': 'South', 'South': 'West', 'West': 'North', 'North': 'East' }[instance.Orientation] || 'South';
-    } else {
-        instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal';
-    }
-    await updateObjectInSheet(instance);
-    renderGrid();
-    setTimeout(() => selectObject(instanceId), 50);
-}
-function handleOpen(instanceId) {
-    const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
-    if (instance) {
-        const assetInfo = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID);
-        if (assetInfo) navigateTo(instance.InstanceID, assetInfo.AssetName);
-    }
-}
-function handleResize(instanceId) {
-    if (!instanceId) return;
-    selectObject(instanceId);
-    const objEl = document.querySelector(`[data-instance-id="${instanceId}"]`);
-    if(objEl) createObjectResizeHandles(objEl, instanceId);
-    showMessage("Use the handles to resize the object.", "info");
-}
+function hideRadialMenu() { if (dom.radialMenu) { dom.radialMenu.classList.remove('visible'); setTimeout(() => dom.radialMenu.classList.add('hidden'), 200); } viState.activeRadialInstanceId = null; clearTimeout(hideMenuTimeout); }
+async function handleRename(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null; if (!asset) return; const newName = prompt("Enter new name:", asset.AssetName); if (newName && newName.trim() && newName.trim() !== asset.AssetName) { asset.AssetName = newName.trim(); const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP); await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]); window.dispatchEvent(new CustomEvent('datachanged')); } }
+async function handleFlip(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { instance.Orientation = { 'East': 'West', 'West': 'East', 'North': 'South', 'South': 'North' }[instance.Orientation] || 'East'; await updateObjectInSheet(instance); renderGrid(); } }
+async function handleRotate(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (!instance) return; const asset = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID); if (!asset) return; if (asset.AssetType === 'Door') { instance.Orientation = { 'East': 'South', 'South': 'West', 'West': 'North', 'North': 'East' }[instance.Orientation] || 'South'; } else { instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal'; } await updateObjectInSheet(instance); renderGrid(); setTimeout(() => selectObject(instanceId), 50); }
+function handleOpen(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { const assetInfo = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID); if (assetInfo) navigateTo(instance.InstanceID, assetInfo.AssetName); } }
+function handleResize(instanceId) { if (!instanceId || !stage) return; selectObject(instanceId); const node = stage.findOne('#' + instanceId); if (node) { showMessage("Use the handles to resize the object.", "info"); } }
 
-// --- NEW: Keyboard Shortcut Handlers ---
+// --- KEYBOARD & CLIPBOARD ACTIONS ---
 function handleKeyDown(e) {
-    if (dom.visualInventoryPanel.classList.contains('hidden') || document.querySelector('.modal-container:not(.hidden)')) {
-        return; // Don't run shortcuts if VI isn't active or a modal is open
-    }
+    if (dom.visualInventoryPanel.classList.contains('hidden') || document.querySelector('.modal-container:not(.hidden)')) return;
     const isCtrlOrMeta = e.ctrlKey || e.metaKey;
-    if ((e.key === 'Delete' || e.key === 'Backspace') && viState.selectedInstanceIds.length > 0) {
-        e.preventDefault();
-        handleDelete(viState.selectedInstanceIds);
-    } else if (isCtrlOrMeta && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        handleCopy();
-    } else if (isCtrlOrMeta && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        handlePaste();
-    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && viState.selectedInstanceIds.length > 0) { e.preventDefault(); handleDelete(viState.selectedInstanceIds); }
+    else if (isCtrlOrMeta && e.key.toLowerCase() === 'c') { e.preventDefault(); handleCopy(); }
+    else if (isCtrlOrMeta && e.key.toLowerCase() === 'v') { e.preventDefault(); handlePaste(); }
 }
-
-async function handleDelete(instanceIdsToDelete) {
-    if (!instanceIdsToDelete || instanceIdsToDelete.length === 0) return;
-    if (!confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s) from the room? They will be returned to the unplaced items list.`)) return;
-
-    const { spatialLayoutData, sheetIds } = getState();
-    const requests = [];
-    const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET];
-
-    instanceIdsToDelete.forEach(instanceId => {
-        const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
-        if (instance && layoutSheetId && instance.rowIndex) {
-            // Only create a request to delete the row from the spatial layout sheet.
-            requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } });
-        }
-    });
-    
-    if (requests.length > 0) {
-        await api.batchUpdateSheet({ requests });
-        window.dispatchEvent(new CustomEvent('datachanged'));
-    }
-}
-
-function handleCopy() {
-    if (viState.selectedInstanceIds.length === 0) return;
-    const { spatialLayoutData, allAssets } = getState();
-    const assetsById = selectors.selectAssetsById(allAssets);
-    
-    viState.clipboard = viState.selectedInstanceIds.map(id => {
-        const instance = spatialLayoutData.find(i => i.InstanceID === id);
-        const asset = assetsById.get(instance?.ReferenceID);
-        return { instance, asset };
-    }).filter(item => item.instance && item.asset);
-    
-    if (viState.clipboard.length > 0) {
-        showMessage(`Copied ${viState.clipboard.length} item(s).`, 'success');
-    }
-}
-
-async function handlePaste() {
-    if (!viState.clipboard || viState.clipboard.length === 0 || !viState.activeParentId) return;
-
-    const newInstanceRows = [];
-    const newAssetRows = [];
-    const newSelectedIds = [];
-
-    for (const item of viState.clipboard) {
-        let newReferenceId = item.instance.ReferenceID;
-        const isStructural = ['Shelf', 'Container', 'Wall', 'Door'].includes(item.asset.AssetType) || item.asset.AssetType.startsWith('FloorPatch_');
-
-        if (!isStructural) {
-            newReferenceId = `ASSET-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-            const newAsset = { ...item.asset, AssetID: newReferenceId, AssetName: `${item.asset.AssetName} (Copy)`, ParentObjectID: viState.activeParentId };
-            delete newAsset.rowIndex;
-            newAssetRows.push(await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP));
-        }
-
-        const newInstanceId = `INST-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const newInstance = {
-            ...item.instance,
-            InstanceID: newInstanceId,
-            ReferenceID: newReferenceId,
-            ParentID: viState.activeParentId,
-            PosX: parseInt(item.instance.PosX) + 1, // Offset paste
-            PosY: parseInt(item.instance.PosY) + 1,
-        };
-        delete newInstance.rowIndex;
-        newInstanceRows.push(await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstance, SPATIAL_LAYOUT_HEADER_MAP));
-        newSelectedIds.push(newInstanceId);
-    }
-
-    if (newAssetRows.length > 0) await api.appendSheetValues(ASSET_SHEET, newAssetRows);
-    if (newInstanceRows.length > 0) await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, newInstanceRows);
-    
-    showMessage(`Pasted ${newInstanceRows.length} item(s).`, 'success');
-    window.dispatchEvent(new CustomEvent('datachanged'));
-    
-    // Defer selection until after data reload and re-render
-    setTimeout(() => {
-        selectObject(null); // Clear previous selection
-        viState.selectedInstanceIds = newSelectedIds;
-        updateSelectionVisuals();
-    }, 500);
-}
-
-// --- SNAPPING & ALIGNMENT ---
-function calculateSnapping(targetX, targetY, primaryInstance, cellWidth, cellHeight) {
-    hideSnapGuides();
-    const snapThreshold = 6; // pixels
-    let finalX = targetX, finalY = targetY;
-
-    const staticObjects = getState().spatialLayoutData.filter(
-        obj => obj.ParentID === viState.activeParentId && !dragState.draggedInstances.some(d => d.InstanceID === obj.InstanceID)
-    );
-    
-    const draggedRect = {
-        left: targetX, top: targetY,
-        right: targetX + primaryInstance.Width * cellWidth,
-        bottom: targetY + primaryInstance.Height * cellHeight,
-        hCenter: targetX + (primaryInstance.Width * cellWidth) / 2,
-        vCenter: targetY + (primaryInstance.Height * cellHeight) / 2
-    };
-
-    staticObjects.forEach(obj => {
-        const staticRect = {
-            left: obj.PosX * cellWidth, top: obj.PosY * cellHeight,
-            right: (obj.PosX * 1 + obj.Width * 1) * cellWidth,
-            bottom: (obj.PosY * 1 + obj.Height * 1) * cellHeight,
-            hCenter: (obj.PosX * 1 + obj.Width / 2) * cellWidth,
-            vCenter: (obj.PosY * 1 + obj.Height / 2) * cellHeight
-        };
-        // Vertical snapping
-        if (Math.abs(draggedRect.left - staticRect.left) < snapThreshold) { finalX = staticRect.left; showSnapGuide('vertical', staticRect.left); }
-        if (Math.abs(draggedRect.right - staticRect.right) < snapThreshold) { finalX = staticRect.right - (primaryInstance.Width * cellWidth); showSnapGuide('vertical', staticRect.right); }
-        if (Math.abs(draggedRect.hCenter - staticRect.hCenter) < snapThreshold) { finalX = staticRect.hCenter - (primaryInstance.Width * cellWidth / 2); showSnapGuide('vertical', staticRect.hCenter); }
-        if (Math.abs(draggedRect.left - staticRect.right) < snapThreshold) { finalX = staticRect.right; showSnapGuide('vertical', staticRect.right); }
-        if (Math.abs(draggedRect.right - staticRect.left) < snapThreshold) { finalX = staticRect.left - (primaryInstance.Width * cellWidth); showSnapGuide('vertical', staticRect.left); }
-        
-        // Horizontal snapping
-        if (Math.abs(draggedRect.top - staticRect.top) < snapThreshold) { finalY = staticRect.top; showSnapGuide('horizontal', staticRect.top); }
-        if (Math.abs(draggedRect.bottom - staticRect.bottom) < snapThreshold) { finalY = staticRect.bottom - (primaryInstance.Height * cellHeight); showSnapGuide('horizontal', staticRect.bottom); }
-        if (Math.abs(draggedRect.vCenter - staticRect.vCenter) < snapThreshold) { finalY = staticRect.vCenter - (primaryInstance.Height * cellHeight / 2); showSnapGuide('horizontal', staticRect.vCenter); }
-        if (Math.abs(draggedRect.top - staticRect.bottom) < snapThreshold) { finalY = staticRect.bottom; showSnapGuide('horizontal', staticRect.bottom); }
-        if (Math.abs(draggedRect.bottom - staticRect.top) < snapThreshold) { finalY = staticRect.top - (primaryInstance.Height * cellHeight); showSnapGuide('horizontal', staticRect.top); }
-    });
-    
-    return { finalX, finalY };
-}
-
-function showSnapGuide(orientation, position) {
-    const guide = document.createElement('div');
-    guide.className = `snap-guide ${orientation}`;
-    if (orientation === 'vertical') guide.style.left = `${position}px`;
-    else guide.style.top = `${position}px`;
-    dom.gridContainer.appendChild(guide);
-    dragState.snapLines.push(guide);
-}
-
-function hideSnapGuides() {
-    dragState.snapLines.forEach(line => line.remove());
-    dragState.snapLines = [];
-}
-
-function showTooltip(event, objectData, assetsById) { /* Original implementation */ }
-function hideTooltip() { /* Original implementation */ }
-function createObjectResizeHandles(objEl, instanceId) { /* Original implementation */ }
-async function initResize(e, instanceId, direction) { /* Original implementation */ }
-
-
+async function handleDelete(instanceIdsToDelete) { if (!instanceIdsToDelete || instanceIdsToDelete.length === 0 || !confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s) from the room? They will be returned to the unplaced items list.`)) return; const { spatialLayoutData, sheetIds } = getState(); const requests = []; const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET]; instanceIdsToDelete.forEach(instanceId => { const instance = spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance && layoutSheetId && instance.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } }); } }); if (requests.length > 0) { await api.batchUpdateSheet({ requests }); window.dispatchEvent(new CustomEvent('datachanged')); } }
+function handleCopy() { if (viState.selectedInstanceIds.length === 0) return; const { spatialLayoutData, allAssets } = getState(); const assetsById = selectors.selectAssetsById(allAssets); viState.clipboard = viState.selectedInstanceIds.map(id => { const instance = spatialLayoutData.find(i => i.InstanceID === id); const asset = assetsById.get(instance?.ReferenceID); return { instance, asset }; }).filter(item => item.instance && item.asset); if (viState.clipboard.length > 0) showMessage(`Copied ${viState.clipboard.length} item(s).`, 'success'); }
+async function handlePaste() { if (!viState.clipboard || viState.clipboard.length === 0 || !viState.activeParentId) return; const newInstanceRows = []; const newAssetRows = []; const newSelectedIds = []; for (const item of viState.clipboard) { let newReferenceId = item.instance.ReferenceID; const isStructural = ['Shelf', 'Container', 'Wall', 'Door'].includes(item.asset.AssetType) || item.asset.AssetType.startsWith('FloorPatch_'); if (!isStructural) { newReferenceId = `ASSET-${Date.now()}-${Math.random().toString(16).slice(2)}`; const newAsset = { ...item.asset, AssetID: newReferenceId, AssetName: `${item.asset.AssetName} (Copy)`, ParentObjectID: viState.activeParentId }; delete newAsset.rowIndex; newAssetRows.push(await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP)); } const newInstanceId = `INST-${Date.now()}-${Math.random().toString(16).slice(2)}`; const newInstance = { ...item.instance, InstanceID: newInstanceId, ReferenceID: newReferenceId, ParentID: viState.activeParentId, PosX: parseInt(item.instance.PosX) + 1, PosY: parseInt(item.instance.PosY) + 1, }; delete newInstance.rowIndex; newInstanceRows.push(await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstance, SPATIAL_LAYOUT_HEADER_MAP)); newSelectedIds.push(newInstanceId); } if (newAssetRows.length > 0) await api.appendSheetValues(ASSET_SHEET, newAssetRows); if (newInstanceRows.length > 0) await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, newInstanceRows); showMessage(`Pasted ${newInstanceRows.length} item(s).`, 'success'); window.dispatchEvent(new CustomEvent('datachanged')); setTimeout(() => { selectObject(null); viState.selectedInstanceIds = newSelectedIds; selectObject(newSelectedIds[0]); }, 500); }
