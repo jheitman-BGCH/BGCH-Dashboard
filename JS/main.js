@@ -431,16 +431,6 @@ async function handleContainerFormSubmit(e) {
         const rowData = await api.prepareRowData(CONTAINERS_SHEET, containerData, CONTAINERS_HEADER_MAP);
         await api.appendSheetValues(CONTAINERS_SHEET, [rowData]);
         
-        // Create a corresponding asset so it can be placed in the visual inventory
-        const assetForContainer = {
-            AssetID: containerData.ContainerID, // Use the same ID to link them conceptually
-            AssetName: containerData.ContainerName,
-            AssetType: containerData.ContainerType || 'Container', // Fallback to 'Container'
-            ParentObjectID: containerData.ParentID, // Set its logical location
-        };
-        const assetRowData = await api.prepareRowData(ASSET_SHEET, assetForContainer, ASSET_HEADER_MAP);
-        await api.appendSheetValues(ASSET_SHEET, [assetRowData]);
-
         ui.showMessage('Container added successfully!', 'success');
         window.dispatchEvent(new CustomEvent('datachanged'));
 

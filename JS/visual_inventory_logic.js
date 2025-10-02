@@ -182,33 +182,75 @@ function createUnplacedAssetElement(asset) {
 function renderUnplacedAssets(siteId) {
     if (!dom.unplacedAssetsList) return;
     const state = getState();
-    const placedAssetReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
-    let unplacedAssets = state.allAssets.filter(asset => !placedAssetReferenceIDs.has(asset.AssetID));
-    if (siteId) {
-        const site = selectors.selectSitesById(state.allSites).get(siteId);
-        if (site) {
-            unplacedAssets = unplacedAssets.filter(asset => {
-                 const parentId = selectors.selectResolvedAssetParentId(asset, state);
-                 const path = selectors.selectFullLocationPath(state, parentId);
-                 const assetSite = path.find(p => p.SiteID);
-                 return assetSite ? assetSite.SiteID === siteId : asset.Site === site.SiteName;
-            });
+    const placedReferenceIDs = new Set(state.spatialLayoutData.map(item => item.ReferenceID));
+
+    // Combine assets and containers into a single list of placeable items
+    const allAssets = state.allAssets;
+    const allContainers = state.allContainers.map(c => ({
+        AssetID: c.ContainerID,
+        AssetName: c.ContainerName,
+        AssetType: c.ContainerType || 'Container',
+        ParentObjectID: c.ParentID,
+        isContainer: true
+    }));
+
+    // Use a Map to combine and de-duplicate
+    const combinedItemsMap = new Map();
+    allAssets.forEach(a => combinedItemsMap.set(a.AssetID, a));
+    allContainers.forEach(c => {
+        if (!combinedItemsMap.has(c.AssetID)) {
+            combinedItemsMap.set(c.AssetID, c);
         }
+    });
+    const allItems = Array.from(combinedItemsMap.values());
+    
+    // Filter for items that are not yet placed on any grid
+    let unplacedItems = allItems.filter(item => !placedReferenceIDs.has(item.AssetID));
+    
+    // Filter for items that are 'top-level' (not inside another container) and belong to the selected site
+    const containerIds = new Set(state.allContainers.map(c => c.ContainerID));
+    let displayableUnplacedItems = unplacedItems.filter(item => {
+        const parentId = selectors.selectResolvedAssetParentId(item, state);
+        
+        // Item should not be displayed if it has no parent or its parent is a container
+        if (!parentId || containerIds.has(parentId)) {
+            return false;
+        }
+
+        // If a site is selected, the item must belong to that site
+        if (siteId) {
+            const path = selectors.selectFullLocationPath(state, parentId);
+            const itemSite = path.find(p => p.SiteID);
+            return itemSite ? itemSite.SiteID === siteId : false;
+        }
+
+        return true; // If no site is selected, we passed the container check, so it's displayable
+    });
+    
+    // If a specific room is active, further filter down to only items in that room
+    if (viState.activeRoomId) {
+        displayableUnplacedItems = displayableUnplacedItems.filter(item => {
+            const parentId = selectors.selectResolvedAssetParentId(item, state);
+            return parentId === viState.activeRoomId;
+        });
     }
-    const unplacedAssetIds = new Set(unplacedAssets.map(a => a.AssetID));
-    let rootUnplacedAssets = unplacedAssets.filter(asset => !unplacedAssetIds.has(selectors.selectResolvedAssetParentId(asset, state)));
-    let finalAssets = filterData(rootUnplacedAssets, dom.unplacedAssetSearch.value, ['AssetName', 'AssetType', 'IDCode']);
-    finalAssets.sort((a, b) => (a.AssetName || '').localeCompare(b.AssetName || ''));
-    if (viState.unplacedAssetSort === 'desc') finalAssets.reverse();
+
+    // Apply search filter, sort, and then render
+    let finalItems = filterData(displayableUnplacedItems, dom.unplacedAssetSearch.value, ['AssetName', 'AssetType', 'IDCode']);
+    finalItems.sort((a, b) => (a.AssetName || '').localeCompare(b.AssetName || ''));
+    if (viState.unplacedAssetSort === 'desc') finalItems.reverse();
 
     dom.unplacedAssetsList.innerHTML = '';
-    if (finalAssets.length === 0) return dom.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced assets found.</p>`;
+    if (finalItems.length === 0) {
+        dom.unplacedAssetsList.innerHTML = `<p class="text-xs text-gray-500 px-2">No unplaced items found for this view.</p>`;
+        return;
+    }
 
     if (viState.unplacedAssetGroupBy === 'assetType') {
-        const grouped = finalAssets.reduce((acc, asset) => {
-            const type = asset.AssetType || 'Uncategorized';
+        const grouped = finalItems.reduce((acc, item) => {
+            const type = item.AssetType || 'Uncategorized';
             if (!acc[type]) acc[type] = [];
-            acc[type].push(asset);
+            acc[type].push(item);
             return acc;
         }, {});
         Object.keys(grouped).sort().forEach(groupName => {
@@ -216,10 +258,10 @@ function renderUnplacedAssets(siteId) {
             groupHeader.className = 'unplaced-group-header';
             groupHeader.textContent = groupName;
             dom.unplacedAssetsList.appendChild(groupHeader);
-            grouped[groupName].forEach(asset => dom.unplacedAssetsList.appendChild(createUnplacedAssetElement(asset)));
+            grouped[groupName].forEach(item => dom.unplacedAssetsList.appendChild(createUnplacedAssetElement(item)));
         });
     } else {
-        finalAssets.forEach(asset => dom.unplacedAssetsList.appendChild(createUnplacedAssetElement(asset)));
+        finalItems.forEach(item => dom.unplacedAssetsList.appendChild(createUnplacedAssetElement(item)));
     }
 }
 
