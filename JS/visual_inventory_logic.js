@@ -716,24 +716,17 @@ function handleKeyDown(e) {
 
 async function handleDelete(instanceIdsToDelete) {
     if (!instanceIdsToDelete || instanceIdsToDelete.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${instanceIdsToDelete.length} object(s)? This cannot be undone.`)) return;
+    if (!confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s) from the room? They will be returned to the unplaced items list.`)) return;
 
-    const { spatialLayoutData, sheetIds, allAssets } = getState();
+    const { spatialLayoutData, sheetIds } = getState();
     const requests = [];
     const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET];
-    const assetSheetId = sheetIds[ASSET_SHEET];
-
-    const assetsById = selectors.selectAssetsById(allAssets);
 
     instanceIdsToDelete.forEach(instanceId => {
         const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
         if (instance && layoutSheetId && instance.rowIndex) {
-            requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } });
-            const asset = assetsById.get(instance.ReferenceID);
-            // Also delete the backing asset if it's not a reusable type (like a shelf/container)
-            if (asset && !['Shelf', 'Container', 'Wall', 'Door'].includes(asset.AssetType) && !asset.AssetType.startsWith('FloorPatch_') && assetSheetId && asset.rowIndex) {
-                requests.push({ deleteDimension: { range: { sheetId: assetSheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } });
-            }
+            // Only create a request to delete the row from the spatial layout sheet.
+            requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } });
         }
     });
     
@@ -867,4 +860,5 @@ function showTooltip(event, objectData, assetsById) { /* Original implementation
 function hideTooltip() { /* Original implementation */ }
 function createObjectResizeHandles(objEl, instanceId) { /* Original implementation */ }
 async function initResize(e, instanceId, direction) { /* Original implementation */ }
+
 
