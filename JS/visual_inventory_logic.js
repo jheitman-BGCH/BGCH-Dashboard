@@ -556,9 +556,11 @@ function handleRoomSelection(e) {
         if (room) navigateTo(room.RoomID, room.RoomName);
     } else {
         viState.activeParentId = null;
+        viState.activeRoomId = null;
         viState.breadcrumbs = [];
         renderBreadcrumbs();
         renderGrid();
+        renderUnplacedAssets(viState.activeSiteId);
     }
 }
 function navigateTo(id, name) {
@@ -576,6 +578,7 @@ function navigateTo(id, name) {
     selectObject(null);
     renderGrid();
     renderBreadcrumbs();
+    renderUnplacedAssets(viState.activeSiteId);
 }
 function renderBreadcrumbs() {
     dom.breadcrumbContainer.innerHTML = viState.breadcrumbs.map((crumb, index) => index < viState.breadcrumbs.length - 1 ? `<span><a href="#" data-id="${crumb.id}" data-name="${crumb.name}" class="hover:underline text-indigo-600">${crumb.name}</a> / </span>` : `<span class="font-semibold text-gray-700">${crumb.name}</span>`).join('');
@@ -864,3 +867,4 @@ function showTooltip(event, objectData, assetsById) { /* Original implementation
 function hideTooltip() { /* Original implementation */ }
 function createObjectResizeHandles(objEl, instanceId) { /* Original implementation */ }
 async function initResize(e, instanceId, direction) { /* Original implementation */ }
+
