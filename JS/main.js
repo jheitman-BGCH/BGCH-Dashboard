@@ -304,7 +304,7 @@ function setupEventListeners() {
     d.filterContainer.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { container: e.target.value } }));
     ['AssetType', 'Condition', 'IntendedUserType', 'AssignedTo', 'ModelNumber'].forEach(key => {
         const el = d[`filter${key}`];
-        if (el) el.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { [key]: e.target.value } }));
+        if (el) el.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { [key.charAt(0).toLowerCase() + key.slice(1)]: e.target.value } }));
     });
     
     d.employeeSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_EMPLOYEE_FILTERS, payload: { searchTerm: e.target.value } }));
@@ -431,6 +431,16 @@ async function handleContainerFormSubmit(e) {
         const rowData = await api.prepareRowData(CONTAINERS_SHEET, containerData, CONTAINERS_HEADER_MAP);
         await api.appendSheetValues(CONTAINERS_SHEET, [rowData]);
         
+        // Create a corresponding asset so it can be placed in the visual inventory
+        const assetForContainer = {
+            AssetID: containerData.ContainerID, // Use the same ID to link them conceptually
+            AssetName: containerData.ContainerName,
+            AssetType: containerData.ContainerType || 'Container', // Fallback to 'Container'
+            ParentObjectID: containerData.ParentID, // Set its logical location
+        };
+        const assetRowData = await api.prepareRowData(ASSET_SHEET, assetForContainer, ASSET_HEADER_MAP);
+        await api.appendSheetValues(ASSET_SHEET, [assetRowData]);
+
         ui.showMessage('Container added successfully!', 'success');
         window.dispatchEvent(new CustomEvent('datachanged'));
 
@@ -514,7 +524,10 @@ function setupBulkEditListeners() {
         const form = document.getElementById('bulk-edit-form');
         form.reset();
         document.querySelectorAll('#bulk-edit-form select, #bulk-edit-form input').forEach(el => el.disabled = true);
-        document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(cb => cb.disabled = false);
+        document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+            cb.disabled = false
+        });
         ui.toggleModal(ui.dom.bulkEditModal, true);
     });
     document.getElementById('bulk-cancel-btn').onclick = () => ui.toggleModal(ui.dom.bulkEditModal, false);
@@ -522,9 +535,8 @@ function setupBulkEditListeners() {
     
     document.querySelectorAll('#bulk-edit-form input[type="checkbox"]').forEach(checkbox => {
         checkbox.addEventListener('change', e => {
-            const fieldName = e.target.id.replace('bulk-update-', '').replace('-check', '');
             const isChecked = e.target.checked;
-            if (fieldName === 'location') {
+            if (e.target.id === 'bulk-update-location-check') {
                 ['bulk-site', 'bulk-room', 'bulk-container'].forEach(id => document.getElementById(id).disabled = !isChecked);
             } else {
                 const inputEl = document.getElementById(e.target.dataset.target);
@@ -624,8 +636,8 @@ function handleChartClick(event, elements, filterId) {
     const chart = elements[0].element.$context.chart;
     const label = chart.data.labels[elements[0].index];
     
-    const newFilters = { searchTerm: '', site: '', room: '', container: '', AssetType: '', Condition: '', IntendedUserType: '', AssignedTo: '', ModelNumber: '' };
-    const filterKeyMap = { 'filter-site': 'site', 'filter-condition': 'Condition', 'filter-asset-type': 'AssetType', 'filter-assigned-to': 'AssignedTo' };
+    const newFilters = { searchTerm: '', site: '', room: '', container: '', assetType: '', condition: '', intendedUserType: '', assignedTo: '', modelNumber: '' };
+    const filterKeyMap = { 'filter-site': 'site', 'filter-condition': 'condition', 'filter-asset-type': 'assetType', 'filter-assigned-to': 'assignedTo' };
     const stateKey = filterKeyMap[filterId];
     
     if (stateKey) {

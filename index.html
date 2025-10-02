@@ -10,7 +10,7 @@
     
     <link rel="stylesheet" href="CSS/style.css">
     <!-- Updated stylesheet link with cache-busting query -->
-    <link rel="stylesheet" href="CSS/visual_inventory_styles.css?v=1.1">
+    <link rel="stylesheet" href="CSS/visual_inventory_styles.css?v=1.2">
 </head>
 <body class="bg-gray-100 text-gray-800">
 
@@ -230,6 +230,14 @@
                                 <div class="toolbar-item" draggable="true" data-asset-type="Wall" data-name="Wall" data-width="1" data-height="1">Wall</div>
                                 <div class="toolbar-item" draggable="true" data-asset-type="Door" data-name="Door" data-width="1" data-height="1">Door</div>
                             </div>
+                             <!-- NEW: Floor Types Section -->
+                            <div class="border-t my-4"></div>
+                            <h3 class="font-bold mb-2">Floor Types</h3>
+                            <div class="space-y-2">
+                                <div class="toolbar-item" draggable="true" data-asset-type="FloorPatch_Carpet" data-name="Carpet" data-width="1" data-height="1">Carpet</div>
+                                <div class="toolbar-item" draggable="true" data-asset-type="FloorPatch_Tile" data-name="Tile" data-width="1" data-height="1">Tile</div>
+                                <div class="toolbar-item" draggable="true" data-asset-type="FloorPatch_Wood" data-name="Wood" data-width="1" data-height="1">Wood</div>
+                            </div>
                             <h3 class="font-bold mb-4 mt-6">Unplaced Assets for Site</h3>
                             <div class="mb-2">
                                 <input type="text" id="unplaced-asset-search" placeholder="Search assets..." class="form-input w-full text-sm">
@@ -433,7 +441,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="checkbox" id="bulk-update-intended-user-check" class="form-checkbox">
+                        <input type="checkbox" id="bulk-update-intended-user-check" data-target="bulk-intended-user-type" class="form-checkbox">
                         <div class="flex-grow">
                              <label for="bulk-intended-user-type" class="form-label">Intended User</label>
                             <select id="bulk-intended-user-type" class="form-select disabled:bg-gray-100" disabled>
@@ -442,7 +450,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="checkbox" id="bulk-update-condition-check" class="form-checkbox">
+                        <input type="checkbox" id="bulk-update-condition-check" data-target="bulk-condition" class="form-checkbox">
                         <div class="flex-grow">
                             <label for="bulk-condition" class="form-label">Condition</label>
                             <select id="bulk-condition" class="form-select disabled:bg-gray-100" disabled>
@@ -451,7 +459,7 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <input type="checkbox" id="bulk-update-assigned-to-check" class="form-checkbox">
+                        <input type="checkbox" id="bulk-update-assigned-to-check" data-target="bulk-assigned-to" class="form-checkbox">
                         <div class="flex-grow">
                             <label for="bulk-assigned-to" class="form-label">Assignment (Employee)</label>
                             <select id="bulk-assigned-to" class="form-select disabled:bg-gray-100" disabled></select>

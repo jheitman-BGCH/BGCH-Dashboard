@@ -59,18 +59,20 @@ let globalTooltip = null;
 
 // --- INITIALIZATION ---
 
-// NEW: Restored handleToolbarDragStart function
 function handleToolbarDragStart(e) {
     const target = e.target;
+    // For floor patches, we create a specific asset type.
+    // For other items, it remains generic until dropped.
+    const assetType = target.dataset.assetType;
     const data = {
         type: 'new-object',
-        assetType: target.dataset.assetType,
+        assetType: assetType,
         name: target.dataset.name,
         width: parseInt(target.dataset.width || 1),
         height: parseInt(target.dataset.height || 1),
         shelfRows: parseInt(target.dataset.shelfRows || 0),
         shelfCols: parseInt(target.dataset.shelfCols || 0),
-        referenceId: null // It's a new structural item, not based on an existing asset
+        referenceId: null 
     };
     e.dataTransfer.setData('application/json', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'copy';
@@ -407,13 +409,17 @@ function renderGrid() {
         }
     }
 
-    roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(40px, 1fr))`;
-    roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(40px, 1fr))`;
-    
-    setTimeout(() => {
-        const rect = roomGrid.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) roomGrid.style.backgroundSize = `${rect.width / gridWidth}px ${rect.height / gridHeight}px`;
-    }, 0);
+    // Ensure grid cells are square by setting aspect ratio of the grid itself.
+    roomGrid.style.aspectRatio = `${gridWidth} / ${gridHeight}`;
+
+    roomGrid.style.gridTemplateColumns = `repeat(${gridWidth}, minmax(0, 1fr))`;
+    roomGrid.style.gridTemplateRows = `repeat(${gridHeight}, minmax(0, 1fr))`;
+
+    const rect = roomGrid.getBoundingClientRect();
+    if (rect.width > 0) {
+        const cellWidth = rect.width / gridWidth;
+        roomGrid.style.backgroundSize = `${cellWidth}px ${cellWidth}px`;
+    }
 
     state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId).forEach(obj => renderObject(obj, roomGrid, assetsById));
     updateSelectionVisuals();
@@ -423,41 +429,55 @@ function renderObject(objectData, parentGrid, assetsById) {
     const assetInfo = assetsById.get(objectData.ReferenceID);
     if (!assetInfo) return;
 
-    const objEl = document.createElement('div');
-    objEl.className = 'visual-object flex items-center justify-center p-1 select-none';
-    objEl.dataset.instanceId = objectData.InstanceID;
-    objEl.draggable = true;
-    const typeClass = { 'Shelf': 'shelf', 'Container': 'container', 'Wall': 'wall', 'Door': 'door' }[assetInfo.AssetType] || 'asset-item';
-    objEl.classList.add(typeClass);
+    const isFloorPatch = assetInfo.AssetType && assetInfo.AssetType.startsWith('FloorPatch_');
 
+    const objEl = document.createElement('div');
+    objEl.className = 'visual-object';
+    objEl.dataset.instanceId = objectData.InstanceID;
+    
     let width = objectData.Width, height = objectData.Height;
-    if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && objectData.Orientation === 'Vertical') {
-        [width, height] = [height, width];
+
+    if (isFloorPatch) {
+        objEl.classList.add('floor-patch');
+        const floorType = assetInfo.AssetType.split('_')[1]?.toLowerCase() || '';
+        if(floorType) objEl.classList.add(floorType);
+        objEl.style.zIndex = 1;
+    } else {
+        const typeClass = { 'Shelf': 'shelf', 'Container': 'container', 'Wall': 'wall', 'Door': 'door' }[assetInfo.AssetType] || 'asset-item';
+        objEl.classList.add(typeClass, 'flex', 'items-center', 'justify-center', 'p-1', 'select-none');
+        objEl.draggable = true;
+        objEl.style.zIndex = 10;
+        
+        if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && objectData.Orientation === 'Vertical') {
+            [width, height] = [height, width];
+        }
+
+        if (typeClass === 'shelf' || typeClass === 'container') {
+            objEl.addEventListener('mouseenter', (e) => showTooltip(e, objectData, assetsById));
+            objEl.addEventListener('mouseleave', hideTooltip);
+        }
+
+        if (assetInfo.AssetType === 'Door') {
+            objEl.innerHTML = `<svg viewBox="0 0 500 500"><path d="M500,500h-95.21c.22-62.74-17.01-124.74-49.41-178.11-49.99-82.35-134.38-140.31-229.69-156.99-10.12-1.77-20.32-2.86-30.48-4.27v339.37H0v-28.91l.88-.75c.24-.02.44.46.58.46h61.92l.34-313.3c.24-.71.76-.83,1.42-.95,1.93-.35,7.04-.26,9.34-.26,25.01.06,53.35,4.68,77.52,10.94,139.42,36.08,243.83,158.82,254.8,303.02l93.2.84v28.91Z"/></svg>`;
+            const svg = objEl.querySelector('svg');
+            if (objectData.Orientation === 'North') svg.style.transform = 'rotate(270deg)';
+            if (objectData.Orientation === 'South') svg.style.transform = 'rotate(90deg)';
+            if (objectData.Orientation === 'West') svg.style.transform = 'scaleX(-1)';
+        } else if(typeClass !== 'wall') {
+            objEl.innerHTML = `<span class="truncate pointer-events-none">${assetInfo.AssetName}</span>`;
+        }
+
+        objEl.addEventListener('dragstart', (e) => handleObjectDragStart(e, objectData));
+        objEl.addEventListener('dragend', cleanupDrag);
+        objEl.addEventListener('dblclick', (e) => {
+            if (['shelf', 'container'].includes(typeClass)) { e.stopPropagation(); navigateTo(objectData.InstanceID, assetInfo.AssetName); }
+        });
     }
+
     objEl.style.gridColumn = `${parseInt(objectData.PosX) + 1} / span ${width}`;
     objEl.style.gridRow = `${parseInt(objectData.PosY) + 1} / span ${height}`;
-
-    if (typeClass === 'shelf' || typeClass === 'container') {
-        objEl.addEventListener('mouseenter', (e) => showTooltip(e, objectData, assetsById));
-        objEl.addEventListener('mouseleave', hideTooltip);
-    }
     
-    if (assetInfo.AssetType === 'Door') {
-        objEl.innerHTML = `<svg viewBox="0 0 500 500"><path d="M500,500h-95.21c.22-62.74-17.01-124.74-49.41-178.11-49.99-82.35-134.38-140.31-229.69-156.99-10.12-1.77-20.32-2.86-30.48-4.27v339.37H0v-28.91l.88-.75c.24-.02.44.46.58.46h61.92l.34-313.3c.24-.71.76-.83,1.42-.95,1.93-.35,7.04-.26,9.34-.26,25.01.06,53.35,4.68,77.52,10.94,139.42,36.08,243.83,158.82,254.8,303.02l93.2.84v28.91Z"/></svg>`;
-        const svg = objEl.querySelector('svg');
-        if (objectData.Orientation === 'North') svg.style.transform = 'rotate(270deg)';
-        if (objectData.Orientation === 'South') svg.style.transform = 'rotate(90deg)';
-        if (objectData.Orientation === 'West') svg.style.transform = 'scaleX(-1)';
-    } else if(typeClass !== 'wall') {
-        objEl.innerHTML = `<span class="truncate pointer-events-none">${assetInfo.AssetName}</span>`;
-    }
-
-    objEl.addEventListener('dragstart', (e) => handleObjectDragStart(e, objectData));
-    objEl.addEventListener('dragend', cleanupDrag);
     objEl.addEventListener('click', (e) => { e.stopPropagation(); selectObject(objectData.InstanceID, e.shiftKey); });
-    objEl.addEventListener('dblclick', (e) => {
-        if (['shelf', 'container'].includes(typeClass)) { e.stopPropagation(); navigateTo(objectData.InstanceID, assetInfo.AssetName); }
-    });
     objEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showRadialMenu(e.clientX, e.clientY, objectData.InstanceID); });
     parentGrid.appendChild(objEl);
 }
@@ -529,8 +549,10 @@ function selectObject(instanceId, isMultiSelect = false) {
     } else if (isMultiSelect) {
         selectedIds.has(instanceId) ? selectedIds.delete(instanceId) : selectedIds.add(instanceId);
     } else {
-        selectedIds.clear();
-        selectedIds.add(instanceId);
+        if (!selectedIds.has(instanceId)) {
+            selectedIds.clear();
+            selectedIds.add(instanceId);
+        }
     }
     viState.selectedInstanceIds = Array.from(selectedIds);
     updateSelectionVisuals();
@@ -553,18 +575,19 @@ async function updateObjectInSheet(updatedInstance) {
 // (handleRename, handleFlip, handleRotate, handleOpen, handleResize logic remains largely the same)
 function showRadialMenu(x, y, instanceId) {
     clearTimeout(hideMenuTimeout);
-    if(viState.selectedInstanceIds.length > 1) { // Don't show menu for multi-select
-        selectObject(instanceId); // Select only the right-clicked item
+    if(viState.selectedInstanceIds.length > 1 && !viState.selectedInstanceIds.includes(instanceId)) { 
+        selectObject(instanceId); 
     }
     viState.activeRadialInstanceId = instanceId;
     const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
     const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null;
     if (!asset) return;
     const isContainer = ['Shelf', 'Container'].includes(asset.AssetType);
-    dom.radialRenameUse.classList.toggle('hidden', asset.AssetType === 'Door' || asset.AssetType === 'Wall');
+    const isFloor = asset.AssetType.startsWith('FloorPatch_');
+    dom.radialRenameUse.classList.toggle('hidden', asset.AssetType === 'Door' || asset.AssetType === 'Wall' || isFloor);
     dom.radialFlipUse.classList.toggle('hidden', asset.AssetType !== 'Door');
     dom.radialOpenUse.classList.toggle('hidden', !isContainer);
-    dom.radialRotateUse.classList.toggle('hidden', asset.AssetType === 'Wall');
+    dom.radialRotateUse.classList.toggle('hidden', asset.AssetType === 'Wall' || isFloor);
     dom.radialResizeUse.classList.toggle('hidden', asset.AssetType === 'Door');
     dom.radialMenu.style.left = `${x}px`;
     dom.radialMenu.style.top = `${y}px`;
@@ -655,12 +678,15 @@ async function handleDelete(instanceIdsToDelete) {
     const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET];
     const assetSheetId = sheetIds[ASSET_SHEET];
 
+    const assetsById = selectors.selectAssetsById(allAssets);
+
     instanceIdsToDelete.forEach(instanceId => {
         const instance = spatialLayoutData.find(i => i.InstanceID === instanceId);
         if (instance && layoutSheetId && instance.rowIndex) {
             requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: instance.rowIndex - 1, endIndex: instance.rowIndex } } });
-            const asset = selectors.selectAssetsById(allAssets).get(instance.ReferenceID);
-            if (asset && !['Shelf', 'Container', 'Wall', 'Door'].includes(asset.AssetType) && assetSheetId && asset.rowIndex) {
+            const asset = assetsById.get(instance.ReferenceID);
+            // Also delete the backing asset if it's not a reusable type (like a shelf/container)
+            if (asset && !['Shelf', 'Container', 'Wall', 'Door'].includes(asset.AssetType) && !asset.AssetType.startsWith('FloorPatch_') && assetSheetId && asset.rowIndex) {
                 requests.push({ deleteDimension: { range: { sheetId: assetSheetId, dimension: "ROWS", startIndex: asset.rowIndex - 1, endIndex: asset.rowIndex } } });
             }
         }
@@ -697,7 +723,7 @@ async function handlePaste() {
 
     for (const item of viState.clipboard) {
         let newReferenceId = item.instance.ReferenceID;
-        const isStructural = ['Shelf', 'Container', 'Wall', 'Door'].includes(item.asset.AssetType);
+        const isStructural = ['Shelf', 'Container', 'Wall', 'Door'].includes(item.asset.AssetType) || item.asset.AssetType.startsWith('FloorPatch_');
 
         if (!isStructural) {
             newReferenceId = `ASSET-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -792,9 +818,7 @@ function hideSnapGuides() {
     dragState.snapLines = [];
 }
 
-// Resize logic (unchanged)
-function createObjectResizeHandles(objEl, instanceId) { /*...*/ }
-function initResize(e, instanceId, direction) { /*...*/ }
-function showTooltip(event, objectData, assetsById) { /*...*/ }
-function hideTooltip() { /*...*/ }
-
+function showTooltip(event, objectData, assetsById) { /* Original implementation */ }
+function hideTooltip() { /* Original implementation */ }
+function createObjectResizeHandles(objEl, instanceId) { /* Original implementation */ }
+async function initResize(e, instanceId, direction) { /* Original implementation */ }

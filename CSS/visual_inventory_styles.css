@@ -94,6 +94,7 @@
     background-image:
         linear-gradient(to right, #d1d5db 1px, transparent 1px),
         linear-gradient(to bottom, #d1d5db 1px, transparent 1px);
+    background-size: 1fr 1fr; /* Will be updated by JS */
 }
 
 /* --- Visual Object Styles --- */
@@ -115,10 +116,10 @@
     cursor: grabbing;
 }
 
-.visual-object:hover {
+.visual-object:not(.floor-patch):hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    z-index: 10;
+    z-index: 15;
 }
 
 .visual-object.shelf { background-color: #fefcbf; border: 2px solid #f59e0b; color: #b45309; }
@@ -220,3 +221,16 @@
     width: 100%;
     left: 0;
 }
+
+/* --- [NEW] Floor Patch Styles --- */
+.visual-object.floor-patch {
+    z-index: 1;
+    border-radius: 0;
+    box-shadow: none;
+    border: 1px dashed rgba(0, 0, 0, 0.1);
+    cursor: default;
+}
+
+.visual-object.floor-patch.carpet { background-color: #f3e9d2; }
+.visual-object.floor-patch.tile { background-color: #e5e7eb; }
+.visual-object.floor-patch.wood { background-color: #d1b7a0; }
