@@ -17,10 +17,12 @@ let viState = {
     unplacedAssetSort: 'asc',
     unplacedAssetGroupBy: 'none',
     clipboard: null,
+    isWallDrawingMode: false,
+    wallDrawingStartPoint: null,
 };
 
 // --- NEW: Konva State ---
-let stage, gridLayer, objectsLayer;
+let stage, gridLayer, objectsLayer, wallPreviewLayer;
 let cellWidth, cellHeight;
 
 // --- DOM REFERENCES & FLAGS ---
@@ -91,7 +93,7 @@ function setupAndBindVisualInventory() {
         renderUnplacedAssets(viState.activeSiteId);
     });
 
-    document.querySelectorAll('.toolbar-item').forEach(item => item.addEventListener('dragstart', (e) => {
+    document.querySelectorAll('.toolbar-item[draggable="true"]').forEach(item => item.addEventListener('dragstart', (e) => {
         const target = e.target;
         const data = {
             type: 'new-object',
@@ -106,6 +108,9 @@ function setupAndBindVisualInventory() {
         e.dataTransfer.setData('application/json', JSON.stringify(data));
         e.dataTransfer.effectAllowed = 'copy';
     }));
+
+    // Wall drawing button
+    dom.drawWallBtn.addEventListener('click', toggleWallDrawingMode);
 
     // Listen for drops on the container, which holds the canvas
     dom.gridContainer.addEventListener('dragover', (e) => e.preventDefault());
@@ -286,6 +291,8 @@ function renderGrid() {
     gridEl.id = 'room-grid';
     gridContainer.appendChild(gridEl);
 
+    if (viState.isWallDrawingMode) toggleWallDrawingMode();
+
     if (!viState.activeParentId) {
         gridContainer.innerHTML = `<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select a site and room to begin.</p></div>`;
         return;
@@ -334,17 +341,46 @@ function renderGrid() {
 
     objectsLayer = new Konva.Layer();
     stage.add(objectsLayer);
+    
+    wallPreviewLayer = new Konva.Layer();
+    stage.add(wallPreviewLayer);
 
     state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId).forEach(obj => renderObject(obj, itemsById));
     objectsLayer.draw();
 
-    stage.on('click', (e) => { if (e.target === stage) selectObject(null); });
+    stage.on('mousedown', (e) => { 
+        if (viState.isWallDrawingMode) {
+            handleWallDrawClick(e);
+        } else if (e.target === stage) {
+            selectObject(null);
+        }
+    });
+    stage.on('mousemove', (e) => {
+        if (viState.isWallDrawingMode && viState.wallDrawingStartPoint) {
+            drawPreviewWall(e);
+        }
+    });
     stage.on('contextmenu', (e) => { e.evt.preventDefault(); });
 }
 
 function renderObject(objectData, itemsById) {
     const assetInfo = itemsById.get(objectData.ReferenceID);
     if (!assetInfo) return;
+
+    if (assetInfo.AssetType === 'Wall') {
+        if (objectData.x1 && objectData.y1 && objectData.x2 && objectData.y2) {
+            const wallLine = new Konva.Line({
+                points: [parseFloat(objectData.x1), parseFloat(objectData.y1), parseFloat(objectData.x2), parseFloat(objectData.y2)],
+                stroke: '#4b5563', strokeWidth: 8, id: objectData.InstanceID, draggable: false, hitStrokeWidth: 15,
+            });
+            wallLine.on('click', (e) => { e.evt.stopPropagation(); selectObject(objectData.InstanceID, e.evt.shiftKey); });
+            wallLine.on('contextmenu', (e) => { e.evt.preventDefault(); e.evt.stopPropagation(); showRadialMenu(e.evt.pageX, e.evt.pageY, objectData.InstanceID); });
+            objectsLayer.add(wallLine);
+        } else {
+             console.warn(`Wall object InstanceID ${objectData.InstanceID} has no vector data.`);
+        }
+        return;
+    }
 
     const group = new Konva.Group({
         x: objectData.PosX * cellWidth,
@@ -354,7 +390,7 @@ function renderObject(objectData, itemsById) {
     });
     
     let width = objectData.Width, height = objectData.Height;
-    if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && objectData.Orientation === 'Vertical') {
+    if (assetInfo.AssetType !== 'Door' && objectData.Orientation === 'Vertical') {
         [width, height] = [height, width];
     }
     const pixelWidth = width * cellWidth;
@@ -363,7 +399,6 @@ function renderObject(objectData, itemsById) {
     const typeStyles = {
         'Shelf': { fill: '#fef3c7', stroke: '#f59e0b', strokeWidth: 2, textColor: '#78350f' },
         'Container': { fill: '#dbeafe', stroke: '#3b82f6', strokeWidth: 2, textColor: '#1e3a8a' },
-        'Wall': { fill: '#4b5563', stroke: '#1f2937', strokeWidth: 1 },
         'Door': { fill: 'white', stroke: '#9ca3af', strokeWidth: 2 },
         'default': { fill: '#e5e7eb', stroke: '#6b7280', strokeWidth: 1, textColor: '#1f2937' }
     };
@@ -379,7 +414,7 @@ function renderObject(objectData, itemsById) {
     const rect = new Konva.Rect({ width: pixelWidth, height: pixelHeight, fill: style.fill, stroke: style.stroke, strokeWidth: style.strokeWidth, cornerRadius: 4 });
     group.add(rect);
     
-    if (assetInfo.AssetType !== 'Wall' && assetInfo.AssetType !== 'Door' && !assetInfo.AssetType.startsWith('FloorPatch_')) {
+    if (assetInfo.AssetType !== 'Door' && !assetInfo.AssetType.startsWith('FloorPatch_')) {
         const text = new Konva.Text({
             text: assetInfo.AssetName, fontSize: 12, fontFamily: 'Inter, sans-serif', fill: style.textColor, padding: 5,
             width: pixelWidth, height: pixelHeight, align: 'center', verticalAlign: 'middle', listening: false,
@@ -408,10 +443,17 @@ function renderObject(objectData, itemsById) {
     objectsLayer.add(group);
 }
 
-// --- EVENT HANDLERS & NAVIGATION (Logic mostly unchanged, hooks into new render functions) ---
+// --- EVENT HANDLERS & NAVIGATION ---
 async function handleRoomFormSubmit(e) {
     e.preventDefault();
-    const roomData = { RoomID: `ROOM-${Date.now()}`, RoomName: document.getElementById('room-name').value, SiteID: viState.activeSiteId, GridWidth: document.getElementById('grid-width').value, GridHeight: document.getElementById('grid-height').value };
+    const roomData = { 
+        RoomID: `ROOM-${Date.now()}`, 
+        RoomName: document.getElementById('room-name').value, 
+        SiteID: viState.activeSiteId, 
+        GridWidth: document.getElementById('grid-width').value, 
+        GridHeight: document.getElementById('grid-height').value,
+        Dimensions: document.getElementById('room-dimensions').value,
+    };
     const rowData = await api.prepareRowData(ROOMS_SHEET, roomData, ROOMS_HEADER_MAP);
     await api.appendSheetValues(ROOMS_SHEET, [rowData]);
     toggleModal(dom.roomModal, false);
@@ -456,10 +498,70 @@ function renderBreadcrumbs() {
     dom.breadcrumbContainer.querySelectorAll('a').forEach(a => a.onclick = (e) => { e.preventDefault(); navigateTo(e.target.dataset.id, e.target.dataset.name); });
 }
 
+// --- WALL DRAWING ---
+function toggleWallDrawingMode() {
+    viState.isWallDrawingMode = !viState.isWallDrawingMode;
+    viState.wallDrawingStartPoint = null;
+    if (wallPreviewLayer) wallPreviewLayer.destroyChildren();
+
+    if (viState.isWallDrawingMode) {
+        dom.drawWallBtn.classList.add('bg-indigo-200', 'text-indigo-800');
+        stage.container().style.cursor = 'crosshair';
+        showMessage('Wall Drawing Mode: Click a start point, then an end point.', 'info');
+    } else {
+        dom.drawWallBtn.classList.remove('bg-indigo-200', 'text-indigo-800');
+        if (stage) stage.container().style.cursor = 'default';
+    }
+}
+function handleWallDrawClick() {
+    if (!stage) return;
+    const pos = stage.getPointerPosition();
+    if (!viState.wallDrawingStartPoint) {
+        viState.wallDrawingStartPoint = pos;
+    } else {
+        saveNewWall(viState.wallDrawingStartPoint, pos);
+        toggleWallDrawingMode();
+    }
+}
+function drawPreviewWall() {
+    if (!stage || !viState.wallDrawingStartPoint) return;
+    const pos = stage.getPointerPosition();
+    wallPreviewLayer.destroyChildren();
+    const line = new Konva.Line({
+        points: [viState.wallDrawingStartPoint.x, viState.wallDrawingStartPoint.y, pos.x, pos.y],
+        stroke: '#6366f1', strokeWidth: 4, dash: [10, 5],
+    });
+    wallPreviewLayer.add(line);
+}
+async function saveNewWall(start, end) {
+    if (!viState.activeParentId) return showMessage("Cannot add a wall without a selected room or container.");
+    
+    // Create a corresponding asset for this wall
+    const newAsset = { AssetID: `ASSET-${Date.now()}`, AssetName: 'Wall', AssetType: 'Wall', ParentObjectID: viState.activeParentId };
+    const newAssetRow = await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP);
+
+    const newInstanceData = {
+        InstanceID: `INST-${Date.now()}`,
+        ParentID: viState.activeParentId,
+        ReferenceID: newAsset.AssetID,
+        x1: start.x.toFixed(2),
+        y1: start.y.toFixed(2),
+        x2: end.x.toFixed(2),
+        y2: end.y.toFixed(2),
+    };
+    const newInstanceRow = await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstanceData, SPATIAL_LAYOUT_HEADER_MAP);
+
+    await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
+    await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, [newInstanceRow]);
+    
+    window.dispatchEvent(new CustomEvent('datachanged'));
+}
+
 // --- OBJECT MANIPULATION & SELECTION ---
 function selectObject(instanceId, isMultiSelect = false) {
     if (!stage) return;
     objectsLayer.find('Transformer').forEach(tr => tr.destroy());
+    objectsLayer.find('.selection-rect').forEach(r => r.destroy()); // For wall selections
 
     const selectedIds = new Set(viState.selectedInstanceIds);
     if (instanceId === null) {
@@ -476,11 +578,26 @@ function selectObject(instanceId, isMultiSelect = false) {
     const selectedNodes = viState.selectedInstanceIds.map(id => stage.findOne('#' + id)).filter(Boolean);
     
     if (selectedNodes.length > 0) {
-        const tr = new Konva.Transformer({
-            nodes: selectedNodes, borderStroke: '#4f46e5', borderStrokeWidth: 2, anchorStroke: '#4f46e5',
-            anchorFill: 'white', anchorSize: 8, keepRatio: false, rotateEnabled: false,
+        // Use Transformer for rectangles, custom bounding box for lines/walls
+        const rectNodes = selectedNodes.filter(n => n instanceof Konva.Group);
+        const lineNodes = selectedNodes.filter(n => n instanceof Konva.Line);
+
+        if (rectNodes.length > 0) {
+            const tr = new Konva.Transformer({
+                nodes: rectNodes, borderStroke: '#4f46e5', borderStrokeWidth: 2, anchorStroke: '#4f46e5',
+                anchorFill: 'white', anchorSize: 8, keepRatio: false, rotateEnabled: false,
+            });
+            objectsLayer.add(tr);
+        }
+
+        lineNodes.forEach(line => {
+            const box = line.getClientRect();
+             const selectionRect = new Konva.Rect({
+                x: box.x, y: box.y, width: box.width, height: box.height,
+                stroke: '#4f46e5', strokeWidth: 2, dash: [4, 4], name: 'selection-rect',
+            });
+            objectsLayer.add(selectionRect);
         });
-        objectsLayer.add(tr);
     }
     objectsLayer.draw();
 }
@@ -490,7 +607,7 @@ async function updateObjectInSheet(updatedInstance) {
     await api.updateSheetValues(`${SPATIAL_LAYOUT_SHEET}!A${updatedInstance.rowIndex}`, [rowData]);
 }
 
-// --- RADIAL MENU & ACTIONS (Logic mostly unchanged) ---
+// --- RADIAL MENU & ACTIONS ---
 function showRadialMenu(x, y, instanceId) {
     clearTimeout(hideMenuTimeout);
     if(viState.selectedInstanceIds.length > 1 && !viState.selectedInstanceIds.includes(instanceId)) selectObject(instanceId); 
@@ -500,11 +617,13 @@ function showRadialMenu(x, y, instanceId) {
     if (!asset) return;
     const isContainer = ['Shelf', 'Container'].includes(asset.AssetType);
     const isFloor = asset.AssetType.startsWith('FloorPatch_');
-    dom.radialRenameUse.classList.toggle('hidden', asset.AssetType === 'Door' || asset.AssetType === 'Wall' || isFloor);
+    const isWall = asset.AssetType === 'Wall';
+    
+    dom.radialRenameUse.classList.toggle('hidden', asset.AssetType === 'Door' || isWall || isFloor);
     dom.radialFlipUse.classList.toggle('hidden', asset.AssetType !== 'Door');
     dom.radialOpenUse.classList.toggle('hidden', !isContainer);
-    dom.radialRotateUse.classList.toggle('hidden', asset.AssetType === 'Wall' || isFloor);
-    dom.radialResizeUse.classList.toggle('hidden', asset.AssetType === 'Door');
+    dom.radialRotateUse.classList.toggle('hidden', isWall || isFloor);
+    dom.radialResizeUse.classList.toggle('hidden', asset.AssetType === 'Door' || isWall);
     dom.radialMenu.style.left = `${x}px`; dom.radialMenu.style.top = `${y}px`;
     dom.radialMenu.classList.remove('hidden');
     setTimeout(() => dom.radialMenu.classList.add('visible'), 10);
@@ -524,6 +643,6 @@ function handleKeyDown(e) {
     else if (isCtrlOrMeta && e.key.toLowerCase() === 'c') { e.preventDefault(); handleCopy(); }
     else if (isCtrlOrMeta && e.key.toLowerCase() === 'v') { e.preventDefault(); handlePaste(); }
 }
-async function handleDelete(instanceIdsToDelete) { if (!instanceIdsToDelete || instanceIdsToDelete.length === 0 || !confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s) from the room? They will be returned to the unplaced items list.`)) return; const { spatialLayoutData, sheetIds } = getState(); const requests = []; const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET]; instanceIdsToDelete.forEach(instanceId => { const instance = spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance && layoutSheetId && instance.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } }); } }); if (requests.length > 0) { await api.batchUpdateSheet({ requests }); window.dispatchEvent(new CustomEvent('datachanged')); } }
+async function handleDelete(instanceIdsToDelete) { if (!instanceIdsToDelete || instanceIdsToDelete.length === 0 || !confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s) from the room? This may also delete the associated asset.`)) return; const { spatialLayoutData, allAssets, sheetIds } = getState(); const requests = []; const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET]; const assetSheetId = sheetIds[ASSET_SHEET]; const assetsById = selectors.selectAssetsById(allAssets); instanceIdsToDelete.forEach(instanceId => { const instance = spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { if (layoutSheetId && instance.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } }); } const asset = assetsById.get(instance.ReferenceID); if (asset && asset.AssetType === "Wall") { if (assetSheetId && asset.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: assetSheetId, dimension: "ROWS", startIndex: parseInt(asset.rowIndex) - 1, endIndex: parseInt(asset.rowIndex) } } }); } } } }); if (requests.length > 0) { await api.batchUpdateSheet({ requests }); window.dispatchEvent(new CustomEvent('datachanged')); } }
 function handleCopy() { if (viState.selectedInstanceIds.length === 0) return; const { spatialLayoutData, allAssets } = getState(); const assetsById = selectors.selectAssetsById(allAssets); viState.clipboard = viState.selectedInstanceIds.map(id => { const instance = spatialLayoutData.find(i => i.InstanceID === id); const asset = assetsById.get(instance?.ReferenceID); return { instance, asset }; }).filter(item => item.instance && item.asset); if (viState.clipboard.length > 0) showMessage(`Copied ${viState.clipboard.length} item(s).`, 'success'); }
 async function handlePaste() { if (!viState.clipboard || viState.clipboard.length === 0 || !viState.activeParentId) return; const newInstanceRows = []; const newAssetRows = []; const newSelectedIds = []; for (const item of viState.clipboard) { let newReferenceId = item.instance.ReferenceID; const isStructural = ['Shelf', 'Container', 'Wall', 'Door'].includes(item.asset.AssetType) || item.asset.AssetType.startsWith('FloorPatch_'); if (!isStructural) { newReferenceId = `ASSET-${Date.now()}-${Math.random().toString(16).slice(2)}`; const newAsset = { ...item.asset, AssetID: newReferenceId, AssetName: `${item.asset.AssetName} (Copy)`, ParentObjectID: viState.activeParentId }; delete newAsset.rowIndex; newAssetRows.push(await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP)); } const newInstanceId = `INST-${Date.now()}-${Math.random().toString(16).slice(2)}`; const newInstance = { ...item.instance, InstanceID: newInstanceId, ReferenceID: newReferenceId, ParentID: viState.activeParentId, PosX: parseInt(item.instance.PosX) + 1, PosY: parseInt(item.instance.PosY) + 1, }; delete newInstance.rowIndex; newInstanceRows.push(await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstance, SPATIAL_LAYOUT_HEADER_MAP)); newSelectedIds.push(newInstanceId); } if (newAssetRows.length > 0) await api.appendSheetValues(ASSET_SHEET, newAssetRows); if (newInstanceRows.length > 0) await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, newInstanceRows); showMessage(`Pasted ${newInstanceRows.length} item(s).`, 'success'); window.dispatchEvent(new CustomEvent('datachanged')); setTimeout(() => { selectObject(null); viState.selectedInstanceIds = newSelectedIds; selectObject(newSelectedIds[0]); }, 500); }

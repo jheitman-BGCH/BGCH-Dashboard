@@ -61,6 +61,7 @@ export const ROOMS_HEADER_MAP = [
     { key: "SiteID", aliases: ["SiteID", "Site ID"] },
     { key: "GridWidth", aliases: ["GridWidth", "Grid Width"] },
     { key: "GridHeight", aliases: ["GridHeight", "Grid Height"] },
+    { key: "Dimensions", aliases: ["Dimensions", "Real-World Dimensions"] },
     { key: "Notes", aliases: ["Notes"] }
 ];
 
@@ -81,6 +82,10 @@ export const SPATIAL_LAYOUT_HEADER_MAP = [
     { key: "PosY", aliases: ["PosY", "Pos Y"] },
     { key: "Width", aliases: ["Width"] },
     { key: "Height", aliases: ["Height"] },
+    { key: "x1", aliases: ["x1", "X1"] },
+    { key: "y1", aliases: ["y1", "Y1"] },
+    { key: "x2", aliases: ["x2", "X2"] },
+    { key: "y2", aliases: ["y2", "Y2"] },
     { key: "Orientation", aliases: ["Orientation"] },
     { key: "ShelfRows", aliases: ["ShelfRows", "Shelf Rows"] },
     { key: "ShelfCols", aliases: ["ShelfCols", "Shelf Cols"] }

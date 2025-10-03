@@ -121,7 +121,7 @@
                         </div>
                         <div class="ml-auto">
                             <button id="customize-cols-btn" class="w-full h-10 flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
+                                <svg xmlns="http://www.w.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
                                 <span>View</span>
                             </button>
                         </div>
@@ -224,11 +224,11 @@
                         <div id="object-toolbar" class="lg:col-span-1 bg-gray-50 p-4 rounded-lg border">
                             <h3 class="font-bold mb-4">Add to Room</h3>
                             <div class="space-y-2">
+                                <div id="draw-wall-btn" class="toolbar-item cursor-pointer" title="Draw a wall by clicking two points on the grid.">Draw Wall</div>
                                 <div class="toolbar-item" draggable="true" data-asset-type="Shelf" data-name="New Shelf" data-width="4" data-height="1" data-shelf-rows="1" data-shelf-cols="4">Shelf (4x1)</div>
                                 <div class="toolbar-item" draggable="true" data-asset-type="Shelf" data-name="Tall Shelf" data-width="2" data-height="5" data-shelf-rows="5" data-shelf-cols="2">Tall Shelf (2x5)</div>
                                 <div class="toolbar-item" draggable="true" data-asset-type="Container" data-name="New Box" data-width="2" data-height="2">Box (2x2)</div>
                                 <div class="toolbar-item" draggable="true" data-asset-type="Container" data-name="Small Box" data-width="1" data-height="1">Small Box (1x1)</div>
-                                <div class="toolbar-item" draggable="true" data-asset-type="Wall" data-name="Wall" data-width="1" data-height="1">Wall</div>
                                 <div class="toolbar-item" draggable="true" data-asset-type="Door" data-name="Door" data-width="1" data-height="1">Door</div>
                             </div>
                              <!-- NEW: Floor Types Section -->
@@ -530,6 +530,10 @@
                     <div>
                         <label for="room-name" class="form-label">Room Name</label>
                         <input type="text" id="room-name" required class="form-input">
+                    </div>
+                    <div>
+                        <label for="room-dimensions" class="form-label">Real-World Dimensions</label>
+                        <input type="text" id="room-dimensions" placeholder="e.g., 20ft x 15ft" class="form-input">
                     </div>
                     <div>
                         <label for="grid-width" class="form-label">Grid Width (cells)</label>
