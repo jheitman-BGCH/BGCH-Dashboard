@@ -283,6 +283,10 @@ async function handleToolbarDrop(data, gridX, gridY) {
 }
 
 // --- RENDERING & NAVIGATION ---
+/**
+ * Renders the main grid, handling both real-world dimensions and abstract grid dimensions.
+ * It calculates an effective scale to ensure the scale indicator is always accurate.
+ */
 function renderGrid() {
     const gridContainer = dom.gridContainer;
     const scaleIndicator = document.getElementById('scale-indicator');
@@ -314,28 +318,34 @@ function renderGrid() {
     });
 
     let room, canvasWidth, canvasHeight;
+    let effectiveScale = viState.scale; // Default scale
 
+    // Try to use real-world dimensions first
     if (viState.activeParentId.startsWith('ROOM-')) {
         room = selectors.selectRoomsById(state.allRooms).get(viState.activeParentId);
         if (room && room.Dimensions) {
-            const dims = room.Dimensions.toLowerCase().match(/(\d+(?:\.\d+)?)\s*ft\s*x\s*(\d+(?:\.\d+)?)\s*ft/);
-            if (dims) {
-                const roomWidthFt = parseFloat(dims[1]);
-                const roomHeightFt = parseFloat(dims[2]);
-                canvasWidth = roomWidthFt * viState.scale;
-                canvasHeight = roomHeightFt * viState.scale;
-                cellWidth = viState.scale;
-                cellHeight = viState.scale;
+            const dims = parseDimensions(room.Dimensions);
+            if (dims && dims.wFt && dims.lFt) {
+                const roomWidthFt = parseFloat(dims.wFt) + ((parseFloat(dims.wIn) || 0) / 12);
+                const roomHeightFt = parseFloat(dims.lFt) + ((parseFloat(dims.lIn) || 0) / 12);
+
+                if (roomWidthFt > 0 && roomHeightFt > 0) {
+                    canvasWidth = roomWidthFt * viState.scale;
+                    canvasHeight = roomHeightFt * viState.scale;
+                    cellWidth = viState.scale; // 1 cell is 1 foot
+                    cellHeight = viState.scale;
+                    effectiveScale = viState.scale;
+                }
             }
         }
     }
     
-    // Fallback to grid-based dimensions if real-world are not available
+    // Fallback to grid-based dimensions if real-world are not available or not parsed
     if (!canvasWidth) {
         let gridWidth = 20, gridHeight = 15;
         if (room) {
-            gridWidth = room.GridWidth || 20;
-            gridHeight = room.GridHeight || 15;
+            gridWidth = parseInt(room.GridWidth, 10) || 20;
+            gridHeight = parseInt(room.GridHeight, 10) || 15;
         } else {
              const parentInstance = state.spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
              if (parentInstance) {
@@ -344,23 +354,31 @@ function renderGrid() {
              }
         }
         const containerWidth = gridContainer.clientWidth;
-        canvasWidth = containerWidth;
-        canvasHeight = (containerWidth * gridHeight) / gridWidth;
-        cellWidth = canvasWidth / gridWidth;
-        cellHeight = canvasHeight / gridHeight;
+        // Handle case where container might not have width yet
+        if (containerWidth > 0) {
+            canvasWidth = containerWidth;
+            canvasHeight = (containerWidth * gridHeight) / gridWidth;
+            cellWidth = canvasWidth / gridWidth;
+            cellHeight = canvasHeight / gridHeight;
+            effectiveScale = cellWidth; // The actual pixels per "foot" (or cell)
+        } else {
+             // If container has no width, we can't draw. Hide indicator and exit.
+             scaleIndicator.classList.add('hidden');
+             return;
+        }
     }
     
-    updateScaleIndicator();
+    updateScaleIndicator(effectiveScale);
 
     stage = new Konva.Stage({ container: 'room-grid', width: canvasWidth, height: canvasHeight });
     gridLayer = new Konva.Layer();
     
-    // Draw grid lines based on scale (1 foot = viState.scale pixels)
-    for (let i = 0; i <= canvasWidth; i += viState.scale) {
-        gridLayer.add(new Konva.Line({ points: [i, 0, i, canvasHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
+    // Draw grid lines based on actual cell dimensions
+    for (let i = 0; (i * cellWidth) <= canvasWidth; i++) {
+        gridLayer.add(new Konva.Line({ points: [i * cellWidth, 0, i * cellWidth, canvasHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
     }
-    for (let j = 0; j <= canvasHeight; j += viState.scale) {
-        gridLayer.add(new Konva.Line({ points: [0, j, canvasWidth, j], stroke: '#e5e7eb', strokeWidth: 1 }));
+    for (let j = 0; (j * cellHeight) <= canvasHeight; j++) {
+        gridLayer.add(new Konva.Line({ points: [0, j * cellHeight, canvasWidth, j * cellHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
     }
     stage.add(gridLayer);
 
@@ -388,17 +406,27 @@ function renderGrid() {
     stage.on('contextmenu', (e) => { e.evt.preventDefault(); });
 }
 
-function updateScaleIndicator() {
+/**
+ * Updates the scale indicator's width and text based on the effective pixels-per-foot.
+ * @param {number} pixelsPerFoot - The calculated scale for the current view.
+ */
+function updateScaleIndicator(pixelsPerFoot) {
+    if (!pixelsPerFoot || pixelsPerFoot <= 0) return;
     const scaleLine = document.getElementById('scale-line');
     const scaleText = document.getElementById('scale-text');
     
-    const indicatorLengthFt = 5; // We want the indicator to represent 5 feet
-    const indicatorWidthPx = indicatorLengthFt * viState.scale;
+    // Determine a reasonable length for the indicator (e.g., 1, 2, 5, 10 ft)
+    // that results in a pixel width between roughly 50px and 200px.
+    let indicatorLengthFt = 1;
+    if (pixelsPerFoot * 10 < 200) indicatorLengthFt = 10;
+    else if (pixelsPerFoot * 5 < 200) indicatorLengthFt = 5;
+    else if (pixelsPerFoot * 2 < 150) indicatorLengthFt = 2;
+
+    const indicatorWidthPx = indicatorLengthFt * pixelsPerFoot;
     
     scaleLine.style.width = `${indicatorWidthPx}px`;
     scaleText.textContent = `${indicatorLengthFt} ft`;
 }
-
 
 function renderObject(objectData, itemsById) {
     // If it has wall coordinates, render as wall using scale and exit
