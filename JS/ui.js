@@ -54,6 +54,14 @@ export function initUI() {
         dom[key] = document.getElementById(id);
     });
 
+    // Add table-fixed for better layout control on the main inventory table
+    if (dom.assetTableBody) {
+        const table = dom.assetTableBody.closest('table');
+        if (table) {
+            table.classList.add('table-fixed');
+        }
+    }
+
     // Swipe navigation for pagination
     let touchstartX = 0;
     let touchendX = 0;
@@ -228,7 +236,7 @@ export function renderTable(paginatedAssets, totalPages, currentPage, visibleCol
     dom.assetTableBody.closest('table').dataset.totalPages = totalPages;
 
     const headerRow = document.createElement('tr');
-    let headerHTML = `<th scope="col" class="relative px-6 py-3"><input type="checkbox" id="select-all-assets" class="h-4 w-4 rounded"></th>`;
+    let headerHTML = `<th scope="col" class="relative px-6 py-3 w-12"><input type="checkbox" id="select-all-assets" class="h-4 w-4 rounded"></th>`;
     visibleColumns.forEach(colName => {
         let sortArrow = '';
         if (sortState.column === colName) {
@@ -236,7 +244,7 @@ export function renderTable(paginatedAssets, totalPages, currentPage, visibleCol
         }
         headerHTML += `<th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" data-column="${colName}">${colName.replace(/([A-Z])/g, ' $1')} <span class="sort-arrow">${sortArrow}</span></th>`;
     });
-    headerHTML += `<th scope="col" class="px-6 py-3">Actions</th>`;
+    headerHTML += `<th scope="col" class="px-6 py-3 w-20">Actions</th>`;
     headerRow.innerHTML = headerHTML;
     dom.assetTableHead.appendChild(headerRow);
 
@@ -257,7 +265,14 @@ export function renderTable(paginatedAssets, totalPages, currentPage, visibleCol
         tr.dataset.id = asset.AssetID;
         const displayColumns = visibleColumns.map(colName => {
             const value = colName === 'AssignedTo' ? asset.AssignedToName : asset[colName];
-            return `<td class="px-6 py-4 whitespace-nowrap text-sm">${value || ''}</td>`;
+            let tdClass = 'px-6 py-4 text-sm';
+            if (colName === 'AssetName') {
+                tdClass += ' break-words'; // Let the main name wrap
+            } else {
+                tdClass += ' truncate'; // Truncate other fields
+            }
+            const safeValue = (value || '').toString().replace(/"/g, '&quot;');
+            return `<td class="${tdClass}" title="${safeValue}">${value || ''}</td>`;
         }).join('');
 
         tr.innerHTML = `
@@ -590,4 +605,3 @@ export function setupModalHierarchy() {
         });
     }
 }
-
