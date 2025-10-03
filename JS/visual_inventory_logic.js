@@ -686,6 +686,65 @@ async function handlePaste() { if (!viState.clipboard || viState.clipboard.lengt
 // --- EDIT / DELETE HANDLERS ---
 function handleEditSite() { const site = selectors.selectSitesById(getState().allSites).get(viState.activeSiteId); if (!site) return; dom.siteModalTitle.innerText = 'Edit Site'; dom.siteIdHidden.value = site.SiteID; dom.siteRowIndexHidden.value = site.rowIndex; dom.siteModal.querySelector('#site-name').value = site.SiteName; dom.siteModal.querySelector('#site-address').value = site.Address; dom.siteModal.querySelector('#site-notes').value = site.Notes; toggleModal(dom.siteModal, true); }
 async function handleDeleteSite() { const site = selectors.selectSitesById(getState().allSites).get(viState.activeSiteId); if (!site || !confirm(`Are you sure you want to delete the site "${site.SiteName}"? This cannot be undone.`)) return; const { sheetIds } = getState(); await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: sheetIds[SITES_SHEET], dimension: "ROWS", startIndex: parseInt(site.rowIndex) - 1, endIndex: parseInt(site.rowIndex) } } }] }); window.dispatchEvent(new CustomEvent('datachanged')); }
-function handleEditRoom() { const room = selectors.selectRoomsById(getState().allRooms).get(viState.activeRoomId); if (!room) return; dom.roomModalTitle.innerText = 'Edit Room'; dom.roomIdHidden.value = room.RoomID; dom.roomRowIndexHidden.value = room.rowIndex; dom.roomModalSite.value = room.SiteID; dom.roomModal.querySelector('#room-name').value = room.RoomName; dom.roomModal.querySelector('#room-dimensions').value = room.Dimensions; dom.roomModal.querySelector('#grid-width').value = room.GridWidth; dom.roomModal.querySelector('#grid-height').value = room.GridHeight; toggleModal(dom.roomModal, true); }
+
+/**
+ * Parses a dimension string (e.g., "20ft 6in x 15ft") into its component parts.
+ * @param {string} dimString - The dimension string to parse.
+ * @returns {object} An object with wFt, wIn, lFt, lIn properties.
+ */
+function parseDimensions(dimString = '') {
+    const parsed = { wFt: '', wIn: '', lFt: '', lIn: '' };
+    if (!dimString) return parsed;
+
+    // Regex for one dimension part, e.g., "20ft 6in" or "20'" or "20"
+    const dimRegex = /(?:(\d+)\s*(?:ft|'))?\s*(?:(\d+)\s*(?:in|"))?/;
+    
+    const parts = dimString.toLowerCase().split('x');
+    if (parts.length === 2) {
+        const [widthPart, lengthPart] = parts;
+        
+        const widthMatch = widthPart.match(dimRegex);
+        if (widthMatch) {
+            parsed.wFt = widthMatch[1] || '';
+            parsed.wIn = widthMatch[2] || '';
+            // If only one number is present and no unit, assume it's feet
+            if(!widthMatch[1] && !widthMatch[2] && widthPart.match(/^\s*(\d+)\s*$/)) {
+                 parsed.wFt = widthPart.trim();
+            }
+        }
+
+        const lengthMatch = lengthPart.match(dimRegex);
+        if (lengthMatch) {
+            parsed.lFt = lengthMatch[1] || '';
+            parsed.lIn = lengthMatch[2] || '';
+             // If only one number is present and no unit, assume it's feet
+            if(!lengthMatch[1] && !lengthMatch[2] && lengthPart.match(/^\s*(\d+)\s*$/)) {
+                 parsed.lFt = lengthPart.trim();
+            }
+        }
+    }
+    
+    return parsed;
+}
+
+function handleEditRoom() { 
+    const room = selectors.selectRoomsById(getState().allRooms).get(viState.activeRoomId); 
+    if (!room) return; 
+    dom.roomModalTitle.innerText = 'Edit Room'; 
+    dom.roomIdHidden.value = room.RoomID; 
+    dom.roomRowIndexHidden.value = room.rowIndex; 
+    dom.roomModalSite.value = room.SiteID; 
+    dom.roomModal.querySelector('#room-name').value = room.RoomName; 
+    
+    const dims = parseDimensions(room.Dimensions);
+    dom.roomModal.querySelector('#room-width-ft').value = dims.wFt;
+    dom.roomModal.querySelector('#room-width-in').value = dims.wIn;
+    dom.roomModal.querySelector('#room-length-ft').value = dims.lFt;
+    dom.roomModal.querySelector('#room-length-in').value = dims.lIn;
+
+    dom.roomModal.querySelector('#grid-width').value = room.GridWidth; 
+    dom.roomModal.querySelector('#grid-height').value = room.GridHeight; 
+    toggleModal(dom.roomModal, true); 
+}
 async function handleDeleteRoom() { const room = selectors.selectRoomsById(getState().allRooms).get(viState.activeRoomId); if (!room || !confirm(`Are you sure you want to delete the room "${room.RoomName}"? This cannot be undone.`)) return; const { sheetIds } = getState(); await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: sheetIds[ROOMS_SHEET], dimension: "ROWS", startIndex: parseInt(room.rowIndex) - 1, endIndex: parseInt(room.rowIndex) } } }] }); window.dispatchEvent(new CustomEvent('datachanged')); }
 function handleEditContainer(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); const container = instance ? selectors.selectContainersById(getState().allContainers).get(instance.ReferenceID) : null; if (!container) return; dom.containerModalTitle.innerText = 'Edit Container'; dom.containerIdHidden.value = container.ContainerID; dom.containerRowIndexHidden.value = container.rowIndex; dom.containerModal.querySelector('#container-name').value = container.ContainerName; dom.containerModal.querySelector('#container-type').value = container.ContainerType; dom.containerModal.querySelector('#container-notes').value = container.Notes; const path = selectors.selectFullLocationPath(getState(), container.ParentID); const site = path.find(p => p.SiteID); const room = path.find(p => p.RoomID); dom.containerModalSite.value = site ? site.SiteID : ''; dom.containerModalSite.dispatchEvent(new Event('change')); dom.containerModalRoom.value = room ? room.RoomID : ''; dom.containerModalRoom.dispatchEvent(new Event('change')); const parentContainer = path.find(p => p.ContainerID && p.ContainerID !== container.ContainerID); dom.containerModalParent.value = parentContainer ? parentContainer.ContainerID : ''; toggleModal(dom.containerModal, true); }

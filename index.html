@@ -595,8 +595,23 @@
                         <input type="text" id="room-name" required class="form-input">
                     </div>
                     <div>
-                        <label for="room-dimensions" class="form-label">Real-World Dimensions</label>
-                        <input type="text" id="room-dimensions" placeholder="e.g., 20ft x 15ft" class="form-input">
+                        <label class="form-label">Real-World Dimensions</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="room-width-ft" class="text-sm text-gray-600">Width</label>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <input type="number" id="room-width-ft" placeholder="ft" class="form-input w-full" min="0">
+                                    <input type="number" id="room-width-in" placeholder="in" class="form-input w-full" min="0" max="11">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="room-length-ft" class="text-sm text-gray-600">Length</label>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <input type="number" id="room-length-ft" placeholder="ft" class="form-input w-full" min="0">
+                                    <input type="number" id="room-length-in" placeholder="in" class="form-input w-full" min="0" max="11">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <label for="grid-width" class="form-label">Grid Width (cells)</label>

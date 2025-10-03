@@ -480,6 +480,13 @@ async function handleRoomFormSubmit(e) {
     ui.setLoading(true);
     const d = ui.dom;
     try {
+        const widthFt = parseInt(d.roomModal.querySelector('#room-width-ft').value, 10) || 0;
+        const widthIn = parseInt(d.roomModal.querySelector('#room-width-in').value, 10) || 0;
+        const lengthFt = parseInt(d.roomModal.querySelector('#room-length-ft').value, 10) || 0;
+        const lengthIn = parseInt(d.roomModal.querySelector('#room-length-in').value, 10) || 0;
+
+        const dimensionsString = `${widthFt}ft ${widthIn}in x ${lengthFt}ft ${lengthIn}in`;
+
         const roomData = { 
             RoomID: d.roomIdHidden.value || `ROOM-${Date.now()}`, 
             rowIndex: d.roomRowIndexHidden.value,
@@ -487,7 +494,7 @@ async function handleRoomFormSubmit(e) {
             SiteID: d.roomModalSite.value, 
             GridWidth: d.roomModal.querySelector('#grid-width').value, 
             GridHeight: d.roomModal.querySelector('#grid-height').value,
-            Dimensions: d.roomModal.querySelector('#room-dimensions').value,
+            Dimensions: dimensionsString,
         };
 
         if (!roomData.SiteID) throw new Error("A site must be selected for the room.");
