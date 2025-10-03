@@ -82,45 +82,47 @@
 
             <div id="inventory-panel">
                 <div class="bg-white p-4 rounded-lg shadow-md mb-6">
-                    <div id="filter-section" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
-                         <div id="filter-search-wrapper">
-                            <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
-                            <input type="text" id="filter-search" placeholder="Search..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <div id="filter-section-container" class="flex flex-wrap items-end gap-4">
+                        <div id="filter-controls" class="flex-grow grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div id="filter-search-wrapper">
+                                <label for="filter-search" class="block text-sm font-medium text-gray-700">Search</label>
+                                <input type="text" id="filter-search" placeholder="Search..." class="mt-1 form-input">
+                            </div>
+                            <div id="filter-site-wrapper">
+                                <label for="filter-site" class="block text-sm font-medium text-gray-700">Site</label>
+                                <select id="filter-site" class="mt-1 form-select"></select>
+                            </div>
+                            <div id="filter-room-wrapper">
+                                <label for="filter-room" class="block text-sm font-medium text-gray-700">Room</label>
+                                <select id="filter-room" class="mt-1 form-select" disabled></select>
+                            </div>
+                            <div id="filter-container-wrapper">
+                                <label for="filter-container" class="block text-sm font-medium text-gray-700">Container</label>
+                                <select id="filter-container" class="mt-1 form-select" disabled></select>
+                            </div>
+                            <div id="filter-asset-type-wrapper" class="hidden">
+                                <label for="filter-asset-type" class="block text-sm font-medium text-gray-700">Asset Type</label>
+                                <select id="filter-asset-type" class="mt-1 form-select"></select>
+                            </div>
+                            <div id="filter-condition-wrapper" class="hidden">
+                                <label for="filter-condition" class="block text-sm font-medium text-gray-700">Condition</label>
+                                <select id="filter-condition" class="mt-1 form-select"></select>
+                            </div>
+                            <div id="filter-intended-user-type-wrapper" class="hidden">
+                                <label for="filter-intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
+                                <select id="filter-intended-user-type" class="mt-1 form-select"></select>
+                            </div>
+                             <div id="filter-assigned-to-wrapper" class="hidden">
+                                <label for="filter-assigned-to" class="block text-sm font-medium text-gray-700">Assigned To</label>
+                                <select id="filter-assigned-to" class="mt-1 form-select"></select>
+                            </div>
+                             <div id="filter-model-number-wrapper" class="hidden">
+                                <label for="filter-model-number" class="block text-sm font-medium text-gray-700">Model Number</label>
+                                <select id="filter-model-number" class="mt-1 form-select"></select>
+                            </div>
                         </div>
-                        <div id="filter-site-wrapper">
-                            <label for="filter-site" class="block text-sm font-medium text-gray-700">Site</label>
-                            <select id="filter-site" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
-                        </div>
-                        <div id="filter-room-wrapper">
-                            <label for="filter-room" class="block text-sm font-medium text-gray-700">Room</label>
-                            <select id="filter-room" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" disabled></select>
-                        </div>
-                        <div id="filter-container-wrapper">
-                            <label for="filter-container" class="block text-sm font-medium text-gray-700">Container</label>
-                            <select id="filter-container" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" disabled></select>
-                        </div>
-                        <div id="filter-asset-type-wrapper" class="hidden">
-                            <label for="filter-asset-type" class="block text-sm font-medium text-gray-700">Asset Type</label>
-                            <select id="filter-asset-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
-                        </div>
-                        <div id="filter-condition-wrapper" class="hidden">
-                            <label for="filter-condition" class="block text-sm font-medium text-gray-700">Condition</label>
-                            <select id="filter-condition" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
-                        </div>
-                        <div id="filter-intended-user-type-wrapper" class="hidden">
-                            <label for="filter-intended-user-type" class="block text-sm font-medium text-gray-700">Intended User</label>
-                            <select id="filter-intended-user-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
-                        </div>
-                         <div id="filter-assigned-to-wrapper" class="hidden">
-                            <label for="filter-assigned-to" class="block text-sm font-medium text-gray-700">Assigned To</label>
-                            <select id="filter-assigned-to" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
-                        </div>
-                         <div id="filter-model-number-wrapper" class="hidden">
-                            <label for="filter-model-number" class="block text-sm font-medium text-gray-700">Model Number</label>
-                            <select id="filter-model-number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
-                        </div>
-                        <div class="self-end">
-                            <button id="customize-cols-btn" class="w-full flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
+                        <div class="flex-shrink-0">
+                            <button id="customize-cols-btn" class="w-full h-10 flex items-center justify-center gap-2 bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 4a1 1 0 10-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4z" /></svg>
                                 <span>View</span>
                             </button>
@@ -146,8 +148,8 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-white p-6 rounded-lg shadow-md">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold">Assets by Site</h3>
-                            <select id="site-chart-type" class="chart-type-select form-select text-sm py-1">
+                            <h3 class="text-lg font-semibold flex-grow">Assets by Site</h3>
+                            <select id="site-chart-type" class="form-select text-sm py-1">
                                 <option value="pie">Pie</option>
                                 <option value="bar">Bar</option>
                                 <option value="doughnut">Doughnut</option>
@@ -157,8 +159,8 @@
                     </div>
                     <div class="bg-white p-6 rounded-lg shadow-md">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold">Assets by Condition</h3>
-                            <select id="condition-chart-type" class="chart-type-select form-select text-sm py-1">
+                            <h3 class="text-lg font-semibold flex-grow">Assets by Condition</h3>
+                            <select id="condition-chart-type" class="form-select text-sm py-1">
                                 <option value="bar">Bar</option>
                                 <option value="pie">Pie</option>
                                 <option value="doughnut">Doughnut</option>
@@ -168,8 +170,8 @@
                     </div>
                     <div class="bg-white p-6 rounded-lg shadow-md">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold">Assets by Type</h3>
-                             <select id="type-chart-type" class="chart-type-select form-select text-sm py-1">
+                            <h3 class="text-lg font-semibold flex-grow">Assets by Type</h3>
+                             <select id="type-chart-type" class="form-select text-sm py-1">
                                 <option value="bar">Bar</option>
                                 <option value="pie">Pie</option>
                                 <option value="doughnut">Doughnut</option>
@@ -179,8 +181,8 @@
                     </div>
                     <div class="bg-white p-6 rounded-lg shadow-md">
                          <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold">Assets by Employee</h3>
-                             <select id="employee-chart-type" class="chart-type-select form-select text-sm py-1">
+                            <h3 class="text-lg font-semibold flex-grow">Assets by Employee</h3>
+                             <select id="employee-chart-type" class="form-select text-sm py-1">
                                 <option value="bar">Bar</option>
                                 <option value="pie">Pie</option>
                                 <option value="doughnut">Doughnut</option>
@@ -636,3 +638,4 @@
     <script type="module" src="JS/main.js?v=1.1"></script>
 </body>
 </html>
+

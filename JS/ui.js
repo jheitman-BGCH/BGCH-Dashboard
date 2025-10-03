@@ -173,7 +173,11 @@ export function populateModalDropdowns() {
     const { allAssets, allEmployees } = getState();
     populateSelect(dom.assetType, [...new Map(allAssets.map(item => [item.AssetType, item])).values()], 'AssetType', 'AssetType', { initialOptionText: '-- Select --', addNew: true });
     populateSelect(dom.assignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
-    populateSelect(dom.bulkAssignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
+    
+    const bulkAssignedTo = document.getElementById('bulk-assigned-to');
+    if (bulkAssignedTo) {
+        populateSelect(bulkAssignedTo, allEmployees, 'EmployeeID', 'EmployeeName', { initialOptionText: '-- Unassigned --' });
+    }
 }
 
 /**
@@ -297,27 +301,35 @@ function renderPagination(totalPages, currentPage) {
         if (currentPage > 1) {
             prevButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage - 1 }));
         }
+        if(prevButton.disabled) prevButton.classList.add('disabled');
         container.appendChild(prevButton);
 
         const dotsContainer = document.createElement('div');
         dotsContainer.className = 'pagination-dots';
-        // Simplified pagination dots logic for brevity
-        let start = Math.max(1, currentPage - 2);
-        let end = Math.min(totalPages, currentPage + 2);
+        
+        const pages = [];
+        if (totalPages <= 7) {
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            pages.push(1);
+            if (currentPage > 3) pages.push('...');
+            
+            let start = Math.max(2, currentPage - 1);
+            let end = Math.min(totalPages - 1, currentPage + 1);
 
-        if (start > 1) {
-            dotsContainer.appendChild(createDot(1));
-            if(start > 2) dotsContainer.appendChild(createEllipsis());
+            for (let i = start; i <= end; i++) pages.push(i);
+
+            if (currentPage < totalPages - 2) pages.push('...');
+            pages.push(totalPages);
         }
         
-        for (let i = start; i <= end; i++) {
-            dotsContainer.appendChild(createDot(i, i === currentPage));
-        }
-
-        if (end < totalPages) {
-            if (end < totalPages - 1) dotsContainer.appendChild(createEllipsis());
-            dotsContainer.appendChild(createDot(totalPages));
-        }
+        pages.forEach(page => {
+            if (page === '...') {
+                 dotsContainer.appendChild(createEllipsis());
+            } else {
+                 dotsContainer.appendChild(createDot(page, page === currentPage));
+            }
+        });
         
         container.appendChild(dotsContainer);
 
@@ -328,6 +340,7 @@ function renderPagination(totalPages, currentPage) {
         if (currentPage < totalPages) {
             nextButton.addEventListener('click', () => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: currentPage + 1 }));
         }
+        if (nextButton.disabled) nextButton.classList.add('disabled');
         container.appendChild(nextButton);
     });
 }
@@ -337,14 +350,14 @@ function createDot(pageNumber, isActive = false) {
     dot.className = 'pagination-dot';
     if (isActive) dot.classList.add('active');
     dot.dataset.page = pageNumber;
-    dot.textContent = pageNumber; // Show page numbers
+    // dot.textContent = pageNumber; // Commented out to show dots instead of numbers
     dot.addEventListener('click', (e) => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: parseInt(e.target.dataset.page, 10) }));
     return dot;
 }
 
 function createEllipsis() {
     const ellipsis = document.createElement('span');
-    ellipsis.className = 'px-2 text-gray-500';
+    ellipsis.className = 'pagination-ellipsis';
     ellipsis.textContent = '...';
     return ellipsis;
 }
@@ -511,8 +524,14 @@ export function renderFilters() {
         "AssignedTo": "filter-assigned-to-wrapper", "ModelNumber": "filter-model-number-wrapper",
         "IntendedUserType": "filter-intended-user-type-wrapper"
     };
-    Object.values(filterMap).forEach(id => document.getElementById(id)?.classList.add('hidden'));
-    getState().visibleColumns.forEach(colName => document.getElementById(filterMap[colName])?.classList.remove('hidden'));
+    Object.values(filterMap).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    getState().visibleColumns.forEach(colName => {
+        const el = document.getElementById(filterMap[colName]);
+        if (el) el.classList.remove('hidden');
+    });
 }
 
 export function populateColumnSelector() {
@@ -556,6 +575,11 @@ export function renderOverviewCharts(chartData, clickCallback) {
                     onClick: (e, el) => clickCallback(e, el, config.filterId), 
                     scales: (type === 'bar' || type === 'line') ? { y: { beginAtZero: true } } : {},
                     maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        }
+                    }
                 }
             });
         }
@@ -605,7 +629,7 @@ export function setupModalHierarchy() {
     const bulkSiteEl = document.getElementById('bulk-site');
     const bulkRoomEl = document.getElementById('bulk-room');
     const bulkContainerEl = document.getElementById('bulk-container');
-    if (bulkSiteEl) {
+    if (bulkSiteEl && bulkRoomEl && bulkContainerEl) {
         populateSelect(bulkSiteEl, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select Site --' });
         bulkSiteEl.addEventListener('change', (e) => {
             populateRoomDropdownForSite(e.target.value, bulkRoomEl, bulkContainerEl);
@@ -615,3 +639,4 @@ export function setupModalHierarchy() {
         });
     }
 }
+
