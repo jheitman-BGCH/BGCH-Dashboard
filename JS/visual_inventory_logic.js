@@ -1,5 +1,5 @@
 // JS/visual_inventory_logic.js
-import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, ROOMS_HEADER_MAP } from './state.js';
+import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, ROOMS_HEADER_MAP, CONTAINERS_SHEET, CONTAINERS_HEADER_MAP } from './state.js';
 import { getState } from './store.js';
 import * as api from './sheetsService.js';
 import { toggleModal, showMessage, dom, populateSelect } from './ui.js';
@@ -258,11 +258,19 @@ async function handleToolbarDrop(data, gridX, gridY) {
         const newAssetRow = await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP);
         await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
     } else {
-        const asset = selectors.selectAssetsById(getState().allAssets).get(newInstanceData.ReferenceID);
-        if(asset) {
+        const state = getState();
+        const referenceId = newInstanceData.ReferenceID;
+        const asset = selectors.selectAssetsById(state.allAssets).get(referenceId);
+        const container = selectors.selectContainersById(state.allContainers).get(referenceId);
+
+        if (asset) {
             asset.ParentObjectID = viState.activeParentId;
             const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP);
             await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]);
+        } else if (container) {
+            container.ParentID = viState.activeParentId;
+            const rowData = await api.prepareRowData(CONTAINERS_SHEET, container, CONTAINERS_HEADER_MAP);
+            await api.updateSheetValues(`${CONTAINERS_SHEET}!A${container.rowIndex}`, [rowData]);
         }
     }
     const newInstanceRow = await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstanceData, SPATIAL_LAYOUT_HEADER_MAP);
@@ -284,7 +292,16 @@ function renderGrid() {
     }
 
     const state = getState();
-    const assetsById = selectors.selectAssetsById(state.allAssets);
+    const itemsById = new Map();
+    state.allAssets.forEach(asset => itemsById.set(asset.AssetID, asset));
+    state.allContainers.forEach(container => {
+        itemsById.set(container.ContainerID, {
+            AssetID: container.ContainerID,
+            AssetName: container.ContainerName,
+            AssetType: container.ContainerType || 'Container',
+        });
+    });
+
 
     let gridWidth = 20, gridHeight = 15;
     if (viState.activeParentId.startsWith('ROOM-')) {
@@ -318,15 +335,15 @@ function renderGrid() {
     objectsLayer = new Konva.Layer();
     stage.add(objectsLayer);
 
-    state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId).forEach(obj => renderObject(obj, assetsById));
+    state.spatialLayoutData.filter(obj => obj.ParentID === viState.activeParentId).forEach(obj => renderObject(obj, itemsById));
     objectsLayer.draw();
 
     stage.on('click', (e) => { if (e.target === stage) selectObject(null); });
     stage.on('contextmenu', (e) => { e.evt.preventDefault(); });
 }
 
-function renderObject(objectData, assetsById) {
-    const assetInfo = assetsById.get(objectData.ReferenceID);
+function renderObject(objectData, itemsById) {
+    const assetInfo = itemsById.get(objectData.ReferenceID);
     if (!assetInfo) return;
 
     const group = new Konva.Group({

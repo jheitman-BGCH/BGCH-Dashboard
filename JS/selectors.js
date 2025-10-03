@@ -289,4 +289,3 @@ export const selectFullLocationPathString = (state, parentId) => {
     const path = selectFullLocationPath(state, parentId);
     return path.map(p => p.SiteName || p.RoomName || p.ContainerName).join(' > ');
 };
-
