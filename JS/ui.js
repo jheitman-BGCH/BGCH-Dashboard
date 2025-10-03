@@ -39,15 +39,21 @@ export function initUI() {
         'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to',
         'pagination-controls-top', 'pagination-controls-bottom', 'vi-site-selector',
         // Visual Inventory Elements
-        'room-selector', 'grid-container', 'create-room-btn',
+        'room-selector', 'grid-container',
         'breadcrumb-container', 'room-modal', 'room-form', 'contents-modal',
-        'radial-menu', 'radial-rename-use', 'radial-flip-use', 'radial-rotate-use',
+        'radial-menu', 'radial-rename-use', 'radial-edit-use', 'radial-flip-use', 'radial-rotate-use',
         'radial-resize-use', 'radial-open-use', 'radial-delete-use',
         'unplaced-asset-search', 'unplaced-assets-list', 'unplaced-group-by', 'unplaced-sort-btn',
-        'unplaced-sort-icon', 'draw-wall-btn',
+        'unplaced-sort-icon', 'draw-wall-btn', 'vi-edit-site-btn', 'vi-delete-site-btn',
+        'vi-edit-room-btn', 'vi-delete-room-btn',
+        // New Main Buttons & Modals
+        'add-room-btn', 'add-site-btn', 'site-modal', 'site-form', 'cancel-site-btn',
+        'room-modal-site', 'room-id-hidden', 'room-row-index-hidden', 'cancel-room-btn', 'room-modal-title',
+        'site-modal-title', 'site-id-hidden', 'site-row-index-hidden',
         // New Container Modal Elements
         'add-container-btn', 'container-modal', 'container-form', 'cancel-container-btn',
-        'container-modal-site', 'container-modal-room', 'container-modal-parent'
+        'container-modal-site', 'container-modal-room', 'container-modal-parent', 'container-id-hidden',
+        'container-row-index-hidden', 'container-modal-title',
     ];
     ids.forEach(id => {
         const key = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -624,6 +630,9 @@ export function setupModalHierarchy() {
     dom.containerModalRoom.addEventListener('change', () => {
         populateContainerDropdownForRoom(dom.containerModalRoom.value, dom.containerModalParent);
     });
+
+    // For New/Edit Room Modal
+    populateSelect(dom.roomModalSite, getState().allSites, 'SiteID', 'SiteName', { initialOptionText: '-- Select Site --' });
     
     // For Bulk Edit Modal
     const bulkSiteEl = document.getElementById('bulk-site');

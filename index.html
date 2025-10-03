@@ -19,6 +19,7 @@
     <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
       <defs>
         <!-- Icons remain the same -->
+        <symbol id="icon-edit" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/></g><g><path d="M228.5,443.38 L271.5,400.38 L299.62,428.5 L256.62,471.5 L228.5,471.5 Z M277.5,394.38 L299.62,372.26 L327.74,400.38 L305.62,422.5 Z"/></g></symbol>
         <symbol id="icon-rename" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/></g><g><polygon points="294.54 401.14 294.54 434.8 277.91 434.8 277.91 429.25 289 429.25 289 406.69 277.91 406.69 277.91 401.14 294.54 401.14"/><polygon points="261.28 401.14 261.28 406.69 211 406.69 211 429.25 261.28 429.25 261.28 434.8 205.46 434.8 205.46 401.14 261.28 401.14"/><path d="M283.45,384.52v5.54c-3.98.19-8.21,1.24-11.01,4.23l-.1,46.67c.13,1.4,2.84,2.86,4.11,3.42,2.18.96,4.63,1.38,7,1.51v5.54c-5.11.1-9.8-2-13.98-4.69-3.94,2.99-8.8,4.54-13.73,4.69v-5.54c4.15-.21,7.71-1.57,11-4.04v-47.55c-2.74-2.95-7.09-4.01-11-4.23v-5.54c5.28-.12,9.52,2.03,14.03,4.37,4.08-2.79,8.71-4.37,13.69-4.37Z"/><polygon points="250.2 423.31 216.55 423.31 216.55 412.23 249.6 412.23 250.2 412.82 250.2 423.31"/></g></symbol>
         <symbol id="icon-flip" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/></g><g><path d="M214.71,443.38v-.59l25.81-54.45c1.25-1.17,2.62.01,2.66,1.47v52.55c.04.81-.25,1.55-.89,2.04l-25.99.16c-.87.07-1.09-.66-1.6-1.19Z"/><path d="M287.78,442.8v.59c-.51.53-.73,1.26-1.6,1.19l-25.99-.16c-.64-.49-.92-1.23-.89-2.04v-52.26c-.05-2.05,1.77-3.09,3.01-1.22l25.47,53.91ZM283.97,441.62l-21.71-45.48v45.48h21.71Z"/><path d="M251.98,386.46c1.94,1,1.72,4.95,1.48,6.91-.32,2.64-4.11,2.69-4.42,0-.23-1.99-.49-5.88,1.47-6.9h1.47Z"/></g></symbol>
         <symbol id="icon-rotate" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M338.06,334.84c22.08-22.9,34.23-53.01,34.23-84.84s-12.15-61.94-34.23-84.84l70.03-70.03c40.77,41.61,63.21,96.59,63.21,154.87s-22.45,113.26-63.21,154.87l-70.03-70.03Z"/></g><g><path d="M422.32,253.76v-7.52l13.64,13.79-13.64,13.54v-7.17c-6.13-.13-12.26-.92-18.18-2.49-6.21-1.64-14.96-4.92-14.96-12.71v-7c2.54,3.43,5.84,5.11,9.83,6.39,7.3,2.35,15.66,3.13,23.3,3.17Z"/><path d="M420.96,231.55c6.1.07,12.45.43,18.45,1.53,4.22.77,14.63,3.26,14.37,8.9-.06,1.23-1.68,3.27-2.94,3.22-.3-.01-4.28-2.47-5.3-2.88-7.61-3.11-16.47-3.69-24.59-4.28v5.12l-8.53-8.37,8.53-8.37v5.12Z"/><path d="M440.09,265.71v-13.15c2.65-1.02,5.64-1.49,8.38-2.55s6.39-2.72,7.68-5.47c.13-.09.68.45.68.51v7.52c0,.54-.79,2.71-1.08,3.37-2.35,5.49-10.33,8.21-15.66,9.79Z"/><path d="M407.98,232.58v6.49c-5.05.69-9.8,2.24-13.84,5.38-1.68-1.28-2.66-2.56-2.14-4.8.89-3.88,12.37-6.75,15.98-7.07Z"/></g></symbol>
@@ -33,6 +34,7 @@
     <div id="radial-menu" class="radial-menu hidden">
         <svg viewBox="0 0 500 500" class="radial-svg-container">
             <use href="#icon-rename" class="radial-button" id="radial-rename-use"/>
+            <use href="#icon-edit" class="radial-button hidden" id="radial-edit-use"/>
             <use href="#icon-flip" class="radial-button hidden" id="radial-flip-use"/>
             <use href="#icon-rotate" class="radial-button" id="radial-rotate-use"/>
             <use href="#icon-resize" class="radial-button" id="radial-resize-use"/>
@@ -56,10 +58,12 @@
 
         <main id="dashboard-section" class="hidden">
             <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
-                <div class="flex gap-4">
-                    <button id="add-asset-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700">Add New Asset</button>
-                    <button id="add-container-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700">Add New Container</button>
-                    <button id="bulk-edit-btn" class="hidden bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-yellow-600">Bulk Edit Selected</button>
+                <div class="flex gap-2 sm:gap-4 flex-wrap">
+                    <button id="add-asset-btn" class="btn-primary bg-green-600 hover:bg-green-700">Add Asset</button>
+                    <button id="add-container-btn" class="btn-primary bg-indigo-600 hover:bg-indigo-700">Add Container</button>
+                    <button id="add-room-btn" class="btn-primary bg-blue-600 hover:bg-blue-700">Add Room</button>
+                    <button id="add-site-btn" class="btn-primary bg-purple-600 hover:bg-purple-700">Add Site</button>
+                    <button id="bulk-edit-btn" class="hidden btn-primary bg-yellow-500 hover:bg-yellow-600">Bulk Edit</button>
                 </div>
                 <div class="flex items-center gap-4">
                      <div id="loading-indicator" class="hidden items-center gap-2 text-gray-600">
@@ -218,15 +222,20 @@
                             <div class="vi-card-body space-y-3">
                                 <div>
                                     <label for="vi-site-selector" class="block text-sm font-medium text-gray-700">Site</label>
-                                    <select id="vi-site-selector" class="mt-1 form-select w-full"></select>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <select id="vi-site-selector" class="form-select w-full"></select>
+                                        <button id="vi-edit-site-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Edit Site">✏️</button>
+                                        <button id="vi-delete-site-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Delete Site">🗑️</button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label for="room-selector" class="block text-sm font-medium text-gray-700">Room</label>
-                                    <select id="room-selector" class="mt-1 form-select w-full" disabled></select>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <select id="room-selector" class="form-select w-full" disabled></select>
+                                        <button id="vi-edit-room-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Edit Room">✏️</button>
+                                        <button id="vi-delete-room-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Delete Room">🗑️</button>
+                                    </div>
                                 </div>
-                                <button id="create-room-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50" disabled>
-                                    Add Room
-                                </button>
                             </div>
                         </div>
                          <div id="unplaced-assets-container" class="vi-card flex-grow">
@@ -288,11 +297,42 @@
     </div>
 
     <!-- Modals -->
+    <div id="site-modal" class="modal-container hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content max-w-lg">
+            <form id="site-form" class="p-8">
+                <h2 id="site-modal-title" class="text-2xl font-bold mb-6">Add/Edit Site</h2>
+                <input type="hidden" id="site-id-hidden">
+                <input type="hidden" id="site-row-index-hidden">
+                <div class="space-y-4">
+                    <div>
+                        <label for="site-name" class="form-label">Site Name</label>
+                        <input type="text" id="site-name" required class="form-input">
+                    </div>
+                    <div>
+                        <label for="site-address" class="form-label">Address</label>
+                        <input type="text" id="site-address" class="form-input">
+                    </div>
+                    <div>
+                        <label for="site-notes" class="form-label">Notes</label>
+                        <textarea id="site-notes" rows="3" class="form-textarea"></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="cancel-site-btn" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Site</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="container-modal" class="modal-container hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-content max-w-2xl">
             <form id="container-form" class="p-8">
-                <h2 id="container-modal-title" class="text-2xl font-bold mb-6">Add New Container</h2>
+                <h2 id="container-modal-title" class="text-2xl font-bold mb-6">Add/Edit Container</h2>
+                <input type="hidden" id="container-id-hidden">
+                <input type="hidden" id="container-row-index-hidden">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                     <div>
@@ -538,9 +578,14 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content max-w-lg">
             <form id="room-form" class="p-8">
-                <h2 class="text-2xl font-bold mb-6">Add/Edit Room</h2>
+                <h2 id="room-modal-title" class="text-2xl font-bold mb-6">Add/Edit Room</h2>
                 <input type="hidden" id="room-id-hidden">
+                <input type="hidden" id="room-row-index-hidden">
                 <div class="space-y-4">
+                     <div>
+                        <label for="room-modal-site" class="form-label">Site</label>
+                        <select id="room-modal-site" class="form-select" required></select>
+                    </div>
                     <div>
                         <label for="room-name" class="form-label">Room Name</label>
                         <input type="text" id="room-name" required class="form-input">
@@ -635,6 +680,6 @@
         <p id="message-text"></p>
     </div>
 
-    <script type="module" src="JS/main.js?v=1.1"></script>
+    <script type="module" src="JS/main.js?v=1.2"></script>
 </body>
 </html>

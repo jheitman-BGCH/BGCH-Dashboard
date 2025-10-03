@@ -251,26 +251,21 @@ function setupEventListeners() {
     d.refreshDataBtn.onclick = initializeAppData;
     window.addEventListener('datachanged', initializeAppData);
 
+    // Main Header Buttons
     d.addAssetBtn.onclick = () => {
         d.assetForm.reset();
         d.modalTitle.innerText = 'Add New Asset';
         d.assetId.value = '';
         d.rowIndex.value = '';
         ui.populateAssetForm({});
-        ['asset-type', 'assigned-to'].forEach(id => {
-            const newEl = document.getElementById(`${id}-new`);
-            if (newEl) newEl.classList.add('hidden');
-            document.getElementById(id).value = '';
-        });
         ui.toggleModal(d.assetModal, true);
     };
 
-    d.cancelBtn.onclick = () => ui.toggleModal(d.assetModal, false);
-    d.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.assetModal, false);
-
-    // Container Modal Listeners
     d.addContainerBtn.onclick = () => {
         d.containerForm.reset();
+        d.containerModalTitle.innerText = 'Add New Container';
+        d.containerIdHidden.value = '';
+        d.containerRowIndexHidden.value = '';
         d.containerModalSite.value = '';
         d.containerModalRoom.innerHTML = '<option value="">-- Select Room --</option>';
         d.containerModalRoom.disabled = true;
@@ -278,10 +273,39 @@ function setupEventListeners() {
         d.containerModalParent.disabled = true;
         ui.toggleModal(d.containerModal, true);
     };
-    d.containerForm.onsubmit = handleContainerFormSubmit;
+
+    d.addRoomBtn.onclick = () => {
+        d.roomForm.reset();
+        d.roomModalTitle.innerText = 'Add New Room';
+        d.roomIdHidden.value = '';
+        d.roomRowIndexHidden.value = '';
+        ui.toggleModal(d.roomModal, true);
+    };
+
+    d.addSiteBtn.onclick = () => {
+        d.siteForm.reset();
+        d.siteModalTitle.innerText = 'Add New Site';
+        d.siteIdHidden.value = '';
+        d.siteRowIndexHidden.value = '';
+        ui.toggleModal(d.siteModal, true);
+    };
+
+    // Modal Cancel/Backdrop Buttons
+    d.cancelBtn.onclick = () => ui.toggleModal(d.assetModal, false);
+    d.assetModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.assetModal, false);
     d.containerModal.querySelector('#cancel-container-btn').onclick = () => ui.toggleModal(d.containerModal, false);
     d.containerModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.containerModal, false);
+    d.roomModal.querySelector('#cancel-room-btn').onclick = () => ui.toggleModal(d.roomModal, false);
+    d.roomModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.roomModal, false);
+    d.siteModal.querySelector('#cancel-site-btn').onclick = () => ui.toggleModal(d.siteModal, false);
+    d.siteModal.querySelector('.modal-backdrop').onclick = () => ui.toggleModal(d.siteModal, false);
 
+    // Form Submissions
+    d.assetForm.onsubmit = handleAssetFormSubmit;
+    d.containerForm.onsubmit = handleContainerFormSubmit;
+    d.roomForm.onsubmit = handleRoomFormSubmit;
+    d.siteForm.onsubmit = handleSiteFormSubmit;
+    d.employeeForm.onsubmit = handleEmployeeFormSubmit;
 
     ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(tabName => {
         const camelCaseName = tabName.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -311,8 +335,7 @@ function setupEventListeners() {
     d.employeeDepartmentFilter.addEventListener('change', e => dispatch({ type: actionTypes.SET_EMPLOYEE_FILTERS, payload: { Department: e.target.value } }));
 
     document.querySelectorAll('.chart-type-select').forEach(sel => sel.addEventListener('change', renderApp));
-    d.assetForm.onsubmit = handleAssetFormSubmit;
-    d.employeeForm.onsubmit = handleEmployeeFormSubmit;
+    
     d.assetTableHead.addEventListener('click', handleSortClick);
     d.assetTableBody.addEventListener('click', handleTableClick);
 
@@ -365,6 +388,7 @@ function setupEventListeners() {
     setupColumnSelectorListeners();
 }
 
+// --- FORM SUBMISSION HANDLERS ---
 async function handleAssetFormSubmit(e) {
     e.preventDefault();
     ui.setLoading(true);
@@ -400,6 +424,7 @@ async function handleAssetFormSubmit(e) {
         } else {
             await api.appendSheetValues(ASSET_SHEET, [rowData]);
         }
+        ui.showMessage('Asset saved successfully!', 'success');
         window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error("Error saving asset:", err);
@@ -421,17 +446,24 @@ async function handleContainerFormSubmit(e) {
         }
 
         const containerData = {
-            ContainerID: `CONT-${Date.now()}`,
+            ContainerID: d.containerIdHidden.value || `CONT-${Date.now()}`,
+            rowIndex: d.containerRowIndexHidden.value,
             ContainerName: d.containerModal.querySelector('#container-name').value,
             ContainerType: d.containerModal.querySelector('#container-type').value,
             ParentID: parentId,
             Notes: d.containerModal.querySelector('#container-notes').value,
         };
         
+        const isUpdate = !!containerData.rowIndex;
         const rowData = await api.prepareRowData(CONTAINERS_SHEET, containerData, CONTAINERS_HEADER_MAP);
-        await api.appendSheetValues(CONTAINERS_SHEET, [rowData]);
         
-        ui.showMessage('Container added successfully!', 'success');
+        if (isUpdate) {
+            await api.updateSheetValues(`${CONTAINERS_SHEET}!A${containerData.rowIndex}`, [rowData]);
+        } else {
+            await api.appendSheetValues(CONTAINERS_SHEET, [rowData]);
+        }
+        
+        ui.showMessage('Container saved successfully!', 'success');
         window.dispatchEvent(new CustomEvent('datachanged'));
 
     } catch (err) {
@@ -443,6 +475,75 @@ async function handleContainerFormSubmit(e) {
     }
 }
 
+async function handleRoomFormSubmit(e) {
+    e.preventDefault();
+    ui.setLoading(true);
+    const d = ui.dom;
+    try {
+        const roomData = { 
+            RoomID: d.roomIdHidden.value || `ROOM-${Date.now()}`, 
+            rowIndex: d.roomRowIndexHidden.value,
+            RoomName: d.roomModal.querySelector('#room-name').value, 
+            SiteID: d.roomModalSite.value, 
+            GridWidth: d.roomModal.querySelector('#grid-width').value, 
+            GridHeight: d.roomModal.querySelector('#grid-height').value,
+            Dimensions: d.roomModal.querySelector('#room-dimensions').value,
+        };
+
+        if (!roomData.SiteID) throw new Error("A site must be selected for the room.");
+
+        const isUpdate = !!roomData.rowIndex;
+        const rowData = await api.prepareRowData(ROOMS_SHEET, roomData, ROOMS_HEADER_MAP);
+
+        if (isUpdate) {
+            await api.updateSheetValues(`${ROOMS_SHEET}!A${roomData.rowIndex}`, [rowData]);
+        } else {
+            await api.appendSheetValues(ROOMS_SHEET, [rowData]);
+        }
+        
+        ui.showMessage('Room saved successfully!', 'success');
+        window.dispatchEvent(new CustomEvent('datachanged'));
+    } catch (err) {
+        console.error("Error saving room:", err);
+        ui.showMessage(`Error saving room: ${err.result?.error?.message || err.message}`);
+    } finally {
+        ui.toggleModal(d.roomModal, false);
+        ui.setLoading(false);
+    }
+}
+
+async function handleSiteFormSubmit(e) {
+    e.preventDefault();
+    ui.setLoading(true);
+    const d = ui.dom;
+    try {
+        const siteData = { 
+            SiteID: d.siteIdHidden.value || `SITE-${Date.now()}`,
+            rowIndex: d.siteRowIndexHidden.value,
+            SiteName: d.siteModal.querySelector('#site-name').value,
+            Address: d.siteModal.querySelector('#site-address').value,
+            Notes: d.siteModal.querySelector('#site-notes').value,
+        };
+
+        const isUpdate = !!siteData.rowIndex;
+        const rowData = await api.prepareRowData(SITES_SHEET, siteData, SITES_HEADER_MAP);
+
+        if (isUpdate) {
+            await api.updateSheetValues(`${SITES_SHEET}!A${siteData.rowIndex}`, [rowData]);
+        } else {
+            await api.appendSheetValues(SITES_SHEET, [rowData]);
+        }
+        
+        ui.showMessage('Site saved successfully!', 'success');
+        window.dispatchEvent(new CustomEvent('datachanged'));
+    } catch (err) {
+        console.error("Error saving site:", err);
+        ui.showMessage(`Error saving site: ${err.result?.error?.message || err.message}`);
+    } finally {
+        ui.toggleModal(d.siteModal, false);
+        ui.setLoading(false);
+    }
+}
 
 async function handleEmployeeFormSubmit(e) {
     e.preventDefault();
@@ -474,6 +575,8 @@ async function handleEmployeeFormSubmit(e) {
         ui.setLoading(false);
     }
 }
+// --- END FORM SUBMISSIONS ---
+
 
 function handleTableClick(e) {
     const target = e.target;
@@ -599,6 +702,7 @@ async function handleDeleteRow(sheetName, rowIndex) {
     ui.setLoading(true);
     try {
         await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: parseInt(rowIndex) - 1, endIndex: parseInt(rowIndex) } } }] });
+        ui.showMessage('Item deleted successfully.', 'success');
         window.dispatchEvent(new CustomEvent('datachanged'));
     } catch (err) {
         console.error(`Error deleting from ${sheetName}:`, err);

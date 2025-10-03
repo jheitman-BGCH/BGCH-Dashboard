@@ -1,5 +1,5 @@
 // JS/visual_inventory_logic.js
-import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, ASSET_HEADER_MAP, SPATIAL_LAYOUT_HEADER_MAP, ROOMS_HEADER_MAP, CONTAINERS_SHEET, CONTAINERS_HEADER_MAP } from './state.js';
+import { SITES_SHEET, ROOMS_SHEET, ASSET_SHEET, SPATIAL_LAYOUT_SHEET, CONTAINERS_SHEET, SPATIAL_LAYOUT_HEADER_MAP, CONTAINERS_HEADER_MAP, SITES_HEADER_MAP, ROOMS_HEADER_MAP } from './state.js';
 import { getState } from './store.js';
 import * as api from './sheetsService.js';
 import { toggleModal, showMessage, dom, populateSelect } from './ui.js';
@@ -28,7 +28,6 @@ let cellWidth, cellHeight;
 // --- DOM REFERENCES & FLAGS ---
 let viListenersInitialized = false;
 let hideMenuTimeout;
-let globalTooltip = null;
 
 
 // --- EMOJI MAPPING ---
@@ -58,30 +57,18 @@ function setupAndBindVisualInventory() {
     if (viListenersInitialized) return true;
     if (!dom.viSiteSelector) return false;
 
-    if (!document.getElementById('inventory-global-tooltip')) {
-        globalTooltip = document.createElement('div');
-        globalTooltip.id = 'inventory-global-tooltip';
-        document.body.appendChild(globalTooltip);
-    } else {
-        globalTooltip = document.getElementById('inventory-global-tooltip');
-    }
-
     // Event Listeners
-    dom.createRoomBtn.addEventListener('click', () => {
-        if (!viState.activeSiteId) return showMessage("Please select a site before adding a room.");
-        dom.roomForm.reset();
-        document.getElementById('room-id-hidden').value = '';
-        toggleModal(dom.roomModal, true);
-    });
-    
-    dom.roomModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(dom.roomModal, false));
-    dom.roomModal.querySelector('#cancel-room-btn').addEventListener('click', () => toggleModal(dom.roomModal, false));
     dom.contentsModal.querySelector('.modal-backdrop').addEventListener('click', () => toggleModal(dom.contentsModal, false));
     dom.contentsModal.querySelector('.modal-close-btn').addEventListener('click', () => toggleModal(dom.contentsModal, false));
-    dom.roomForm.addEventListener('submit', handleRoomFormSubmit);
     dom.viSiteSelector.addEventListener('change', handleSiteSelection);
     dom.roomSelector.addEventListener('change', handleRoomSelection);
     
+    // Edit/Delete buttons for Site and Room
+    dom.viEditSiteBtn.addEventListener('click', handleEditSite);
+    dom.viDeleteSiteBtn.addEventListener('click', handleDeleteSite);
+    dom.viEditRoomBtn.addEventListener('click', handleEditRoom);
+    dom.viDeleteRoomBtn.addEventListener('click', handleDeleteRoom);
+
     dom.unplacedAssetSearch.addEventListener('input', () => renderUnplacedAssets(viState.activeSiteId));
     dom.unplacedGroupBy.addEventListener('change', (e) => {
         viState.unplacedAssetGroupBy = e.target.value;
@@ -123,6 +110,7 @@ function setupAndBindVisualInventory() {
     dom.radialMenu.addEventListener('mouseenter', () => clearTimeout(hideMenuTimeout));
     dom.radialMenu.addEventListener('mouseleave', () => hideMenuTimeout = setTimeout(hideRadialMenu, 500));
     dom.radialRenameUse.addEventListener('click', () => { handleRename(viState.activeRadialInstanceId); hideRadialMenu(); });
+    dom.radialEditUse.addEventListener('click', () => { handleEditContainer(viState.activeRadialInstanceId); hideRadialMenu(); });
     dom.radialFlipUse.addEventListener('click', () => { handleFlip(viState.activeRadialInstanceId); hideRadialMenu(); });
     dom.radialRotateUse.addEventListener('click', () => { handleRotate(viState.activeRadialInstanceId); hideRadialMenu(); });
     dom.radialResizeUse.addEventListener('click', () => { handleResize(viState.activeRadialInstanceId); hideRadialMenu(); });
@@ -258,10 +246,20 @@ async function handleToolbarDrop(data, gridX, gridY) {
         ShelfRows: data.shelfRows, ShelfCols: data.shelfCols,
     };
     if (!newInstanceData.ReferenceID) {
-        const newAsset = { AssetID: `ASSET-${Date.now()}`, AssetName: data.name, AssetType: data.assetType, ParentObjectID: viState.activeParentId };
-        newInstanceData.ReferenceID = newAsset.AssetID;
-        const newAssetRow = await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP);
-        await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
+        // This logic is now flawed for walls, which should not be assets.
+        // It's handled by saveNewWall correctly. This is for other tool items.
+        // For items like "Shelf" or "Box" from the toolbar, we need to create a backing entity.
+        // We will treat them as containers.
+        const newContainer = {
+            ContainerID: `CONT-${Date.now()}`,
+            ContainerName: data.name,
+            ContainerType: data.assetType,
+            ParentID: viState.activeParentId,
+        };
+        newInstanceData.ReferenceID = newContainer.ContainerID;
+        const newContainerRow = await api.prepareRowData(CONTAINERS_SHEET, newContainer, CONTAINERS_HEADER_MAP);
+        await api.appendSheetValues(CONTAINERS_SHEET, [newContainerRow]);
+
     } else {
         const state = getState();
         const referenceId = newInstanceData.ReferenceID;
@@ -306,6 +304,7 @@ function renderGrid() {
             AssetID: container.ContainerID,
             AssetName: container.ContainerName,
             AssetType: container.ContainerType || 'Container',
+            isContainer: true
         });
     });
 
@@ -364,23 +363,20 @@ function renderGrid() {
 }
 
 function renderObject(objectData, itemsById) {
-    const assetInfo = itemsById.get(objectData.ReferenceID);
-    if (!assetInfo) return;
-
-    if (assetInfo.AssetType === 'Wall') {
-        if (objectData.x1 && objectData.y1 && objectData.x2 && objectData.y2) {
-            const wallLine = new Konva.Line({
-                points: [parseFloat(objectData.x1), parseFloat(objectData.y1), parseFloat(objectData.x2), parseFloat(objectData.y2)],
-                stroke: '#4b5563', strokeWidth: 8, id: objectData.InstanceID, draggable: false, hitStrokeWidth: 15,
-            });
-            wallLine.on('click', (e) => { e.evt.stopPropagation(); selectObject(objectData.InstanceID, e.evt.shiftKey); });
-            wallLine.on('contextmenu', (e) => { e.evt.preventDefault(); e.evt.stopPropagation(); showRadialMenu(e.evt.pageX, e.evt.pageY, objectData.InstanceID); });
-            objectsLayer.add(wallLine);
-        } else {
-             console.warn(`Wall object InstanceID ${objectData.InstanceID} has no vector data.`);
-        }
+    // If it has wall coordinates, render as wall and exit
+    if (objectData.x1 && objectData.y1 && objectData.x2 && objectData.y2) {
+        const wallLine = new Konva.Line({
+            points: [parseFloat(objectData.x1), parseFloat(objectData.y1), parseFloat(objectData.x2), parseFloat(objectData.y2)],
+            stroke: '#4b5563', strokeWidth: 8, id: objectData.InstanceID, draggable: false, hitStrokeWidth: 15,
+        });
+        wallLine.on('click', (e) => { e.evt.stopPropagation(); selectObject(objectData.InstanceID, e.evt.shiftKey); });
+        wallLine.on('contextmenu', (e) => { e.evt.preventDefault(); e.evt.stopPropagation(); showRadialMenu(e.evt.pageX, e.evt.pageY, objectData.InstanceID); });
+        objectsLayer.add(wallLine);
         return;
     }
+
+    const assetInfo = itemsById.get(objectData.ReferenceID);
+    if (!assetInfo) return;
 
     const group = new Konva.Group({
         x: objectData.PosX * cellWidth,
@@ -424,7 +420,7 @@ function renderObject(objectData, itemsById) {
 
     group.on('click', (e) => { e.evt.stopPropagation(); selectObject(objectData.InstanceID, e.evt.shiftKey); });
     group.on('dblclick', (e) => {
-        if (['Shelf', 'Container'].includes(assetInfo.AssetType)) {
+        if (assetInfo.isContainer || ['Shelf', 'Container'].includes(assetInfo.AssetType)) {
             e.evt.stopPropagation();
             navigateTo(objectData.InstanceID, assetInfo.AssetName);
         }
@@ -444,21 +440,6 @@ function renderObject(objectData, itemsById) {
 }
 
 // --- EVENT HANDLERS & NAVIGATION ---
-async function handleRoomFormSubmit(e) {
-    e.preventDefault();
-    const roomData = { 
-        RoomID: `ROOM-${Date.now()}`, 
-        RoomName: document.getElementById('room-name').value, 
-        SiteID: viState.activeSiteId, 
-        GridWidth: document.getElementById('grid-width').value, 
-        GridHeight: document.getElementById('grid-height').value,
-        Dimensions: document.getElementById('room-dimensions').value,
-    };
-    const rowData = await api.prepareRowData(ROOMS_SHEET, roomData, ROOMS_HEADER_MAP);
-    await api.appendSheetValues(ROOMS_SHEET, [rowData]);
-    toggleModal(dom.roomModal, false);
-    window.dispatchEvent(new CustomEvent('datachanged'));
-}
 function handleSiteSelection(e) {
     const siteId = e.target.value;
     viState.activeSiteId = siteId;
@@ -466,13 +447,17 @@ function handleSiteSelection(e) {
     const roomsForSite = selectors.selectRoomsBySiteId(getState(), siteId);
     populateSelect(dom.roomSelector, roomsForSite, 'RoomID', 'RoomName', { initialOptionText: '-- Select a Room --' });
     dom.roomSelector.disabled = !siteId;
-    dom.createRoomBtn.disabled = !siteId;
-    dom.createRoomBtn.classList.toggle('opacity-50', !siteId);
+    dom.viEditSiteBtn.classList.toggle('hidden', !siteId);
+    dom.viDeleteSiteBtn.classList.toggle('hidden', !siteId);
+    dom.viEditRoomBtn.classList.add('hidden');
+    dom.viDeleteRoomBtn.classList.add('hidden');
     viState.activeRoomId = null; viState.activeParentId = null; viState.breadcrumbs = [];
     renderBreadcrumbs(); renderGrid(); renderUnplacedAssets(siteId);
 }
 function handleRoomSelection(e) {
     const roomId = e.target.value;
+    dom.viEditRoomBtn.classList.toggle('hidden', !roomId);
+    dom.viDeleteRoomBtn.classList.toggle('hidden', !roomId);
     if (roomId) {
         const room = selectors.selectRoomsById(getState().allRooms).get(roomId);
         if (room) navigateTo(room.RoomID, room.RoomName);
@@ -506,7 +491,7 @@ function toggleWallDrawingMode() {
 
     if (viState.isWallDrawingMode) {
         dom.drawWallBtn.classList.add('bg-indigo-200', 'text-indigo-800');
-        stage.container().style.cursor = 'crosshair';
+        if (stage) stage.container().style.cursor = 'crosshair';
         showMessage('Wall Drawing Mode: Click a start point, then an end point.', 'info');
     } else {
         dom.drawWallBtn.classList.remove('bg-indigo-200', 'text-indigo-800');
@@ -536,22 +521,17 @@ function drawPreviewWall() {
 async function saveNewWall(start, end) {
     if (!viState.activeParentId) return showMessage("Cannot add a wall without a selected room or container.");
     
-    // Create a corresponding asset for this wall
-    const newAsset = { AssetID: `ASSET-${Date.now()}`, AssetName: 'Wall', AssetType: 'Wall', ParentObjectID: viState.activeParentId };
-    const newAssetRow = await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP);
-
     const newInstanceData = {
         InstanceID: `INST-${Date.now()}`,
         ParentID: viState.activeParentId,
-        ReferenceID: newAsset.AssetID,
+        ReferenceID: null, // Walls no longer reference the Asset sheet
         x1: start.x.toFixed(2),
         y1: start.y.toFixed(2),
         x2: end.x.toFixed(2),
         y2: end.y.toFixed(2),
     };
     const newInstanceRow = await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstanceData, SPATIAL_LAYOUT_HEADER_MAP);
-
-    await api.appendSheetValues(ASSET_SHEET, [newAssetRow]);
+    
     await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, [newInstanceRow]);
     
     window.dispatchEvent(new CustomEvent('datachanged'));
@@ -578,7 +558,6 @@ function selectObject(instanceId, isMultiSelect = false) {
     const selectedNodes = viState.selectedInstanceIds.map(id => stage.findOne('#' + id)).filter(Boolean);
     
     if (selectedNodes.length > 0) {
-        // Use Transformer for rectangles, custom bounding box for lines/walls
         const rectNodes = selectedNodes.filter(n => n instanceof Konva.Group);
         const lineNodes = selectedNodes.filter(n => n instanceof Konva.Line);
 
@@ -613,26 +592,38 @@ function showRadialMenu(x, y, instanceId) {
     if(viState.selectedInstanceIds.length > 1 && !viState.selectedInstanceIds.includes(instanceId)) selectObject(instanceId); 
     viState.activeRadialInstanceId = instanceId;
     const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId);
-    const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null;
-    if (!asset) return;
-    const isContainer = ['Shelf', 'Container'].includes(asset.AssetType);
-    const isFloor = asset.AssetType.startsWith('FloorPatch_');
-    const isWall = asset.AssetType === 'Wall';
+    if (!instance) return;
+
+    const isWall = !!(instance.x1 && instance.y1);
+    let asset = null;
+    let isContainer = false;
+    let isDoor = false;
+    let isFloor = false;
+
+    if (!isWall) {
+        asset = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) || selectors.selectContainersById(getState().allContainers).get(instance.ReferenceID);
+        if (!asset) return;
+        const type = asset.AssetType || asset.ContainerType;
+        isContainer = type === 'Shelf' || type === 'Container';
+        isDoor = type === 'Door';
+        isFloor = type && type.startsWith('FloorPatch_');
+    }
     
-    dom.radialRenameUse.classList.toggle('hidden', asset.AssetType === 'Door' || isWall || isFloor);
-    dom.radialFlipUse.classList.toggle('hidden', asset.AssetType !== 'Door');
+    dom.radialRenameUse.classList.toggle('hidden', isDoor || isWall || isFloor);
+    dom.radialEditUse.classList.toggle('hidden', !isContainer);
+    dom.radialFlipUse.classList.toggle('hidden', !isDoor);
     dom.radialOpenUse.classList.toggle('hidden', !isContainer);
     dom.radialRotateUse.classList.toggle('hidden', isWall || isFloor);
-    dom.radialResizeUse.classList.toggle('hidden', asset.AssetType === 'Door' || isWall);
+    dom.radialResizeUse.classList.toggle('hidden', isDoor || isWall);
     dom.radialMenu.style.left = `${x}px`; dom.radialMenu.style.top = `${y}px`;
     dom.radialMenu.classList.remove('hidden');
     setTimeout(() => dom.radialMenu.classList.add('visible'), 10);
 }
 function hideRadialMenu() { if (dom.radialMenu) { dom.radialMenu.classList.remove('visible'); setTimeout(() => dom.radialMenu.classList.add('hidden'), 200); } viState.activeRadialInstanceId = null; clearTimeout(hideMenuTimeout); }
-async function handleRename(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); const asset = instance ? selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID) : null; if (!asset) return; const newName = prompt("Enter new name:", asset.AssetName); if (newName && newName.trim() && newName.trim() !== asset.AssetName) { asset.AssetName = newName.trim(); const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP); await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]); window.dispatchEvent(new CustomEvent('datachanged')); } }
+async function handleRename(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if(!instance) return; const state = getState(); const asset = selectors.selectAssetsById(state.allAssets).get(instance.ReferenceID); const container = selectors.selectContainersById(state.allContainers).get(instance.ReferenceID); if (asset) { const newName = prompt("Enter new asset name:", asset.AssetName); if (newName && newName.trim() !== asset.AssetName) { asset.AssetName = newName.trim(); const rowData = await api.prepareRowData(ASSET_SHEET, asset, ASSET_HEADER_MAP); await api.updateSheetValues(`${ASSET_SHEET}!A${asset.rowIndex}`, [rowData]); window.dispatchEvent(new CustomEvent('datachanged')); } } else if (container) { const newName = prompt("Enter new container name:", container.ContainerName); if (newName && newName.trim() !== container.ContainerName) { container.ContainerName = newName.trim(); const rowData = await api.prepareRowData(CONTAINERS_SHEET, container, CONTAINERS_HEADER_MAP); await api.updateSheetValues(`${CONTAINERS_SHEET}!A${container.rowIndex}`, [rowData]); window.dispatchEvent(new CustomEvent('datachanged')); } } }
 async function handleFlip(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { instance.Orientation = { 'East': 'West', 'West': 'East', 'North': 'South', 'South': 'North' }[instance.Orientation] || 'East'; await updateObjectInSheet(instance); renderGrid(); } }
 async function handleRotate(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (!instance) return; const asset = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID); if (!asset) return; if (asset.AssetType === 'Door') { instance.Orientation = { 'East': 'South', 'South': 'West', 'West': 'North', 'North': 'East' }[instance.Orientation] || 'South'; } else { instance.Orientation = instance.Orientation === 'Horizontal' ? 'Vertical' : 'Horizontal'; } await updateObjectInSheet(instance); renderGrid(); setTimeout(() => selectObject(instanceId), 50); }
-function handleOpen(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { const assetInfo = selectors.selectAssetsById(getState().allAssets).get(instance.ReferenceID); if (assetInfo) navigateTo(instance.InstanceID, assetInfo.AssetName); } }
+function handleOpen(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { const state = getState(); const assetInfo = selectors.selectAssetsById(state.allAssets).get(instance.ReferenceID) || selectors.selectContainersById(state.allContainers).get(instance.ReferenceID); const name = assetInfo.AssetName || assetInfo.ContainerName; if (name) navigateTo(instance.InstanceID, name); } }
 function handleResize(instanceId) { if (!instanceId || !stage) return; selectObject(instanceId); const node = stage.findOne('#' + instanceId); if (node) { showMessage("Use the handles to resize the object.", "info"); } }
 
 // --- KEYBOARD & CLIPBOARD ACTIONS ---
@@ -643,6 +634,13 @@ function handleKeyDown(e) {
     else if (isCtrlOrMeta && e.key.toLowerCase() === 'c') { e.preventDefault(); handleCopy(); }
     else if (isCtrlOrMeta && e.key.toLowerCase() === 'v') { e.preventDefault(); handlePaste(); }
 }
-async function handleDelete(instanceIdsToDelete) { if (!instanceIdsToDelete || instanceIdsToDelete.length === 0 || !confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s) from the room? This may also delete the associated asset.`)) return; const { spatialLayoutData, allAssets, sheetIds } = getState(); const requests = []; const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET]; const assetSheetId = sheetIds[ASSET_SHEET]; const assetsById = selectors.selectAssetsById(allAssets); instanceIdsToDelete.forEach(instanceId => { const instance = spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { if (layoutSheetId && instance.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } }); } const asset = assetsById.get(instance.ReferenceID); if (asset && asset.AssetType === "Wall") { if (assetSheetId && asset.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: assetSheetId, dimension: "ROWS", startIndex: parseInt(asset.rowIndex) - 1, endIndex: parseInt(asset.rowIndex) } } }); } } } }); if (requests.length > 0) { await api.batchUpdateSheet({ requests }); window.dispatchEvent(new CustomEvent('datachanged')); } }
+async function handleDelete(instanceIdsToDelete) { if (!instanceIdsToDelete || instanceIdsToDelete.length === 0 || !confirm(`Are you sure you want to remove ${instanceIdsToDelete.length} object(s)? This may delete the object from the database.`)) return; const { spatialLayoutData, allContainers, sheetIds } = getState(); const requests = []; const layoutSheetId = sheetIds[SPATIAL_LAYOUT_SHEET]; const containerSheetId = sheetIds[CONTAINERS_SHEET]; const containersById = selectors.selectContainersById(allContainers); instanceIdsToDelete.forEach(instanceId => { const instance = spatialLayoutData.find(i => i.InstanceID === instanceId); if (instance) { if (layoutSheetId && instance.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: layoutSheetId, dimension: "ROWS", startIndex: parseInt(instance.rowIndex) - 1, endIndex: parseInt(instance.rowIndex) } } }); } const container = containersById.get(instance.ReferenceID); if (container && containerSheetId && container.rowIndex) { requests.push({ deleteDimension: { range: { sheetId: containerSheetId, dimension: "ROWS", startIndex: parseInt(container.rowIndex) - 1, endIndex: parseInt(container.rowIndex) } } }); } } }); if (requests.length > 0) { await api.batchUpdateSheet({ requests }); window.dispatchEvent(new CustomEvent('datachanged')); } }
 function handleCopy() { if (viState.selectedInstanceIds.length === 0) return; const { spatialLayoutData, allAssets } = getState(); const assetsById = selectors.selectAssetsById(allAssets); viState.clipboard = viState.selectedInstanceIds.map(id => { const instance = spatialLayoutData.find(i => i.InstanceID === id); const asset = assetsById.get(instance?.ReferenceID); return { instance, asset }; }).filter(item => item.instance && item.asset); if (viState.clipboard.length > 0) showMessage(`Copied ${viState.clipboard.length} item(s).`, 'success'); }
 async function handlePaste() { if (!viState.clipboard || viState.clipboard.length === 0 || !viState.activeParentId) return; const newInstanceRows = []; const newAssetRows = []; const newSelectedIds = []; for (const item of viState.clipboard) { let newReferenceId = item.instance.ReferenceID; const isStructural = ['Shelf', 'Container', 'Wall', 'Door'].includes(item.asset.AssetType) || item.asset.AssetType.startsWith('FloorPatch_'); if (!isStructural) { newReferenceId = `ASSET-${Date.now()}-${Math.random().toString(16).slice(2)}`; const newAsset = { ...item.asset, AssetID: newReferenceId, AssetName: `${item.asset.AssetName} (Copy)`, ParentObjectID: viState.activeParentId }; delete newAsset.rowIndex; newAssetRows.push(await api.prepareRowData(ASSET_SHEET, newAsset, ASSET_HEADER_MAP)); } const newInstanceId = `INST-${Date.now()}-${Math.random().toString(16).slice(2)}`; const newInstance = { ...item.instance, InstanceID: newInstanceId, ReferenceID: newReferenceId, ParentID: viState.activeParentId, PosX: parseInt(item.instance.PosX) + 1, PosY: parseInt(item.instance.PosY) + 1, }; delete newInstance.rowIndex; newInstanceRows.push(await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstance, SPATIAL_LAYOUT_HEADER_MAP)); newSelectedIds.push(newInstanceId); } if (newAssetRows.length > 0) await api.appendSheetValues(ASSET_SHEET, newAssetRows); if (newInstanceRows.length > 0) await api.appendSheetValues(SPATIAL_LAYOUT_SHEET, newInstanceRows); showMessage(`Pasted ${newInstanceRows.length} item(s).`, 'success'); window.dispatchEvent(new CustomEvent('datachanged')); setTimeout(() => { selectObject(null); viState.selectedInstanceIds = newSelectedIds; selectObject(newSelectedIds[0]); }, 500); }
+
+// --- EDIT / DELETE HANDLERS ---
+function handleEditSite() { const site = selectors.selectSitesById(getState().allSites).get(viState.activeSiteId); if (!site) return; dom.siteModalTitle.innerText = 'Edit Site'; dom.siteIdHidden.value = site.SiteID; dom.siteRowIndexHidden.value = site.rowIndex; dom.siteModal.querySelector('#site-name').value = site.SiteName; dom.siteModal.querySelector('#site-address').value = site.Address; dom.siteModal.querySelector('#site-notes').value = site.Notes; toggleModal(dom.siteModal, true); }
+async function handleDeleteSite() { const site = selectors.selectSitesById(getState().allSites).get(viState.activeSiteId); if (!site || !confirm(`Are you sure you want to delete the site "${site.SiteName}"? This cannot be undone.`)) return; const { sheetIds } = getState(); await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: sheetIds[SITES_SHEET], dimension: "ROWS", startIndex: parseInt(site.rowIndex) - 1, endIndex: parseInt(site.rowIndex) } } }] }); window.dispatchEvent(new CustomEvent('datachanged')); }
+function handleEditRoom() { const room = selectors.selectRoomsById(getState().allRooms).get(viState.activeRoomId); if (!room) return; dom.roomModalTitle.innerText = 'Edit Room'; dom.roomIdHidden.value = room.RoomID; dom.roomRowIndexHidden.value = room.rowIndex; dom.roomModalSite.value = room.SiteID; dom.roomModal.querySelector('#room-name').value = room.RoomName; dom.roomModal.querySelector('#room-dimensions').value = room.Dimensions; dom.roomModal.querySelector('#grid-width').value = room.GridWidth; dom.roomModal.querySelector('#grid-height').value = room.GridHeight; toggleModal(dom.roomModal, true); }
+async function handleDeleteRoom() { const room = selectors.selectRoomsById(getState().allRooms).get(viState.activeRoomId); if (!room || !confirm(`Are you sure you want to delete the room "${room.RoomName}"? This cannot be undone.`)) return; const { sheetIds } = getState(); await api.batchUpdateSheet({ requests: [{ deleteDimension: { range: { sheetId: sheetIds[ROOMS_SHEET], dimension: "ROWS", startIndex: parseInt(room.rowIndex) - 1, endIndex: parseInt(room.rowIndex) } } }] }); window.dispatchEvent(new CustomEvent('datachanged')); }
+function handleEditContainer(instanceId) { const instance = getState().spatialLayoutData.find(i => i.InstanceID === instanceId); const container = instance ? selectors.selectContainersById(getState().allContainers).get(instance.ReferenceID) : null; if (!container) return; dom.containerModalTitle.innerText = 'Edit Container'; dom.containerIdHidden.value = container.ContainerID; dom.containerRowIndexHidden.value = container.rowIndex; dom.containerModal.querySelector('#container-name').value = container.ContainerName; dom.containerModal.querySelector('#container-type').value = container.ContainerType; dom.containerModal.querySelector('#container-notes').value = container.Notes; const path = selectors.selectFullLocationPath(getState(), container.ParentID); const site = path.find(p => p.SiteID); const room = path.find(p => p.RoomID); dom.containerModalSite.value = site ? site.SiteID : ''; dom.containerModalSite.dispatchEvent(new Event('change')); dom.containerModalRoom.value = room ? room.RoomID : ''; dom.containerModalRoom.dispatchEvent(new Event('change')); const parentContainer = path.find(p => p.ContainerID && p.ContainerID !== container.ContainerID); dom.containerModalParent.value = parentContainer ? parentContainer.ContainerID : ''; toggleModal(dom.containerModal, true); }
