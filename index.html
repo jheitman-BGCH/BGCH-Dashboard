@@ -11,7 +11,7 @@
     
     <link rel="stylesheet" href="CSS/style.css">
     <!-- Updated stylesheet link with cache-busting query -->
-    <link rel="stylesheet" href="CSS/visual_inventory_styles.css?v=1.3">
+    <link rel="stylesheet" href="CSS/visual_inventory_styles.css?v=1.4">
 </head>
 <body class="bg-gray-100 text-gray-800">
 
@@ -283,10 +283,14 @@
                                  </div>
                             </div>
                         </div>
-                        <div id="room-grid-container" class="vi-card flex-grow">
+                        <div id="room-grid-container" class="vi-card flex-grow relative">
                              <div id="grid-container" class="w-full h-full">
                                 <!-- This div will now be the target for the Konva.js canvas -->
                                 <div id="room-grid"></div>
+                            </div>
+                            <div id="scale-indicator" class="hidden">
+                                <div id="scale-line"></div>
+                                <span id="scale-text"></span>
                             </div>
                         </div>
                     </div>

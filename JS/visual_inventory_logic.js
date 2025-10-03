@@ -19,6 +19,7 @@ let viState = {
     clipboard: null,
     isWallDrawingMode: false,
     wallDrawingStartPoint: null,
+    scale: 20, // pixels per foot
 };
 
 // --- NEW: Konva State ---
@@ -284,7 +285,8 @@ async function handleToolbarDrop(data, gridX, gridY) {
 // --- RENDERING & NAVIGATION ---
 function renderGrid() {
     const gridContainer = dom.gridContainer;
-    gridContainer.innerHTML = '';
+    const scaleIndicator = document.getElementById('scale-indicator');
+    gridContainer.innerHTML = ''; // Clear previous content
     const gridEl = document.createElement('div');
     gridEl.id = 'room-grid';
     gridContainer.appendChild(gridEl);
@@ -293,8 +295,11 @@ function renderGrid() {
 
     if (!viState.activeParentId) {
         gridContainer.innerHTML = `<div id="room-grid" class="flex items-center justify-center h-full"><p class="text-gray-500">Please select a site and room to begin.</p></div>`;
+        scaleIndicator.classList.add('hidden');
         return;
     }
+    
+    scaleIndicator.classList.remove('hidden');
 
     const state = getState();
     const itemsById = new Map();
@@ -308,33 +313,54 @@ function renderGrid() {
         });
     });
 
+    let room, canvasWidth, canvasHeight;
 
-    let gridWidth = 20, gridHeight = 15;
     if (viState.activeParentId.startsWith('ROOM-')) {
-        const room = selectors.selectRoomsById(state.allRooms).get(viState.activeParentId);
-        if (room) { gridWidth = room.GridWidth || 20; gridHeight = room.GridHeight || 15; }
-    } else {
-        const parentInstance = state.spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
-        if (parentInstance) {
-            gridWidth = parentInstance.Orientation === 'Vertical' ? parentInstance.ShelfRows : parentInstance.ShelfCols;
-            gridHeight = parentInstance.Orientation === 'Vertical' ? parentInstance.ShelfCols : parentInstance.ShelfRows;
+        room = selectors.selectRoomsById(state.allRooms).get(viState.activeParentId);
+        if (room && room.Dimensions) {
+            const dims = room.Dimensions.toLowerCase().match(/(\d+(?:\.\d+)?)\s*ft\s*x\s*(\d+(?:\.\d+)?)\s*ft/);
+            if (dims) {
+                const roomWidthFt = parseFloat(dims[1]);
+                const roomHeightFt = parseFloat(dims[2]);
+                canvasWidth = roomWidthFt * viState.scale;
+                canvasHeight = roomHeightFt * viState.scale;
+                cellWidth = viState.scale;
+                cellHeight = viState.scale;
+            }
         }
     }
     
-    const containerWidth = gridContainer.clientWidth;
-    const containerHeight = (containerWidth * gridHeight) / gridWidth;
+    // Fallback to grid-based dimensions if real-world are not available
+    if (!canvasWidth) {
+        let gridWidth = 20, gridHeight = 15;
+        if (room) {
+            gridWidth = room.GridWidth || 20;
+            gridHeight = room.GridHeight || 15;
+        } else {
+             const parentInstance = state.spatialLayoutData.find(o => o.InstanceID === viState.activeParentId);
+             if (parentInstance) {
+                gridWidth = parentInstance.Orientation === 'Vertical' ? parentInstance.ShelfRows : parentInstance.ShelfCols;
+                gridHeight = parentInstance.Orientation === 'Vertical' ? parentInstance.ShelfCols : parentInstance.ShelfRows;
+             }
+        }
+        const containerWidth = gridContainer.clientWidth;
+        canvasWidth = containerWidth;
+        canvasHeight = (containerWidth * gridHeight) / gridWidth;
+        cellWidth = canvasWidth / gridWidth;
+        cellHeight = canvasHeight / gridHeight;
+    }
     
-    cellWidth = containerWidth / gridWidth;
-    cellHeight = containerHeight / gridHeight;
+    updateScaleIndicator();
 
-    stage = new Konva.Stage({ container: 'room-grid', width: containerWidth, height: containerHeight });
+    stage = new Konva.Stage({ container: 'room-grid', width: canvasWidth, height: canvasHeight });
     gridLayer = new Konva.Layer();
     
-    for (let i = 0; i < gridWidth + 1; i++) {
-        gridLayer.add(new Konva.Line({ points: [i * cellWidth, 0, i * cellWidth, containerHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
+    // Draw grid lines based on scale (1 foot = viState.scale pixels)
+    for (let i = 0; i <= canvasWidth; i += viState.scale) {
+        gridLayer.add(new Konva.Line({ points: [i, 0, i, canvasHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
     }
-    for (let j = 0; j < gridHeight + 1; j++) {
-        gridLayer.add(new Konva.Line({ points: [0, j * cellHeight, containerWidth, j * cellHeight], stroke: '#e5e7eb', strokeWidth: 1 }));
+    for (let j = 0; j <= canvasHeight; j += viState.scale) {
+        gridLayer.add(new Konva.Line({ points: [0, j, canvasWidth, j], stroke: '#e5e7eb', strokeWidth: 1 }));
     }
     stage.add(gridLayer);
 
@@ -362,11 +388,28 @@ function renderGrid() {
     stage.on('contextmenu', (e) => { e.evt.preventDefault(); });
 }
 
+function updateScaleIndicator() {
+    const scaleLine = document.getElementById('scale-line');
+    const scaleText = document.getElementById('scale-text');
+    
+    const indicatorLengthFt = 5; // We want the indicator to represent 5 feet
+    const indicatorWidthPx = indicatorLengthFt * viState.scale;
+    
+    scaleLine.style.width = `${indicatorWidthPx}px`;
+    scaleText.textContent = `${indicatorLengthFt} ft`;
+}
+
+
 function renderObject(objectData, itemsById) {
-    // If it has wall coordinates, render as wall and exit
+    // If it has wall coordinates, render as wall using scale and exit
     if (objectData.x1 && objectData.y1 && objectData.x2 && objectData.y2) {
         const wallLine = new Konva.Line({
-            points: [parseFloat(objectData.x1), parseFloat(objectData.y1), parseFloat(objectData.x2), parseFloat(objectData.y2)],
+            points: [
+                parseFloat(objectData.x1) * viState.scale, 
+                parseFloat(objectData.y1) * viState.scale, 
+                parseFloat(objectData.x2) * viState.scale, 
+                parseFloat(objectData.y2) * viState.scale
+            ],
             stroke: '#4b5563', strokeWidth: 8, id: objectData.InstanceID, draggable: false, hitStrokeWidth: 15,
         });
         wallLine.on('click', (e) => { e.evt.stopPropagation(); selectObject(objectData.InstanceID, e.evt.shiftKey); });
@@ -521,14 +564,15 @@ function drawPreviewWall() {
 async function saveNewWall(start, end) {
     if (!viState.activeParentId) return showMessage("Cannot add a wall without a selected room or container.");
     
+    // Convert pixel coordinates to scaled "feet" before saving
     const newInstanceData = {
         InstanceID: `INST-${Date.now()}`,
         ParentID: viState.activeParentId,
         ReferenceID: null, // Walls no longer reference the Asset sheet
-        x1: start.x.toFixed(2),
-        y1: start.y.toFixed(2),
-        x2: end.x.toFixed(2),
-        y2: end.y.toFixed(2),
+        x1: (start.x / viState.scale).toFixed(2),
+        y1: (start.y / viState.scale).toFixed(2),
+        x2: (end.x / viState.scale).toFixed(2),
+        y2: (end.y / viState.scale).toFixed(2),
     };
     const newInstanceRow = await api.prepareRowData(SPATIAL_LAYOUT_SHEET, newInstanceData, SPATIAL_LAYOUT_HEADER_MAP);
     
@@ -536,6 +580,7 @@ async function saveNewWall(start, end) {
     
     window.dispatchEvent(new CustomEvent('datachanged'));
 }
+
 
 // --- OBJECT MANIPULATION & SELECTION ---
 function selectObject(instanceId, isMultiSelect = false) {

@@ -147,3 +147,35 @@ canvas {
 .radial-button.hidden { display: none; }
 .radial-button:hover { opacity: 1; filter: brightness(1.1) saturate(1.2); }
 #radial-delete-use:hover { filter: brightness(1.25); }
+
+/* --- Scale Indicator --- */
+#scale-indicator {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    color: #4b5563; /* gray-600 */
+    pointer-events: none;
+}
+#scale-indicator.hidden {
+    display: none;
+}
+#scale-line {
+    width: 100px; /* Default, will be set by JS */
+    height: 2px;
+    background-color: #4b5563; /* gray-600 */
+    border-left: 1px solid #4b5563;
+    border-right: 1px solid #4b5563;
+    height: 8px;
+    border-top: none;
+    border-bottom: none;
+}
+#scale-text {
+    margin-top: 0.125rem;
+}
