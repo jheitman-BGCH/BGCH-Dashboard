@@ -44,7 +44,7 @@ export function initUI() {
         'radial-menu', 'radial-rename-use', 'radial-flip-use', 'radial-rotate-use',
         'radial-resize-use', 'radial-open-use', 'radial-delete-use',
         'unplaced-asset-search', 'unplaced-assets-list', 'unplaced-group-by', 'unplaced-sort-btn',
-        'unplaced-sort-icon',
+        'unplaced-sort-icon', 'draw-wall-btn',
         // New Container Modal Elements
         'add-container-btn', 'container-modal', 'container-form', 'cancel-container-btn',
         'container-modal-site', 'container-modal-room', 'container-modal-parent'
@@ -639,4 +639,3 @@ export function setupModalHierarchy() {
         });
     }
 }
-
