@@ -215,6 +215,7 @@ function renderApp() {
     ui.renderEmployeeList(sortedEmployees);
     const chartData = selectors.selectChartData(enrichedAssets, state.allEmployees, state.allSites);
     ui.renderOverviewCharts(chartData, handleChartClick);
+    ui.renderOverviewStats(enrichedAssets, state.allSites);
     ui.populateColumnSelector();
 }
 
@@ -326,9 +327,11 @@ function setupEventListeners() {
         ui.populateChainedFilters();
     });
     d.filterContainer.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { container: e.target.value } }));
+    
+    // PATCH: Correctly dispatch filter actions with PascalCase keys
     ['AssetType', 'Condition', 'IntendedUserType', 'AssignedTo', 'ModelNumber'].forEach(key => {
-        const el = d[`filter${key}`];
-        if (el) el.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { [key.charAt(0).toLowerCase() + key.slice(1)]: e.target.value } }));
+        const el = ui.dom[`filter${key.charAt(0).toLowerCase() + key.slice(1)}`];
+        if (el) el.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { [key]: e.target.value } }));
     });
     
     d.employeeSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_EMPLOYEE_FILTERS, payload: { searchTerm: e.target.value } }));
@@ -738,7 +741,7 @@ function handleChartClick(event, elements, filterId) {
     const label = chart.data.labels[elements[0].index];
     
     const newFilters = { searchTerm: '', site: '', room: '', container: '', assetType: '', condition: '', intendedUserType: '', assignedTo: '', modelNumber: '' };
-    const filterKeyMap = { 'filter-site': 'site', 'filter-condition': 'condition', 'filter-asset-type': 'assetType', 'filter-assigned-to': 'assignedTo' };
+    const filterKeyMap = { 'filter-site': 'site', 'filter-condition': 'Condition', 'filter-asset-type': 'AssetType', 'filter-assigned-to': 'AssignedTo' };
     const stateKey = filterKeyMap[filterId];
     
     if (stateKey) {
@@ -751,7 +754,8 @@ function handleChartClick(event, elements, filterId) {
     const targetFilterEl = document.getElementById(filterId);
     if(targetFilterEl) {
         targetFilterEl.value = newFilters[stateKey] || label;
-        targetFilterEl.dispatchEvent(new Event('change'));
+        // The change event needs to be dispatched to trigger the re-render with the new filter
+        targetFilterEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
     switchTab('inventory');
 }

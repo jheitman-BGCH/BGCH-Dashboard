@@ -54,6 +54,8 @@ export function initUI() {
         'add-container-btn', 'container-modal', 'container-form', 'cancel-container-btn',
         'container-modal-site', 'container-modal-room', 'container-modal-parent', 'container-id-hidden',
         'container-row-index-hidden', 'container-modal-title',
+        // Overview Stats
+        'total-assets-stat', 'assigned-assets-stat', 'total-sites-stat', 'good-condition-stat',
     ];
     ids.forEach(id => {
         const key = id.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
@@ -591,6 +593,26 @@ export function renderOverviewCharts(chartData, clickCallback) {
         }
     }
 }
+
+/**
+ * Renders the high-level statistics on the Overview tab.
+ * @param {Array} enrichedAssets - The fully processed assets array.
+ * @param {Array} allSites - The array of all sites.
+ */
+export function renderOverviewStats(enrichedAssets, allSites) {
+    if (!dom.totalAssetsStat) return;
+
+    const totalAssets = enrichedAssets.length;
+    const assignedAssets = enrichedAssets.filter(a => a.AssignedTo).length;
+    const totalSites = allSites.length;
+    const goodConditionAssets = enrichedAssets.filter(a => a.Condition === 'Good').length;
+
+    dom.totalAssetsStat.textContent = totalAssets;
+    dom.assignedAssetsStat.textContent = `${assignedAssets} (${totalAssets > 0 ? Math.round((assignedAssets / totalAssets) * 100) : 0}%)`;
+    dom.totalSitesStat.textContent = totalSites;
+    dom.goodConditionStat.textContent = goodConditionAssets;
+}
+
 
 // --- HIERARCHICAL MODAL DROPDOWNS ---
 function populateRoomDropdownForSite(siteId, roomEl, containerEl) {
