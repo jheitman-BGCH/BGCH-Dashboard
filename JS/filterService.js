@@ -79,7 +79,10 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
                 return true;
             }
 
-            if (key === 'AssignedTo' && employeesByName) {
+            if (key === 'AssignedTo') {
+                // If the employee data isn't ready, this filter should fail safely.
+                if (!employeesByName) return false; 
+                
                 const employee = employeesByName.get(value);
                 // The item's AssignedTo is an ID, the filter value is a name.
                 return employee ? item[key] === employee.EmployeeID : false;
@@ -92,4 +95,3 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
         return matchesFilters;
     });
 }
-
