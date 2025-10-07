@@ -330,7 +330,7 @@ function setupEventListeners() {
     
     // PATCH: Correctly dispatch filter actions with PascalCase keys
     ['AssetType', 'Condition', 'IntendedUserType', 'AssignedTo', 'ModelNumber'].forEach(key => {
-        const el = ui.dom[`filter${key.charAt(0).toLowerCase() + key.slice(1)}`];
+        const el = ui.dom[`filter${key}`]; // Corrected the key lookup logic here
         if (el) {
             el.addEventListener('change', e => {
                 const payload = { [key]: e.target.value };
@@ -771,3 +771,4 @@ function handleChartClick(event, elements, filterId) {
     }
     switchTab('inventory');
 }
+
