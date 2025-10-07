@@ -33,6 +33,17 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
     const lowercasedSearchTerm = searchTerm.toLowerCase();
     const employeesByName = fullState.employeesByName;
 
+    // --- DEBUGGING START ---
+    // Log the active filters at the start of the function call
+    const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
+    if (Object.keys(activeFilters).length > 0 || searchTerm) {
+        console.groupCollapsed(`[Filter Service] Applying filters...`);
+        console.log("Search Term:", searchTerm || "None");
+        console.log("Active Filters:", activeFilters);
+        console.groupEnd();
+    }
+    // --- DEBUGGING END ---
+
     return data.filter(item => {
         // 1. Match search term
         const matchesSearch = lowercasedSearchTerm
@@ -47,26 +58,17 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
         // 2. Match hierarchical location filters
         const { site, room, container } = filters;
 
-        // Site filter is a simple and efficient check now
         if (site && item.resolvedSiteId !== site) {
             return false;
         }
 
-        // Room/Container filters check against the resolved parent ID
         let validParentIDs = null;
         if (container) {
-            // If a container is selected, an asset's parent must be that container or one of its children
-            validParentIDs = new Set([container]);
-            const children = getChildContainerIdsRecursive(fullState, container);
-            children.forEach(c => validParentIDs.add(c));
+            validParentIDs = new Set([container, ...getChildContainerIdsRecursive(fullState, container)]);
         } else if (room) {
-            // If a room is selected, an asset's parent must be that room or one of its children
-            validParentIDs = new Set([room]);
-            const children = getChildContainerIdsRecursive(fullState, room);
-            children.forEach(c => validParentIDs.add(c));
+            validParentIDs = new Set([room, ...getChildContainerIdsRecursive(fullState, room)]);
         }
 
-        // Apply the room/container filter if it was created
         if (validParentIDs && !validParentIDs.has(item.resolvedParentId)) {
             return false;
         }
@@ -74,24 +76,36 @@ export function filterData(data, searchTerm, searchFields, filters = {}, fullSta
 
         // 3. Match other flat filters
         const matchesFilters = Object.entries(filters).every(([key, value]) => {
-            // Skip handled hierarchical filters, the search term, and empty filters
             if (['site', 'room', 'container', 'searchTerm'].includes(key) || !value) {
                 return true;
             }
 
-            if (key === 'AssignedTo') {
-                // If the employee data isn't ready, this filter should fail safely.
-                if (!employeesByName) return false; 
-                
-                const employee = employeesByName.get(value);
-                // The item's AssignedTo is an ID, the filter value is a name.
-                return employee ? item[key] === employee.EmployeeID : false;
-            }
+            const itemValue = item[key] || '';
+            let isMatch = false;
 
-            // Default filter behavior: case-insensitive match.
-            return String(item[key] || '').toLowerCase() === String(value).toLowerCase();
+            if (key === 'AssignedTo') {
+                if (!employeesByName) return false; 
+                const employee = employeesByName.get(value);
+                isMatch = employee ? itemValue === employee.EmployeeID : false;
+            } else {
+                isMatch = String(itemValue).toLowerCase() === String(value).toLowerCase();
+            }
+            
+            // --- DEBUGGING START ---
+            // If it's a non-location filter and it fails, log the details.
+            if (!isMatch) {
+                 console.log(
+                    `%c[Filter Fail]%c Item: "${item.AssetName}" | Filter: "${key}" | Expected: "${value}" | Got: "${itemValue}"`,
+                    "color: red; font-weight: bold;",
+                    "color: black;"
+                );
+            }
+            // --- DEBUGGING END ---
+
+            return isMatch;
         });
 
         return matchesFilters;
     });
 }
+
