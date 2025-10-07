@@ -331,7 +331,19 @@ function setupEventListeners() {
     // PATCH: Correctly dispatch filter actions with PascalCase keys
     ['AssetType', 'Condition', 'IntendedUserType', 'AssignedTo', 'ModelNumber'].forEach(key => {
         const el = ui.dom[`filter${key.charAt(0).toLowerCase() + key.slice(1)}`];
-        if (el) el.addEventListener('change', e => dispatch({ type: actionTypes.SET_FILTERS, payload: { [key]: e.target.value } }));
+        if (el) {
+            el.addEventListener('change', e => {
+                const payload = { [key]: e.target.value };
+                // --- DEBUGGING START ---
+                console.log(`%c[Dispatching Filter]%c`, "color: blue; font-weight: bold;", "color: black;", payload);
+                // --- DEBUGGING END ---
+                dispatch({ type: actionTypes.SET_FILTERS, payload });
+            });
+        } else {
+            // --- DEBUGGING START ---
+            console.error(`[Event Listener] Could not find element for filter key: ${key}`);
+            // --- DEBUGGING END ---
+        }
     });
     
     d.employeeSearch.addEventListener('input', e => dispatch({ type: actionTypes.SET_EMPLOYEE_FILTERS, payload: { searchTerm: e.target.value } }));
