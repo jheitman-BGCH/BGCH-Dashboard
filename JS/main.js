@@ -3,7 +3,6 @@ import { CLIENT_ID, SCOPES, ASSET_SHEET, EMPLOYEES_SHEET, SITES_SHEET, ROOMS_SHE
 import { getState, dispatch, actionTypes, subscribe } from './store.js';
 import * as api from './sheetsService.js';
 import * as ui from './ui.js';
-import { initVisualInventory } from './visual_inventory_logic.js';
 import * as selectors from './selectors.js';
 
 // --- INITIALIZATION ---
@@ -139,9 +138,6 @@ async function initializeAppData() {
         ui.populateModalDropdowns();
         ui.setupModalHierarchy();
 
-        if (document.getElementById('visual-inventory-tab').classList.contains('active')) {
-            initVisualInventory();
-        }
     } catch (err) {
         console.error("Error during data load:", err);
         const errorMessage = err.result?.error?.message || err.message || 'An unknown error occurred';
@@ -308,7 +304,7 @@ function setupEventListeners() {
     d.siteForm.onsubmit = handleSiteFormSubmit;
     d.employeeForm.onsubmit = handleEmployeeFormSubmit;
 
-    ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(tabName => {
+    ['inventory', 'overview', 'employees'].forEach(tabName => {
         const camelCaseName = tabName.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
         const tab = d[`${camelCaseName}Tab`];
         if(tab) tab.addEventListener('click', () => switchTab(tabName));
@@ -735,7 +731,7 @@ async function handleDeleteRow(sheetName, rowIndex) {
 }
 
 function switchTab(tabName) {
-    ['inventory', 'overview', 'employees', 'visual-inventory'].forEach(name => {
+    ['inventory', 'overview', 'employees'].forEach(name => {
         const panel = document.getElementById(`${name}-panel`);
         const button = document.getElementById(`${name}-tab`);
         const isActive = name === tabName;
@@ -744,7 +740,6 @@ function switchTab(tabName) {
     });
 
     if (tabName === 'overview') renderApp();
-    if (tabName === 'visual-inventory') initVisualInventory();
 }
 
 function handleChartClick(event, elements, filterId) {

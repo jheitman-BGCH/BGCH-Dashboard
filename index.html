@@ -10,38 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="CSS/style.css">
-    <!-- Updated stylesheet link with cache-busting query -->
-    <link rel="stylesheet" href="CSS/visual_inventory_styles.css?v=1.4">
 </head>
 <body class="bg-gray-100 text-gray-800">
-
-    <!-- Inlined SVG Sprite for Radial Menu -->
-    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
-      <defs>
-        <!-- Icons remain the same -->
-        <symbol id="icon-edit" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/></g><g><path d="M228.5,443.38 L271.5,400.38 L299.62,428.5 L256.62,471.5 L228.5,471.5 Z M277.5,394.38 L299.62,372.26 L327.74,400.38 L305.62,422.5 Z"/></g></symbol>
-        <symbol id="icon-rename" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/></g><g><polygon points="294.54 401.14 294.54 434.8 277.91 434.8 277.91 429.25 289 429.25 289 406.69 277.91 406.69 277.91 401.14 294.54 401.14"/><polygon points="261.28 401.14 261.28 406.69 211 406.69 211 429.25 261.28 429.25 261.28 434.8 205.46 434.8 205.46 401.14 261.28 401.14"/><path d="M283.45,384.52v5.54c-3.98.19-8.21,1.24-11.01,4.23l-.1,46.67c.13,1.4,2.84,2.86,4.11,3.42,2.18.96,4.63,1.38,7,1.51v5.54c-5.11.1-9.8-2-13.98-4.69-3.94,2.99-8.8,4.54-13.73,4.69v-5.54c4.15-.21,7.71-1.57,11-4.04v-47.55c-2.74-2.95-7.09-4.01-11-4.23v-5.54c5.28-.12,9.52,2.03,14.03,4.37,4.08-2.79,8.71-4.37,13.69-4.37Z"/><polygon points="250.2 423.31 216.55 423.31 216.55 412.23 249.6 412.23 250.2 412.82 250.2 423.31"/></g></symbol>
-        <symbol id="icon-flip" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M250,471.3c-58.28,0-113.26-22.45-154.87-63.21l70.03-70.03c22.9,22.08,53.01,34.23,84.84,34.23s61.94-12.15,84.84-34.23l70.03,70.03c-41.61,40.77-96.59,63.21-154.87,63.21Z"/></g><g><path d="M214.71,443.38v-.59l25.81-54.45c1.25-1.17,2.62.01,2.66,1.47v52.55c.04.81-.25,1.55-.89,2.04l-25.99.16c-.87.07-1.09-.66-1.6-1.19Z"/><path d="M287.78,442.8v.59c-.51.53-.73,1.26-1.6,1.19l-25.99-.16c-.64-.49-.92-1.23-.89-2.04v-52.26c-.05-2.05,1.77-3.09,3.01-1.22l25.47,53.91ZM283.97,441.62l-21.71-45.48v45.48h21.71Z"/><path d="M251.98,386.46c1.94,1,1.72,4.95,1.48,6.91-.32,2.64-4.11,2.69-4.42,0-.23-1.99-.49-5.88,1.47-6.9h1.47Z"/></g></symbol>
-        <symbol id="icon-rotate" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M338.06,334.84c22.08-22.9,34.23-53.01,34.23-84.84s-12.15-61.94-34.23-84.84l70.03-70.03c40.77,41.61,63.21,96.59,63.21,154.87s-22.45,113.26-63.21,154.87l-70.03-70.03Z"/></g><g><path d="M422.32,253.76v-7.52l13.64,13.79-13.64,13.54v-7.17c-6.13-.13-12.26-.92-18.18-2.49-6.21-1.64-14.96-4.92-14.96-12.71v-7c2.54,3.43,5.84,5.11,9.83,6.39,7.3,2.35,15.66,3.13,23.3,3.17Z"/><path d="M420.96,231.55c6.1.07,12.45.43,18.45,1.53,4.22.77,14.63,3.26,14.37,8.9-.06,1.23-1.68,3.27-2.94,3.22-.3-.01-4.28-2.47-5.3-2.88-7.61-3.11-16.47-3.69-24.59-4.28v5.12l-8.53-8.37,8.53-8.37v5.12Z"/><path d="M440.09,265.71v-13.15c2.65-1.02,5.64-1.49,8.38-2.55s6.39-2.72,7.68-5.47c.13-.09.68.45.68.51v7.52c0,.54-.79,2.71-1.08,3.37-2.35,5.49-10.33,8.21-15.66,9.79Z"/><path d="M407.98,232.58v6.49c-5.05.69-9.8,2.24-13.84,5.38-1.68-1.28-2.66-2.56-2.14-4.8.89-3.88,12.37-6.75,15.98-7.07Z"/></g></symbol>
-        <symbol id="icon-resize" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M91.91,404.87c-40.77-41.61-63.21-96.59-63.21-154.87s22.44-113.26,63.21-154.87l70.03,70.03c-22.08,22.9-34.23,53.01-34.23,84.84s12.15,61.95,34.23,84.84l-70.03,70.03Z"/></g><g><path d="M77.44,237.32l-3.97,3.82c-5.46.29-11.26-.36-16.68,0-.73.05-3.1.28-3.43.67s-.49,1.63-.54,2.2c-.51,6.06-.41,16.31,0,22.44.13,1.88-.05,2.96,2.05,3.14,7.75.69,16.49-.55,24.35,0,.93.03,2.05-.43,2.05-1.5v-19.41s4.09-4.24,4.09-4.24v24.19c0,2.22-3.09,5.04-5.36,5.03-8.2-.47-17.31.74-25.4.04-2.9-.25-4.93-1.94-5.6-4.79.77-8.41-1-18.61,0-26.8.21-1.75,2.78-4.78,4.52-4.78h23.92Z"/><polygon points="91.65 230.76 91.65 240.6 87.96 237.05 69.24 255.77 72.79 259.46 62.95 259.46 62.95 249.62 66.64 253.17 85.36 234.45 81.81 230.76 91.65 230.76"/><path d="M105.59,225.3h-3.83c.34-4.03-.53-5.15-4.65-4.65v-4.1h3.96c1.28,0,4.51,3.05,4.51,4.24v4.51Z"/><path d="M105.59,264.93v4.24c0,1.44-3.09,4.51-4.51,4.51h-3.96v-4.1c4.32.47,4.91-.44,4.65-4.65h3.83Z"/><path d="M57.48,216.55v4.1c-4.12-.5-4.98.61-4.65,4.65h-3.83v-4.24c0-.26.85-1.85,1.1-2.18,1.76-2.36,4.68-2.49,7.38-2.33Z"/><rect x="61.04" y="216.55" width="5.47" height="4.1"/><rect x="70.06" y="216.55" width="5.47" height="4.1"/><rect x="79.08" y="216.55" width="5.47" height="4.1"/><rect x="88.1" y="216.55" width="5.47" height="4.1"/><rect x="88.1" y="269.58" width="5.47" height="4.1"/><rect x="49.01" y="228.85" width="3.83" height="5.47"/><rect x="101.77" y="228.85" width="3.83" height="5.47"/><rect x="101.77" y="237.87" width="3.83" height="5.47"/><rect x="101.77" y="246.89" width="3.83" height="5.47"/><rect x="101.77" y="255.91" width="3.83" height="5.47"/></g></symbol>
-        <symbol id="icon-open" viewBox="0 0 500 500"><g opacity=".5"><path fill="#cecccc" d="M95.13,92.8c41.61-40.77,96.59-63.21,154.87-63.21s113.26,22.44,154.87,63.21l-70.03,70.03c-22.9-22.08-53.01-34.23-84.84-34.23s-61.94,12.15-84.84,34.23l-70.03-70.03Z"/></g><g><polygon points="252.24 52.11 223.68 52.11 223.68 102.35 273.92 102.35 273.92 73.79 280.11 79.81 280.11 108.55 217.49 108.55 217.49 45.92 246.22 45.92 252.24 52.11"/><path d="M280.11,45.92v21.68c-2.82-1.83-5.47-6.19-8.07-7.93-.32-.22-.55-.45-.98-.29l-17.66,17.49c-.3.05-3.87-3.32-4.1-3.76-.14-.27-.23-.42,0-.68l17.36-17.45c.16-.43-.07-.66-.29-.98-1.75-2.6-6.1-5.25-7.93-8.07h21.68Z"/></g></symbol>
-        <symbol id="icon-delete" viewBox="0 0 500 500"><g opacity=".5"><path fill="#d30f00" d="M250,362.04c-61.78,0-112.04-50.26-112.04-112.04s50.26-112.04,112.04-112.04,112.04,50.26,112.04,112.04-50.26,112.04-112.04,112.04Z"/><path fill="#282828" d="M250,138.46c29.79,0,57.8,11.6,78.87,32.67,21.07,21.07,32.67,49.08,32.67,78.87s-11.6,57.8-32.67,78.87c-21.07,21.07-49.08,32.67-78.87,32.67s-57.8-11.6-78.87-32.67c-21.07-21.07-32.67-49.08-32.67-78.87s11.6-57.8,32.67-78.87c21.07-21.07,49.08-32.67,78.87-32.67M250,137.46c-62.15,0-112.54,50.39-112.54,112.54s50.39,112.54,112.54,112.54,112.54-50.39,112.54-112.54-50.39-112.54-112.54-112.54h0Z"/></g><g><path d="M265.46,203.86c2.99.02,7.54,4.05,7.54,7v4.54h9.77c2.46,0,5.63,2.54,6.72,4.66,1.18,2.31,1.09,7.39.9,10.03s-2.13,4.79-4.74,5.41c-.42.1-1.05-.14-1.11.42v49.99c-.52,5.5-5.04,9.81-10.54,10.22h-47.68c-6.63-.4-11.11-5.66-11-12.22v-48.37c-2.77.18-5.42-2.47-5.68-5.15-.24-2.37-.22-7.94.74-10.02,1.04-2.27,4.3-4.97,6.87-4.97h9.61c-.12-3.62.15-6.86,2.99-9.39,1.14-1.01,3.02-1.97,4.54-2.15h31.07ZM267.3,215.39v-3.46c0-.65-1.22-2.13-1.99-2.16l-30.23-.07c-.94-.08-2.38,1.38-2.38,2.23v3.46h34.6ZM284.53,229.85v-6.69c0-.54-1.22-1.77-1.84-1.85l-64.98-.08c-.4.05-1.08.36-1.38.62-.19.16-.84,1.18-.84,1.31v6.69h69.05ZM278.84,235.54h-57.67v49.9c0,1.97,2.82,4.78,4.85,4.84h47.68c2.14.16,5.15-2.82,5.15-4.84v-49.9Z"/><path d="M246.35,241.42c.97-.18,6.53-.18,7.43.03.99.23,1.84,1.34,1.98,2.33v38.28c-.13,1.3-1.07,2.34-2.38,2.52-1.19.16-5.88.17-6.99-.05s-1.93-1.19-2.13-2.33v-38.28c.09-1.1.99-2.3,2.1-2.5ZM252.85,244.31h-5.69v37.37h5.69v-37.37Z"/><path d="M263.73,241.42c1.15-.2,6.01-.2,7.15,0,1.05.18,1.84,1.06,2.1,2.05v38.9c-.21,1.18-1.2,2.07-2.39,2.21-1.51.18-4.75.15-6.29.02-1.32-.11-2.17-.73-2.65-1.97-.45-12.61-.06-25.31-.2-37.95.06-1.45.68-2.99,2.27-3.26ZM270.23,244.31h-5.84v37.37h5.84v-37.37Z"/><path d="M229.12,241.42c1.15-.2,6.01-.2,7.15,0,1.05.18,1.84,1.06,2.1,2.05v38.9c-.21,1.18-1.2,2.07-2.39,2.21-1.41.17-5.48.18-6.83-.05-1.83-.32-2.21-1.95-2.31-3.54-.74-11.82.57-24.41,0-36.31.06-1.45.68-2.99,2.27-3.26ZM235.62,244.31h-5.84v37.37h5.84v-37.37Z"/></g></symbol>
-        <symbol id="icon-circle-background" viewBox="0 0 500 500"><g opacity=".5"><path fill="#e5e5e5" d="M250,479.84c-61.39,0-119.11-23.91-162.52-67.32-43.41-43.41-67.32-101.13-67.32-162.52s23.91-119.11,67.32-162.52C130.89,44.07,188.61,20.16,250,20.16s119.11,23.91,162.52,67.32c43.41,43.41,67.32,101.13,67.32,162.52s-23.91,119.11-67.32,162.52-101.13,67.32-162.52,67.32Z"/><path fill="#7c7c7c" d="M250,20.66c30.96,0,61,6.06,89.27,18.02,27.31,11.55,51.84,28.09,72.9,49.15,21.06,21.06,37.6,45.59,49.15,72.9,11.96,28.27,18.02,58.31,18.02,89.27s-6.06,61-18.02,89.27c-11.55,27.31-28.09,51.84-49.15,72.9-21.06,21.06-45.59,37.6-72.9,49.15-28.27,11.96-58.31,18.02-89.27,18.02s-61-6.06-89.27-18.02c-27.31-11.55-51.84-28.09-72.9-49.15-21.06-21.06-37.6-45.59-49.15-72.9-11.96-28.27-18.02-58.31-18.02-89.27s6.06-61,18.02-89.27c11.55-27.31,28.09,51.84,49.15-72.9,21.06-21.06,45.59,37.6,72.9-49.15,28.27-11.96,58.31-18.02,89.27-18.02M250,19.66C122.79,19.66,19.66,122.79,19.66,250s103.13,230.34,230.34,230.34,230.34-103.13,230.34-230.34S377.21,19.66,250,19.66h0Z"/></g></symbol>
-      </defs>
-    </svg>
-
-    <!-- The radial menu SVG container -->
-    <div id="radial-menu" class="radial-menu hidden">
-        <svg viewBox="0 0 500 500" class="radial-svg-container">
-            <use href="#icon-rename" class="radial-button" id="radial-rename-use"/>
-            <use href="#icon-edit" class="radial-button hidden" id="radial-edit-use"/>
-            <use href="#icon-flip" class="radial-button hidden" id="radial-flip-use"/>
-            <use href="#icon-rotate" class="radial-button" id="radial-rotate-use"/>
-            <use href="#icon-resize" class="radial-button" id="radial-resize-use"/>
-            <use href="#icon-open" class="radial-button" id="radial-open-use"/>
-            <use href="#icon-delete" class="radial-button" id="radial-delete-use"/>
-        </svg>
-    </div>
 
     <div class="container mx-auto p-4 md:p-8">
         <header class="mb-8">
@@ -80,7 +50,7 @@
                     <button id="inventory-tab" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">Inventory</button>
                     <button id="overview-tab" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">Overview</button>
                     <button id="employees-tab" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">Employees</button>
-                    <button id="visual-inventory-tab" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">Visual Inventory</button>
+                    <a href="https://vim.bgcharlem.org" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-indigo-600 hover:border-gray-300">Visual Inventory</a>
                 </nav>
             </div>
 
@@ -249,92 +219,6 @@
                     </div>
                  </div>
             </div>
-
-            <div id="visual-inventory-panel" class="hidden">
-                <div class="flex flex-col lg:flex-row gap-6">
-                    <aside id="vi-left-panel" class="w-full lg:w-72 flex-shrink-0 space-y-4">
-                        <div class="vi-card">
-                             <div class="vi-card-header">
-                                <h3 class="vi-card-title">Location</h3>
-                            </div>
-                            <div class="vi-card-body space-y-3">
-                                <div>
-                                    <label for="vi-site-selector" class="block text-sm font-medium text-gray-700">Site</label>
-                                    <div class="flex items-center gap-2 mt-1">
-                                        <select id="vi-site-selector" class="form-select w-full"></select>
-                                        <button id="vi-edit-site-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Edit Site">✏️</button>
-                                        <button id="vi-delete-site-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Delete Site">🗑️</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="room-selector" class="block text-sm font-medium text-gray-700">Room</label>
-                                    <div class="flex items-center gap-2 mt-1">
-                                        <select id="room-selector" class="form-select w-full" disabled></select>
-                                        <button id="vi-edit-room-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Edit Room">✏️</button>
-                                        <button id="vi-delete-room-btn" class="hidden p-2 rounded-md hover:bg-gray-200" title="Delete Room">🗑️</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                         <div id="unplaced-assets-container" class="vi-card flex-grow">
-                            <div class="vi-card-header">
-                                <h3 class="vi-card-title">Unplaced Assets</h3>
-                            </div>
-                            <div class="p-2 space-y-2">
-                               <input type="text" id="unplaced-asset-search" placeholder="Search assets..." class="form-input w-full text-sm">
-                                <div class="flex items-center justify-between gap-2 text-xs">
-                                    <div class="flex items-center gap-1">
-                                        <label for="unplaced-group-by" class="font-medium text-gray-600">Group:</label>
-                                        <select id="unplaced-group-by" class="form-select p-1 h-7 text-xs rounded-md">
-                                            <option value="none">None</option>
-                                            <option value="assetType">Type</option>
-                                        </select>
-                                    </div>
-                                    <button id="unplaced-sort-btn" class="p-1.5 rounded-md hover:bg-gray-200" title="Sort by Name">
-                                        <svg id="unplaced-sort-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="unplaced-assets-list-wrapper" class="border-t">
-                                <div id="unplaced-assets-list"></div>
-                            </div>
-                        </div>
-
-                    </aside>
-                    <div id="vi-main-content" class="flex-grow">
-                        <div class="vi-card">
-                            <div class="vi-card-header">
-                                <div id="breadcrumb-container" class="vi-breadcrumb-container"></div>
-                                 <div id="vi-toolbar" class="vi-toolbar">
-                                     <button id="draw-wall-btn" class="toolbar-item" title="Draw a wall by clicking two points on the grid.">Draw Wall</button>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="Shelf" data-name="New Shelf" data-width="4" data-height="1" data-shelf-rows="1" data-shelf-cols="4">Shelf (4x1)</div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="Shelf" data-name="Tall Shelf" data-width="2" data-height="5" data-shelf-rows="5" data-shelf-cols="2">Tall Shelf (2x5)</div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="Container" data-name="New Box" data-width="2" data-height="2">Box (2x2)</div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="Container" data-name="Small Box" data-width="1" data-height="1">Small Box (1x1)</div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="Door" data-name="Door" data-width="1" data-height="1">Door</div>
-                                     <div class="border-l mx-2 h-6"></div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="FloorPatch_Carpet" data-name="Carpet" data-width="1" data-height="1">Carpet</div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="FloorPatch_Tile" data-name="Tile" data-width="1" data-height="1">Tile</div>
-                                     <div class="toolbar-item" draggable="true" data-asset-type="FloorPatch_Wood" data-name="Wood" data-width="1" data-height="1">Wood</div>
-                                 </div>
-                            </div>
-                        </div>
-                        <div id="room-grid-container" class="vi-card flex-grow relative">
-                             <div id="grid-container" class="w-full h-full">
-                                <!-- This div will now be the target for the Konva.js canvas -->
-                                <div id="room-grid"></div>
-                            </div>
-                            <div id="scale-indicator" class="hidden">
-                                <div id="scale-line"></div>
-                                <span id="scale-text"></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
         </main>
     </div>
 
@@ -602,19 +486,6 @@
             </div>
         </div>
     </div>
-
-    <div id="contents-modal" class="modal-container hidden">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content max-w-xl">
-             <div class="p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 id="contents-modal-title" class="text-xl font-bold">Container Contents</h2>
-                    <button class="modal-close-btn text-gray-500 hover:text-gray-800">&times;</button>
-                </div>
-                <div id="contents-modal-body"></div>
-            </div>
-        </div>
-    </div>
     
     <div id="room-modal" class="modal-container hidden">
         <div class="modal-backdrop"></div>
@@ -740,3 +611,4 @@
     <script type="module" src="JS/main.js?v=1.2"></script>
 </body>
 </html>
+

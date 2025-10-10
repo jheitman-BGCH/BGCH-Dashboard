@@ -17,8 +17,8 @@ export function initUI() {
         'add-asset-btn', 'bulk-edit-btn', 'refresh-data-btn', 'asset-modal',
         'asset-form', 'cancel-btn', 'loading-indicator', 'no-data-message',
         'detail-modal', 'bulk-edit-modal', 'column-modal', 'inventory-tab',
-        'overview-tab', 'employees-tab', 'visual-inventory-tab', 'inventory-panel',
-        'overview-panel', 'employees-panel', 'visual-inventory-panel',
+        'overview-tab', 'employees-tab', 'inventory-panel',
+        'overview-panel', 'employees-panel',
         'asset-table-head', 'asset-table-body', 'filter-search',
         'filter-site-wrapper', 'filter-site', 'filter-room-wrapper', 'filter-room',
         'filter-container-wrapper', 'filter-container',
@@ -37,24 +37,14 @@ export function initUI() {
         'employee-search', 'employee-department-filter', 'employee-detail-edit-btn',
         'employee-id', 'employee-row-index', 'bulk-location',
         'bulk-intended-user-type', 'bulk-condition', 'bulk-assigned-to',
-        'pagination-controls-top', 'pagination-controls-bottom', 'vi-site-selector',
-        // Visual Inventory Elements
-        'room-selector', 'grid-container',
-        'breadcrumb-container', 'room-modal', 'room-form', 'contents-modal',
-        'radial-menu', 'radial-rename-use', 'radial-edit-use', 'radial-flip-use', 'radial-rotate-use',
-        'radial-resize-use', 'radial-open-use', 'radial-delete-use',
-        'unplaced-asset-search', 'unplaced-assets-list', 'unplaced-group-by', 'unplaced-sort-btn',
-        'unplaced-sort-icon', 'draw-wall-btn', 'vi-edit-site-btn', 'vi-delete-site-btn',
-        'vi-edit-room-btn', 'vi-delete-room-btn',
-        // New Main Buttons & Modals
+        'pagination-controls-top', 'pagination-controls-bottom',
+        'room-modal', 'room-form',
         'add-room-btn', 'add-site-btn', 'site-modal', 'site-form', 'cancel-site-btn',
         'room-modal-site', 'room-id-hidden', 'room-row-index-hidden', 'cancel-room-btn', 'room-modal-title',
         'site-modal-title', 'site-id-hidden', 'site-row-index-hidden',
-        // New Container Modal Elements
         'add-container-btn', 'container-modal', 'container-form', 'cancel-container-btn',
         'container-modal-site', 'container-modal-room', 'container-modal-parent', 'container-id-hidden',
         'container-row-index-hidden', 'container-modal-title',
-        // Overview Stats
         'total-assets-stat', 'assigned-assets-stat', 'total-sites-stat', 'good-condition-stat',
     ];
     ids.forEach(id => {
@@ -670,3 +660,4 @@ export function setupModalHierarchy() {
         });
     }
 }
+
